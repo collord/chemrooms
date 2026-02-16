@@ -1,0 +1,207 @@
+/**
+ * Wires Cesium entity click events to the chemrooms slice.
+ * When a user clicks a location entity on the globe, this hook:
+ * 1. Sets the selectedLocationId in the chemrooms slice
+ * 2. Fires a query for the location summary
+ * 3. Fires a query for the analytes available at that location
+ */
+
+import {useEffect, useRef} from 'react';
+import {
+  Cartesian2,
+  ScreenSpaceEventHandler,
+  ScreenSpaceEventType,
+  defined,
+} from 'cesium';
+import {useSql} from '@sqlrooms/duckdb';
+import {useChemroomsStore} from '../slices/chemrooms-slice';
+
+export function useLocationClick() {
+  const viewer = useChemroomsStore((s) => s.cesium.viewer);
+  const setSelectedLocation = useChemroomsStore(
+    (s) => s.chemrooms.setSelectedLocation,
+  );
+  const setSelectedEntity = useChemroomsStore(
+    (s) => s.cesium.setSelectedEntity,
+  );
+  const handlerRef = useRef<ScreenSpaceEventHandler | null>(null);
+
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+
+    const handler = new ScreenSpaceEventHandler(viewer.scene.canvas);
+    handlerRef.current = handler;
+
+    handler.setInputAction((movement: {position: Cartesian2}) => {
+      const picked = viewer.scene.pick(movement.position);
+      if (defined(picked) && picked.id) {
+        const entity = picked.id;
+        const locationId = entity.name ?? entity.id;
+        setSelectedEntity(entity);
+        setSelectedLocation(locationId);
+
+        // Fly to the selected location
+        viewer.flyTo(entity, {duration: 1.0});
+      } else {
+        // Clicked empty space — deselect
+        setSelectedEntity(null);
+        setSelectedLocation(null);
+      }
+    }, ScreenSpaceEventType.LEFT_CLICK);
+
+    return () => {
+      if (!handler.isDestroyed()) {
+        handler.destroy();
+      }
+      handlerRef.current = null;
+    };
+  }, [viewer, setSelectedLocation, setSelectedEntity]);
+}
+
+/**
+ * Loads location summary + analyte list when selectedLocationId changes.
+ */
+export function useLocationDetail() {
+  const selectedLocationId = useChemroomsStore(
+    (s) => s.chemrooms.config.selectedLocationId,
+  );
+  const matrixFilter = useChemroomsStore(
+    (s) => s.chemrooms.config.matrixFilter,
+  );
+  const fractionFilter = useChemroomsStore(
+    (s) => s.chemrooms.config.fractionFilter,
+  );
+  const setLocationSummary = useChemroomsStore(
+    (s) => s.chemrooms.setLocationSummary,
+  );
+  const setAnalytesAtLocation = useChemroomsStore(
+    (s) => s.chemrooms.setAnalytesAtLocation,
+  );
+  const setIsLoadingLocation = useChemroomsStore(
+    (s) => s.chemrooms.setIsLoadingLocation,
+  );
+
+  const locationsTable = useChemroomsStore((s) =>
+    s.db.findTableByName('locations'),
+  );
+
+  // Location summary query
+  const {data: summaryData, isLoading: summaryLoading} = useSql<{
+    location_id: string;
+    loc_type: string;
+    loc_desc: string;
+    region: string;
+    sample_count: number;
+    analyte_count: number;
+    first_date: string;
+    last_date: string;
+    matrices: string[];
+  }>({
+    query: `
+      SELECT
+        l.location_id,
+        COALESCE(l.loc_type, '') AS loc_type,
+        COALESCE(l.loc_desc, '') AS loc_desc,
+        COALESCE(l.region, '') AS region,
+        COUNT(DISTINCT s.sample_id)::INT AS sample_count,
+        COUNT(DISTINCT r.analyte)::INT AS analyte_count,
+        MIN(s.sample_date)::VARCHAR AS first_date,
+        MAX(s.sample_date)::VARCHAR AS last_date,
+        LIST(DISTINCT s.matrix ORDER BY s.matrix) AS matrices
+      FROM locations l
+      JOIN samples s ON s.location_id = l.location_id
+      JOIN results r ON r.sample_id = s.sample_id
+      WHERE l.location_id = '${selectedLocationId}'
+      GROUP BY l.location_id, l.loc_type, l.loc_desc, l.region
+    `,
+    enabled: Boolean(selectedLocationId) && Boolean(locationsTable),
+  });
+
+  // Analytes at this location
+  const matrixClause = matrixFilter ? `AND s.matrix = '${matrixFilter}'` : '';
+  const fractionClause = fractionFilter
+    ? `AND r.fraction = '${fractionFilter}'`
+    : '';
+
+  const {data: analytesData, isLoading: analytesLoading} = useSql<{
+    analyte: string;
+    analyte_group: string;
+    cas_number: string;
+    result_count: number;
+    detect_count: number;
+    min_result: number;
+    max_result: number;
+    units: string;
+  }>({
+    query: `
+      SELECT
+        r.analyte,
+        COALESCE(r.analyte_group, 'Other') AS analyte_group,
+        COALESCE(r.cas_number, '') AS cas_number,
+        COUNT(*)::INT AS result_count,
+        SUM(CASE WHEN r.detected THEN 1 ELSE 0 END)::INT AS detect_count,
+        MIN(r.result) AS min_result,
+        MAX(r.result) AS max_result,
+        COALESCE(r.units, '') AS units
+      FROM results r
+      JOIN samples s ON r.sample_id = s.sample_id
+      WHERE s.location_id = '${selectedLocationId}'
+        ${matrixClause}
+        ${fractionClause}
+      GROUP BY r.analyte, r.analyte_group, r.cas_number, r.units
+      ORDER BY COALESCE(r.analyte_group, 'Other'), r.analyte
+    `,
+    enabled: Boolean(selectedLocationId) && Boolean(locationsTable),
+  });
+
+  useEffect(() => {
+    setIsLoadingLocation(summaryLoading || analytesLoading);
+  }, [summaryLoading, analytesLoading, setIsLoadingLocation]);
+
+  useEffect(() => {
+    if (summaryData) {
+      const row = summaryData.toArray()[0];
+      if (row) {
+        setLocationSummary({
+          locationId: row.location_id,
+          locType: row.loc_type,
+          locDesc: row.loc_desc,
+          region: row.region,
+          sampleCount: row.sample_count,
+          analyteCount: row.analyte_count,
+          firstDate: row.first_date,
+          lastDate: row.last_date,
+          matrices: row.matrices ?? [],
+        });
+      }
+    } else if (!selectedLocationId) {
+      setLocationSummary(null);
+    }
+  }, [summaryData, selectedLocationId, setLocationSummary]);
+
+  useEffect(() => {
+    if (analytesData) {
+      setAnalytesAtLocation(
+        analytesData.toArray().map((r: {
+          analyte: string;
+          analyte_group: string;
+          cas_number: string;
+          result_count: number;
+          detect_count: number;
+          min_result: number;
+          max_result: number;
+          units: string;
+        }) => ({
+          analyte: r.analyte,
+          analyteGroup: r.analyte_group,
+          casNumber: r.cas_number,
+          resultCount: r.result_count,
+          detectCount: r.detect_count,
+          minResult: r.min_result,
+          maxResult: r.max_result,
+          units: r.units,
+        })),
+      );
+    }
+  }, [analytesData, setAnalytesAtLocation]);
+}

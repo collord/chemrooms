@@ -1,0 +1,1 @@
+this will be a repo to house both a server (python/fastapi) and client (ts/sqlrooms/duckdb-wasm/c) 

@@ -1,0 +1,190 @@
+/**
+ * Time-series chart panel using @sqlrooms/mosaic VgPlotChart.
+ *
+ * Displays concentration vs. date for the selected location and analytes.
+ * Non-detect handling is applied in the SQL query based on user's chosen method.
+ * Supports up to 4 analytes with color encoding.
+ */
+
+import React, {useMemo} from 'react';
+import {VgPlotChart} from '@sqlrooms/mosaic';
+import {useChemroomsStore} from '../slices/chemrooms-slice';
+
+/**
+ * Build the SQL query for time-series data, applying non-detect handling
+ * inline so the chart gets the correct plot values.
+ */
+function buildTimeSeriesQuery(
+  locationId: string,
+  analytes: string[],
+  matrixFilter: string | null,
+  fractionFilter: string | null,
+  ndMethod: string,
+): string {
+  const analyteList = analytes.map((a) => `'${a.replace(/'/g, "''")}'`).join(',');
+  const matrixClause = matrixFilter
+    ? `AND s.matrix = '${matrixFilter.replace(/'/g, "''")}'`
+    : '';
+  const fractionClause = fractionFilter
+    ? `AND r.fraction = '${fractionFilter.replace(/'/g, "''")}'`
+    : '';
+  const ndExcludeClause =
+    ndMethod === 'exclude' ? 'AND r.detected = TRUE' : '';
+
+  let ndExpression: string;
+  switch (ndMethod) {
+    case 'half_dl':
+      ndExpression = `CASE
+        WHEN r.detected THEN r.result
+        ELSE COALESCE(r.reporting_limit, r.method_detection_limit, r.quantitation_limit) / 2.0
+      END`;
+      break;
+    case 'at_dl':
+      ndExpression = `CASE
+        WHEN r.detected THEN r.result
+        ELSE COALESCE(r.reporting_limit, r.method_detection_limit, r.quantitation_limit)
+      END`;
+      break;
+    case 'zero':
+      ndExpression = `CASE WHEN r.detected THEN r.result ELSE 0 END`;
+      break;
+    default: // 'exclude' — non-detects are filtered out in WHERE
+      ndExpression = `r.result`;
+      break;
+  }
+
+  return `
+    SELECT
+      r.analyte,
+      s.sample_date,
+      (${ndExpression}) AS plot_value,
+      r.result,
+      r.detected,
+      COALESCE(r.reporting_limit, r.method_detection_limit, r.quantitation_limit)
+        AS detection_limit,
+      COALESCE(r.units, '') AS units,
+      COALESCE(r.qualifier, '') AS qualifier,
+      CASE WHEN r.detected THEN 'Detected' ELSE 'Non-Detect' END AS detect_status
+    FROM results r
+    JOIN samples s ON r.sample_id = s.sample_id
+    WHERE s.location_id = '${locationId.replace(/'/g, "''")}'
+      AND r.analyte IN (${analyteList})
+      ${matrixClause}
+      ${fractionClause}
+      ${ndExcludeClause}
+    ORDER BY r.analyte, s.sample_date
+  `;
+}
+
+export const TimeSeriesPanel: React.FC = () => {
+  const selectedLocationId = useChemroomsStore(
+    (s) => s.chemrooms.config.selectedLocationId,
+  );
+  const selectedAnalytes = useChemroomsStore(
+    (s) => s.chemrooms.config.timeSeriesAnalytes,
+  );
+  const matrixFilter = useChemroomsStore(
+    (s) => s.chemrooms.config.matrixFilter,
+  );
+  const fractionFilter = useChemroomsStore(
+    (s) => s.chemrooms.config.fractionFilter,
+  );
+  const nonDetectMethod = useChemroomsStore(
+    (s) => s.chemrooms.config.nonDetectMethod,
+  );
+  const mosaicConn = useChemroomsStore((s) => s.mosaic.connection);
+
+  const hasSelection =
+    selectedLocationId && selectedAnalytes.length > 0;
+
+  // Build VgPlot spec (declarative Mosaic spec)
+  const spec = useMemo(() => {
+    if (!hasSelection || mosaicConn.status !== 'ready') return null;
+
+    const query = buildTimeSeriesQuery(
+      selectedLocationId!,
+      selectedAnalytes,
+      matrixFilter,
+      fractionFilter,
+      nonDetectMethod,
+    );
+
+    return {
+      data: {
+        ts_data: {type: 'table' as const, query},
+      },
+      plot: [
+        {
+          mark: 'lineY',
+          data: {from: 'ts_data'},
+          x: 'sample_date',
+          y: 'plot_value',
+          stroke: 'analyte',
+          strokeWidth: 1.5,
+        },
+        {
+          mark: 'dot',
+          data: {from: 'ts_data'},
+          x: 'sample_date',
+          y: 'plot_value',
+          fill: 'analyte',
+          r: 4,
+          tip: true,
+        },
+      ],
+      xLabel: 'Sample Date',
+      yLabel: 'Concentration',
+      colorLegend: true,
+      width: 800,
+      height: 300,
+    };
+  }, [
+    hasSelection,
+    selectedLocationId,
+    selectedAnalytes,
+    matrixFilter,
+    fractionFilter,
+    nonDetectMethod,
+    mosaicConn.status,
+  ]);
+
+  if (mosaicConn.status === 'loading') {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+        Initializing chart engine...
+      </div>
+    );
+  }
+
+  if (mosaicConn.status === 'error') {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-destructive">
+        Chart engine error. Try reloading.
+      </div>
+    );
+  }
+
+  if (!hasSelection) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+        Select a location on the map, then choose analytes to view time-series
+        data.
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col overflow-auto p-2">
+      <div className="mb-2 text-xs text-muted-foreground">
+        <span className="font-medium">{selectedLocationId}</span>
+        {' — '}
+        {selectedAnalytes.join(', ')}
+      </div>
+      {spec ? (
+        <VgPlotChart spec={spec as any} />
+      ) : (
+        <div className="text-sm text-muted-foreground">Building chart...</div>
+      )}
+    </div>
+  );
+};

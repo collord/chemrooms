@@ -1,0 +1,48 @@
+{
+  "name": "chemrooms",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "link-sqlrooms": "bash ./scripts/link-sqlrooms.sh"
+  },
+  "dependencies": {
+    "@sqlrooms/cesium": "link:../../sqlrooms/packages/cesium",
+    "@sqlrooms/data-table": "link:../../sqlrooms/packages/data-table",
+    "@sqlrooms/duckdb": "link:../../sqlrooms/packages/duckdb",
+    "@sqlrooms/duckdb-core": "link:../../sqlrooms/packages/duckdb-core",
+    "@sqlrooms/layout": "link:../../sqlrooms/packages/layout",
+    "@sqlrooms/layout-config": "link:../../sqlrooms/packages/layout-config",
+    "@sqlrooms/monaco-editor": "link:../../sqlrooms/packages/monaco-editor",
+    "@sqlrooms/mosaic": "link:../../sqlrooms/packages/mosaic",
+    "@sqlrooms/room-config": "link:../../sqlrooms/packages/room-config",
+    "@sqlrooms/room-shell": "link:../../sqlrooms/packages/room-shell",
+    "@sqlrooms/room-store": "link:../../sqlrooms/packages/room-store",
+    "@sqlrooms/schema-tree": "link:../../sqlrooms/packages/schema-tree",
+    "@sqlrooms/sql-editor": "link:../../sqlrooms/packages/sql-editor",
+    "@sqlrooms/sql-editor-config": "link:../../sqlrooms/packages/sql-editor-config",
+    "@sqlrooms/ui": "link:../../sqlrooms/packages/ui",
+    "@sqlrooms/utils": "link:../../sqlrooms/packages/utils",
+    "cesium": "^1.124.0",
+    "immer": "^11.0.1",
+    "lucide-react": "^0.556.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "zod": "^3.23.0",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.4",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.9.3",
+    "vite": "^5.4.2",
+    "vite-plugin-cesium": "^1.2.0"
+  }
+}
