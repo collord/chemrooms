@@ -46,7 +46,7 @@ export const LocationDetailCard: React.FC<Props> = ({summary}) => {
         </div>
       </div>
 
-      {summary.matrices.length > 0 && (
+      {Array.isArray(summary.matrices) && summary.matrices.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {summary.matrices.map((m) => (
             <span

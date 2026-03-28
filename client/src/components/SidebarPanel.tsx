@@ -12,6 +12,7 @@ import {useLocationClick, useLocationDetail} from '../hooks/useLocationClick';
 import {LocationDetailCard} from './LocationDetailCard';
 import {AnalytePicker} from './AnalytePicker';
 import {FilterToolbar} from './FilterToolbar';
+import {CrossSectionToggle} from './CrossSectionToggle';
 
 export const SidebarPanel: React.FC = () => {
   // Activate hooks
@@ -32,6 +33,7 @@ export const SidebarPanel: React.FC = () => {
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-3">
       <FilterToolbar />
+      <CrossSectionToggle />
 
       {selectedLocationId ? (
         <>

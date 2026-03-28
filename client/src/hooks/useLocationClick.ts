@@ -171,7 +171,9 @@ export function useLocationDetail() {
           analyteCount: row.analyte_count,
           firstDate: row.first_date,
           lastDate: row.last_date,
-          matrices: row.matrices ?? [],
+          matrices: Array.isArray(row.matrices)
+            ? row.matrices
+            : row.matrices?.toArray?.() ?? [],
         });
       }
     } else if (!selectedLocationId) {
