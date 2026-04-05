@@ -1,17 +1,2 @@
 overrides:
   '@sqlrooms/cesium': link:../../sqlrooms/packages/cesium
-  '@sqlrooms/data-table': link:../../sqlrooms/packages/data-table
-  '@sqlrooms/duckdb': link:../../sqlrooms/packages/duckdb
-  '@sqlrooms/duckdb-core': link:../../sqlrooms/packages/duckdb-core
-  '@sqlrooms/layout': link:../../sqlrooms/packages/layout
-  '@sqlrooms/layout-config': link:../../sqlrooms/packages/layout-config
-  '@sqlrooms/monaco-editor': link:../../sqlrooms/packages/monaco-editor
-  '@sqlrooms/mosaic': link:../../sqlrooms/packages/mosaic
-  '@sqlrooms/room-config': link:../../sqlrooms/packages/room-config
-  '@sqlrooms/room-shell': link:../../sqlrooms/packages/room-shell
-  '@sqlrooms/room-store': link:../../sqlrooms/packages/room-store
-  '@sqlrooms/schema-tree': link:../../sqlrooms/packages/schema-tree
-  '@sqlrooms/sql-editor': link:../../sqlrooms/packages/sql-editor
-  '@sqlrooms/sql-editor-config': link:../../sqlrooms/packages/sql-editor-config
-  '@sqlrooms/ui': link:../../sqlrooms/packages/ui
-  '@sqlrooms/utils': link:../../sqlrooms/packages/utils
