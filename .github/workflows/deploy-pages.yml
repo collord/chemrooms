@@ -40,8 +40,32 @@ jobs:
         working-directory: client
         run: pnpm install --no-frozen-lockfile
 
-      - name: Symlink node_modules for cesium source resolution
-        run: ln -sf $GITHUB_WORKSPACE/client/node_modules $GITHUB_WORKSPACE/sqlrooms/node_modules
+      - name: Patch cesium package for standalone build
+        run: |
+          ln -sf $GITHUB_WORKSPACE/client/node_modules $GITHUB_WORKSPACE/sqlrooms/node_modules
+          cat > $GITHUB_WORKSPACE/sqlrooms/packages/cesium/tsconfig.json << 'TSEOF'
+          {
+            "compilerOptions": {
+              "target": "ES2020",
+              "module": "ESNext",
+              "moduleResolution": "bundler",
+              "jsx": "react-jsx",
+              "strict": true,
+              "esModuleInterop": true,
+              "skipLibCheck": true,
+              "declaration": true,
+              "sourceMap": true,
+              "outDir": "dist"
+            },
+            "include": ["src"],
+            "exclude": ["node_modules", "dist"]
+          }
+          TSEOF
+          # Point package entry to source (no build step needed)
+          cd $GITHUB_WORKSPACE/sqlrooms/packages/cesium
+          sed -i 's|"main": "dist/index.js"|"main": "src/index.ts"|' package.json
+          sed -i 's|"types": "dist/index.d.ts"|"types": "src/index.ts"|' package.json
+          sed -i 's|"module": "dist/index.js"|"module": "src/index.ts"|' package.json
 
       - name: Build
         working-directory: client
