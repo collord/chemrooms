@@ -3,7 +3,11 @@ import {defineConfig} from 'vite';
 import react from '@vitejs/plugin-react';
 import cesium from 'vite-plugin-cesium';
 
-const cesiumPkgSrc = path.resolve(__dirname, '../../sqlrooms/packages/cesium/src');
+// In CI, sqlrooms is checked out inside the workspace (../sqlrooms relative to client/).
+// Locally, it's at ../../sqlrooms (sibling to chemrooms repo).
+const cesiumPkgSrc = process.env.GITHUB_ACTIONS
+  ? path.resolve(__dirname, '../sqlrooms/packages/cesium/src')
+  : path.resolve(__dirname, '../../sqlrooms/packages/cesium/src');
 
 export default defineConfig({
   base: process.env.GITHUB_ACTIONS ? '/chemrooms/' : '/',
