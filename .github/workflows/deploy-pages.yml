@@ -1,0 +1,68 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout collord/sqlrooms (for @sqlrooms/cesium)
+        uses: actions/checkout@v4
+        with:
+          repository: collord/sqlrooms
+          path: sqlrooms
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: client/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: client
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Symlink node_modules for cesium source resolution
+        run: ln -sf $GITHUB_WORKSPACE/client/node_modules $GITHUB_WORKSPACE/sqlrooms/node_modules
+
+      - name: Build
+        working-directory: client
+        env:
+          VITE_CESIUM_ION_TOKEN: ${{ secrets.VITE_CESIUM_ION_TOKEN }}
+          VITE_DATA_URL: ./data
+        run: npx vite build
+
+      - name: Copy parquet data into build output
+        run: cp -r server/data client/dist/data
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: client/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

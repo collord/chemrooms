@@ -6,9 +6,12 @@ import cesium from 'vite-plugin-cesium';
 const cesiumPkgSrc = path.resolve(__dirname, '../../sqlrooms/packages/cesium/src');
 
 export default defineConfig({
+  base: process.env.GITHUB_ACTIONS ? '/chemrooms/' : '/',
   plugins: [react(), cesium()],
   define: {
-    CESIUM_BASE_URL: JSON.stringify('/cesium'),
+    CESIUM_BASE_URL: JSON.stringify(
+      process.env.GITHUB_ACTIONS ? '/chemrooms/cesium' : '/cesium',
+    ),
   },
   server: {
     host: '0.0.0.0',
