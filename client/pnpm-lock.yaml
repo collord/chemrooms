@@ -59,6 +59,9 @@ importers:
       '@sqlrooms/utils':
         specifier: ^0.28.0
         version: 0.28.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@tailwindcss/typography':
+        specifier: ^0.5.19
+        version: 0.5.19(tailwindcss@3.4.19)
       cesium:
         specifier: ^1.124.0
         version: 1.140.0
@@ -77,6 +80,9 @@ importers:
       resium:
         specifier: ^1.20.0
         version: 1.20.0(cesium@1.140.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      tailwindcss-animate:
+        specifier: ^1.0.7
+        version: 1.0.7(tailwindcss@3.4.19)
       zod:
         specifier: ^3.23.0
         version: 3.25.76
