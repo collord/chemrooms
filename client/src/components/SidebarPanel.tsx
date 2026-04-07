@@ -9,6 +9,7 @@ import React from 'react';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
 import {useAvailableFilters} from '../hooks/useAvailableFilters';
 import {useLocationClick, useLocationDetail} from '../hooks/useLocationClick';
+import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts';
 import {LocationDetailCard} from './LocationDetailCard';
 import {AnalytePicker} from './AnalytePicker';
 import {FilterToolbar} from './FilterToolbar';
@@ -19,6 +20,7 @@ export const SidebarPanel: React.FC = () => {
   useAvailableFilters();
   useLocationClick();
   useLocationDetail();
+  useKeyboardShortcuts();
 
   const selectedLocationId = useChemroomsStore(
     (s) => s.chemrooms.config.selectedLocationId,
