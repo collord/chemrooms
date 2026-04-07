@@ -10,7 +10,7 @@
     "link-sqlrooms": "bash ./scripts/link-sqlrooms.sh"
   },
   "dependencies": {
-    "@sqlrooms/cesium": "github:sqlrooms/sqlrooms#v0.28.0&path:packages/cesium",
+    "@sqlrooms/cesium": "link:../../sqlrooms/packages/cesium",
     "@sqlrooms/data-table": "^0.28.0",
     "@sqlrooms/duckdb": "^0.28.0",
     "@sqlrooms/duckdb-core": "^0.28.0",
@@ -31,6 +31,7 @@
     "lucide-react": "^0.556.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "resium": "^1.20.0",
     "zod": "^3.23.0",
     "zustand": "^5.0.8"
   },
