@@ -14,6 +14,7 @@ import {LocationDetailCard} from './LocationDetailCard';
 import {AnalytePicker} from './AnalytePicker';
 import {FilterToolbar} from './FilterToolbar';
 import {CrossSectionToggle} from './CrossSectionToggle';
+import {VerticalExaggerationSlider} from './VerticalExaggerationSlider';
 
 export const SidebarPanel: React.FC = () => {
   // Activate hooks
@@ -36,6 +37,7 @@ export const SidebarPanel: React.FC = () => {
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-3">
       <FilterToolbar />
       <CrossSectionToggle />
+      <VerticalExaggerationSlider />
 
       {selectedLocationId ? (
         <>
