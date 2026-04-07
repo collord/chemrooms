@@ -74,8 +74,15 @@ jobs:
           VITE_DATA_URL: ./data
         run: npx vite build
 
-      - name: Copy parquet data into build output
-        run: cp -r server/data client/dist/data
+      - name: Copy parquet data and Cesium assets into build output
+        working-directory: client
+        run: |
+          cp -r ../server/data dist/data
+          mkdir -p dist/cesium
+          cp -r node_modules/cesium/Build/Cesium/Assets dist/cesium/Assets
+          cp -r node_modules/cesium/Build/Cesium/ThirdParty dist/cesium/ThirdParty
+          cp -r node_modules/cesium/Build/Cesium/Workers dist/cesium/Workers
+          cp -r node_modules/cesium/Build/Cesium/Widgets dist/cesium/Widgets
 
       - uses: actions/upload-pages-artifact@v3
         with:
