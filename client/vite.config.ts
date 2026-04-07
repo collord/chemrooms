@@ -11,11 +11,14 @@ const cesiumPkgSrc = process.env.GITHUB_ACTIONS
 
 export default defineConfig({
   base: process.env.GITHUB_ACTIONS ? '/chemrooms/' : '/',
-  plugins: [react(), cesium()],
+  plugins: [react(), cesium({rebuildCesium: true})],
   define: {
     CESIUM_BASE_URL: JSON.stringify(
       process.env.GITHUB_ACTIONS ? '/chemrooms/cesium' : '/cesium',
     ),
+  },
+  build: {
+    chunkSizeWarningLimit: 6000,
   },
   server: {
     host: '0.0.0.0',
