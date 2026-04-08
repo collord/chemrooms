@@ -37,8 +37,8 @@ app.add_middleware(
 app.mount("/data", StaticFiles(directory=str(DATA_DIR)), name="data")
 
 # Serve 3D tileset files at /tiles/
-if TILES_DIR.exists():
-    app.mount("/tiles", StaticFiles(directory=str(TILES_DIR)), name="tiles")
+TILES_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/tiles", StaticFiles(directory=str(TILES_DIR)), name="tiles")
 
 
 @app.get("/health")
