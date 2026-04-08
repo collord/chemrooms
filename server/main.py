@@ -46,6 +46,20 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/tiles/manifest.json")
+def tiles_manifest():
+    """Return a list of available tilesets under TILES_DIR."""
+    tilesets = []
+    if TILES_DIR.exists():
+        for child in sorted(TILES_DIR.iterdir()):
+            if child.is_dir() and (child / "tileset.json").exists():
+                tilesets.append({
+                    "name": child.name,
+                    "url": f"/tiles/{child.name}/tileset.json",
+                })
+    return {"tilesets": tilesets}
+
+
 # ---------------------------------------------------------------------------
 # CLI: export tables from .duckdb to parquet
 # ---------------------------------------------------------------------------

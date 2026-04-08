@@ -1,10 +1,12 @@
 /**
  * Hamburger-style layers menu with visibility toggles.
  *
- * Layers:
+ * Static layers:
  *  - Site Data (points from store/DuckDB)
  *  - Topography (Cesium world terrain)
- *  - Local Topo (3D Tileset served from /tiles/)
+ *
+ * Dynamic layers: fetched from /tiles/manifest.json at startup —
+ * one toggle per tileset subdirectory found on the server.
  */
 
 import React, {useState, useCallback, useRef, useEffect} from 'react';
@@ -12,34 +14,43 @@ import {Menu} from 'lucide-react';
 import {useStoreWithCesium} from '@sqlrooms/cesium';
 import {Cesium3DTileset} from 'cesium';
 
-interface LayerItem {
-  id: string;
-  label: string;
-  defaultVisible: boolean;
+interface TilesetEntry {
+  name: string;
+  url: string;
 }
 
-const LAYERS: LayerItem[] = [
-  {id: 'site-data', label: 'Site Data', defaultVisible: true},
-  {id: 'topography', label: 'Topography', defaultVisible: true},
-  {id: 'local-topo', label: 'Local Topo', defaultVisible: false},
-];
-
-const TILES_BASE_URL =
-  import.meta.env.VITE_TILES_URL ?? 'http://localhost:8000/tiles';
+const SERVER_BASE =
+  import.meta.env.VITE_DATA_URL?.replace('/data', '') ?? 'http://localhost:8000';
 
 export const LayersMenu: React.FC = () => {
   const [open, setOpen] = useState(false);
-  const [visibility, setVisibility] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(LAYERS.map((l) => [l.id, l.defaultVisible])),
-  );
+  const [siteDataVisible, setSiteDataVisible] = useState(true);
+  const [topoVisible, setTopoVisible] = useState(true);
+  const [tilesets, setTilesets] = useState<TilesetEntry[]>([]);
+  const [tilesetVisibility, setTilesetVisibility] = useState<Record<string, boolean>>({});
+
   const menuRef = useRef<HTMLDivElement>(null);
-  const tilesetRef = useRef<Cesium3DTileset | null>(null);
+  const tilesetRefs = useRef<Record<string, Cesium3DTileset>>({});
 
   const viewer = useStoreWithCesium((s) => s.cesium.viewer);
   const layers = useStoreWithCesium((s) => s.cesium.config.layers);
   const toggleLayerVisibility = useStoreWithCesium(
     (s) => s.cesium.toggleLayerVisibility,
   );
+
+  // Fetch manifest on mount
+  useEffect(() => {
+    fetch(`${SERVER_BASE}/tiles/manifest.json`)
+      .then((r) => r.json())
+      .then((data) => {
+        const entries: TilesetEntry[] = data.tilesets ?? [];
+        setTilesets(entries);
+        setTilesetVisibility(
+          Object.fromEntries(entries.map((t) => [t.name, false])),
+        );
+      })
+      .catch(() => {/* server may not have any tilesets yet */});
+  }, []);
 
   // Close on outside click
   useEffect(() => {
@@ -53,58 +64,61 @@ export const LayersMenu: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [open]);
 
-  // Clean up tileset on unmount
+  // Clean up tilesets on unmount
   useEffect(() => {
     return () => {
-      if (tilesetRef.current && viewer && !viewer.isDestroyed()) {
-        viewer.scene.primitives.remove(tilesetRef.current);
-        tilesetRef.current = null;
+      if (!viewer || viewer.isDestroyed()) return;
+      for (const ts of Object.values(tilesetRefs.current)) {
+        viewer.scene.primitives.remove(ts);
       }
+      tilesetRefs.current = {};
     };
   }, [viewer]);
 
-  const toggle = useCallback(
-    (id: string) => {
-      const next = !visibility[id];
-      setVisibility((v) => ({...v, [id]: next}));
+  const toggleSiteData = useCallback(() => {
+    const next = !siteDataVisible;
+    setSiteDataVisible(next);
+    for (const layer of layers) {
+      if (layer.visible !== next) toggleLayerVisibility(layer.id);
+    }
+  }, [siteDataVisible, layers, toggleLayerVisibility]);
 
-      if (id === 'site-data') {
-        // Toggle all DuckDB-sourced entity layers
-        for (const layer of layers) {
-          if (layer.visible !== next) {
-            toggleLayerVisibility(layer.id);
-          }
-        }
-      } else if (id === 'topography') {
-        if (viewer && !viewer.isDestroyed()) {
-          viewer.scene.globe.show = next;
-        }
-      } else if (id === 'local-topo') {
-        if (!viewer || viewer.isDestroyed()) return;
+  const toggleTopo = useCallback(() => {
+    const next = !topoVisible;
+    setTopoVisible(next);
+    if (viewer && !viewer.isDestroyed()) {
+      viewer.scene.globe.show = next;
+    }
+  }, [topoVisible, viewer]);
 
-        if (next) {
-          // Load tileset if not already loaded
-          if (!tilesetRef.current) {
-            Cesium3DTileset.fromUrl(`${TILES_BASE_URL}/tileset.json`)
-              .then((tileset) => {
-                tilesetRef.current = tileset;
-                viewer.scene.primitives.add(tileset);
-                console.log('[LocalTopo] Tileset loaded', tileset);
-              })
-              .catch((err) => {
-                console.error('[LocalTopo] Failed to load tileset:', err);
-              });
-          } else {
-            tilesetRef.current.show = true;
-          }
+  const toggleTileset = useCallback(
+    (entry: TilesetEntry) => {
+      if (!viewer || viewer.isDestroyed()) return;
+      const next = !tilesetVisibility[entry.name];
+      setTilesetVisibility((v) => ({...v, [entry.name]: next}));
+
+      if (next) {
+        if (!tilesetRefs.current[entry.name]) {
+          const fullUrl = `${SERVER_BASE}${entry.url}`;
+          Cesium3DTileset.fromUrl(fullUrl)
+            .then((ts) => {
+              tilesetRefs.current[entry.name] = ts;
+              viewer.scene.primitives.add(ts);
+              console.log(`[LocalTopo:${entry.name}] loaded`);
+            })
+            .catch((err) =>
+              console.error(`[LocalTopo:${entry.name}] failed:`, err),
+            );
         } else {
-          if (tilesetRef.current) {
-            tilesetRef.current.show = false;
-          }
+          tilesetRefs.current[entry.name].show = true;
+        }
+      } else {
+        if (tilesetRefs.current[entry.name]) {
+          tilesetRefs.current[entry.name].show = false;
         }
       }
     },
-    [visibility, viewer, layers, toggleLayerVisibility],
+    [tilesetVisibility, viewer],
   );
 
   return (
@@ -120,30 +134,44 @@ export const LayersMenu: React.FC = () => {
 
       {open && (
         <div className="absolute left-0 z-50 mt-1 w-48 rounded-md border border-border bg-background py-1 shadow-lg">
-          {LAYERS.map((layer) => (
-            <label
-              key={layer.id}
-              className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-xs transition-colors hover:bg-muted"
-            >
-              <input
-                type="checkbox"
-                checked={visibility[layer.id] ?? layer.defaultVisible}
-                onChange={() => toggle(layer.id)}
-                className="accent-primary"
-              />
-              <span
-                className={
-                  visibility[layer.id]
-                    ? 'text-foreground'
-                    : 'text-muted-foreground'
-                }
-              >
-                {layer.label}
-              </span>
-            </label>
-          ))}
+          {/* Static layers */}
+          <LayerRow label="Site Data" checked={siteDataVisible} onChange={toggleSiteData} />
+          <LayerRow label="Topography" checked={topoVisible} onChange={toggleTopo} />
+
+          {/* Dynamic tileset layers */}
+          {tilesets.length > 0 && (
+            <>
+              <div className="mx-3 my-1 border-t border-border" />
+              {tilesets.map((entry) => (
+                <LayerRow
+                  key={entry.name}
+                  label={entry.name}
+                  checked={tilesetVisibility[entry.name] ?? false}
+                  onChange={() => toggleTileset(entry)}
+                />
+              ))}
+            </>
+          )}
         </div>
       )}
     </div>
   );
 };
+
+const LayerRow: React.FC<{
+  label: string;
+  checked: boolean;
+  onChange: () => void;
+}> = ({label, checked, onChange}) => (
+  <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-xs transition-colors hover:bg-muted">
+    <input
+      type="checkbox"
+      checked={checked}
+      onChange={onChange}
+      className="accent-primary"
+    />
+    <span className={checked ? 'text-foreground' : 'text-muted-foreground'}>
+      {label}
+    </span>
+  </label>
+);
