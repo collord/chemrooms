@@ -40,7 +40,7 @@ export const LayersMenu: React.FC = () => {
 
   // Fetch manifest on mount
   useEffect(() => {
-    fetch(`${SERVER_BASE}/tiles/manifest.json`)
+    fetch(`${SERVER_BASE}/api/tiles/manifest`)
       .then((r) => r.json())
       .then((data) => {
         const entries: TilesetEntry[] = data.tilesets ?? [];

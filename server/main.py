@@ -46,7 +46,7 @@ def health():
     return {"status": "ok"}
 
 
-@app.get("/tiles/manifest.json")
+@app.get("/api/tiles/manifest")
 def tiles_manifest():
     """Return a list of available tilesets under TILES_DIR."""
     tilesets = []
