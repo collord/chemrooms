@@ -263,13 +263,15 @@ def main():
     transform_matrix = enu_to_ecef_matrix(center_lon, center_lat, center_height)
     enu_x, enu_y, enu_z = ecef_to_enu(ecef_x, ecef_y, ecef_z, transform_matrix)
 
-    # Convert ENU (X=East, Y=North, Z=Up) to glTF Y-up (X=East, Y=Up, Z=-North).
-    # Cesium applies Y-up→Z-up internally: (X,Y,Z)→(X,-Z,Y).
-    # Storing (East, Up, -North) means after that conversion we get (East, North, Up) = ENU,
-    # and the enu_to_ecef_matrix transform then correctly maps to ECEF.
-    local_x = enu_x        # East
-    local_y = enu_z        # Up   (glTF Y)
-    local_z = -enu_y       # -North (glTF Z)
+    # Convert ENU (X=East, Y=North, Z=Up) to glTF Y-up.
+    # Cesium applies Y-up→Z-up internally: (X,Y,Z) → (X, Z, -Y).
+    # We need the result to be ENU (East, North, Up):
+    #   X → East  : glTF X = East
+    #   Z → North : glTF Z = North
+    #  -Y → Up    : glTF Y = -Up
+    local_x = enu_x        # East  (glTF X)
+    local_y = -enu_z       # -Up   (glTF Y)
+    local_z = enu_y        # North (glTF Z)
 
     print("Building mesh...")
     mesh = build_mesh(local_x, local_y, local_z, valid, rows, cols)
