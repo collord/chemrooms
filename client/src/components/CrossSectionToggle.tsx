@@ -13,6 +13,8 @@ import {Scissors, X} from 'lucide-react';
 import {useStoreWithCesium} from '@sqlrooms/cesium';
 import {
   Cartesian3,
+  Cartographic,
+  Math as CesiumMath,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
   defined,
@@ -22,6 +24,7 @@ import {
   CallbackProperty,
   PolylineDashMaterialProperty,
 } from 'cesium';
+import {useChemroomsStore} from '../slices/chemrooms-slice';
 
 type Mode = 'idle' | 'picking_first' | 'picking_second' | 'active';
 
@@ -45,6 +48,33 @@ export const CrossSectionToggle: React.FC = () => {
     (s) => s.cesium.toggleLayerVisibility,
   );
   const layers = useStoreWithCesium((s) => s.cesium.config.layers);
+  const setCrossSectionPoints = useChemroomsStore(
+    (s) => s.chemrooms.setCrossSectionPoints,
+  );
+  const crossSectionPoints = useChemroomsStore(
+    (s) => s.chemrooms.crossSectionPoints,
+  );
+
+  // Sync mode to 'active' when restored from bookmark
+  useEffect(() => {
+    if (crossSectionPoints && mode === 'idle' && viewer && !viewer.isDestroyed()) {
+      const [[lon1, lat1], [lon2, lat2]] = crossSectionPoints;
+      const p1 = Cartesian3.fromDegrees(lon1, lat1);
+      const p2 = Cartesian3.fromDegrees(lon2, lat2);
+      linePointsRef.current = [p1, p2];
+
+      // Draw the fixed yellow line
+      previewEntityRef.current = viewer.entities.add({
+        polyline: {
+          positions: [p1, p2],
+          width: 3,
+          material: Color.YELLOW,
+          clampToGround: true,
+        },
+      });
+      setMode('active');
+    }
+  }, [crossSectionPoints, viewer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const showSubsurface = useCallback(
     (show: boolean) => {
@@ -105,6 +135,14 @@ export const CrossSectionToggle: React.FC = () => {
       enableClippingPlane({x: normal.x, y: normal.y, z: normal.z}, distance);
       showSubsurface(true);
 
+      // Persist the two picked points (as lon/lat degrees) for bookmarking
+      const c1 = Cartographic.fromCartesian(p1);
+      const c2 = Cartographic.fromCartesian(p2);
+      setCrossSectionPoints([
+        [CesiumMath.toDegrees(c1.longitude), CesiumMath.toDegrees(c1.latitude)],
+        [CesiumMath.toDegrees(c2.longitude), CesiumMath.toDegrees(c2.latitude)],
+      ]);
+
       // Replace the dynamic preview line with a fixed solid line
       removePreviewLine();
       linePointsRef.current = [Cartesian3.clone(p1), Cartesian3.clone(p2)];
@@ -121,7 +159,7 @@ export const CrossSectionToggle: React.FC = () => {
 
       setMode('active');
     },
-    [enableClippingPlane, showSubsurface, removePreviewLine, viewer],
+    [enableClippingPlane, showSubsurface, removePreviewLine, viewer, setCrossSectionPoints],
   );
 
   const cleanupHandlers = useCallback(() => {
@@ -144,10 +182,11 @@ export const CrossSectionToggle: React.FC = () => {
     removePreviewLine();
     disableClippingPlane();
     showSubsurface(false);
+    setCrossSectionPoints(null);
     firstPointRef.current = null;
     linePointsRef.current = null;
     setMode('idle');
-  }, [cleanupHandlers, removePreviewLine, disableClippingPlane, showSubsurface]);
+  }, [cleanupHandlers, removePreviewLine, disableClippingPlane, showSubsurface, setCrossSectionPoints]);
 
   // Set up click + mouse-move handlers when entering picking mode
   useEffect(() => {

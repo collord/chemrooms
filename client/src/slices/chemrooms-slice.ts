@@ -57,6 +57,9 @@ export interface ChemroomsConfig {
   fractionFilter: string | null;
 }
 
+/** Lon/lat pairs for the two cross-section endpoints (degrees). */
+export type CrossSectionPoints = [[number, number], [number, number]] | null;
+
 export interface ChemroomsSliceState {
   chemrooms: {
     config: ChemroomsConfig;
@@ -66,6 +69,7 @@ export interface ChemroomsSliceState {
     availableScreeningLevels: string[];
     locationSummary: LocationSummary | null;
     analytesAtLocation: AnalyteInfo[];
+    crossSectionPoints: CrossSectionPoints;
     isLoadingFilters: boolean;
     isLoadingLocation: boolean;
     // Actions
@@ -85,6 +89,7 @@ export interface ChemroomsSliceState {
     setAvailableAnalytes: (analytes: AnalyteInfo[]) => void;
     setAvailableMatrices: (matrices: string[]) => void;
     setAvailableScreeningLevels: (levels: string[]) => void;
+    setCrossSectionPoints: (points: CrossSectionPoints) => void;
     setIsLoadingFilters: (loading: boolean) => void;
     setIsLoadingLocation: (loading: boolean) => void;
   };
@@ -144,6 +149,7 @@ export function createChemroomsSlice(
       availableScreeningLevels: [],
       locationSummary: null,
       analytesAtLocation: [],
+      crossSectionPoints: null,
       isLoadingFilters: false,
       isLoadingLocation: false,
 
@@ -249,6 +255,11 @@ export function createChemroomsSlice(
       setAvailableScreeningLevels: (levels) =>
         set((state: ChemroomsSliceState) =>
           updateRuntime(state, {availableScreeningLevels: levels}),
+        ),
+
+      setCrossSectionPoints: (points) =>
+        set((state: ChemroomsSliceState) =>
+          updateRuntime(state, {crossSectionPoints: points}),
         ),
 
       setIsLoadingFilters: (loading) =>

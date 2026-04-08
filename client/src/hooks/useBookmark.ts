@@ -8,6 +8,7 @@
  *  - Selected location
  *  - Filters: matrix, fraction, non-detect method
  *  - Time-series analytes
+ *  - Cross-section plane (two picked surface points)
  */
 
 import {useEffect, useRef} from 'react';
@@ -24,6 +25,9 @@ function r(n: number, d = 4): number {
 export function useBookmark() {
   const viewer = useStoreWithCesium((s) => s.cesium.viewer);
   const config = useChemroomsStore((s) => s.chemrooms.config);
+  const crossSectionPoints = useChemroomsStore(
+    (s) => s.chemrooms.crossSectionPoints,
+  );
   const setSelectedLocation = useChemroomsStore(
     (s) => s.chemrooms.setSelectedLocation,
   );
@@ -39,6 +43,16 @@ export function useBookmark() {
   const setTimeSeriesAnalytes = useChemroomsStore(
     (s) => s.chemrooms.setTimeSeriesAnalytes,
   );
+  const setCrossSectionPoints = useChemroomsStore(
+    (s) => s.chemrooms.setCrossSectionPoints,
+  );
+  const enableClippingPlane = useStoreWithCesium(
+    (s) => s.cesium.enableClippingPlane,
+  );
+  const toggleLayerVisibility = useStoreWithCesium(
+    (s) => s.cesium.toggleLayerVisibility,
+  );
+  const layers = useStoreWithCesium((s) => s.cesium.config.layers);
 
   const appliedRef = useRef(false);
 
@@ -105,6 +119,42 @@ export function useBookmark() {
     // Analytes
     const analytes = params.get('analytes');
     if (analytes) setTimeSeriesAnalytes(analytes.split(','));
+
+    // Cross-section: replay the clipping plane from two surface points
+    const xsec = params.get('xsec');
+    if (xsec) {
+      const nums = xsec.split(',').map(Number);
+      if (nums.length === 4 && nums.every((n) => !isNaN(n))) {
+        const [lon1, lat1, lon2, lat2] = nums;
+        const p1 = Cartesian3.fromDegrees(lon1, lat1);
+        const p2 = Cartesian3.fromDegrees(lon2, lat2);
+
+        // Replicate the clipping plane math from CrossSectionToggle
+        const dir = Cartesian3.subtract(p2, p1, new Cartesian3());
+        const midpoint = Cartesian3.midpoint(p1, p2, new Cartesian3());
+        const up = Cartesian3.normalize(midpoint, new Cartesian3());
+        const normal = Cartesian3.cross(dir, up, new Cartesian3());
+        Cartesian3.normalize(normal, normal);
+        const distance = -Cartesian3.dot(normal, p1);
+
+        enableClippingPlane(
+          {x: normal.x, y: normal.y, z: normal.z},
+          distance,
+        );
+
+        // Show subsurface layer
+        const sub = layers.find((l) => l.id === 'subsurface-samples');
+        if (sub && !sub.visible) {
+          toggleLayerVisibility('subsurface-samples');
+        }
+
+        // Store points so CrossSectionToggle can pick up 'active' state
+        setCrossSectionPoints([
+          [lon1, lat1],
+          [lon2, lat2],
+        ]);
+      }
+    }
   }, [
     viewer,
     setSelectedLocation,
@@ -112,6 +162,10 @@ export function useBookmark() {
     setFractionFilter,
     setNonDetectMethod,
     setTimeSeriesAnalytes,
+    setCrossSectionPoints,
+    enableClippingPlane,
+    toggleLayerVisibility,
+    layers,
   ]);
 
   /** Snapshot current state into a bookmark URL. */
@@ -160,6 +214,15 @@ export function useBookmark() {
     }
     if (config.timeSeriesAnalytes.length > 0) {
       params.set('analytes', config.timeSeriesAnalytes.join(','));
+    }
+
+    // Cross-section points
+    if (crossSectionPoints) {
+      const [[lon1, lat1], [lon2, lat2]] = crossSectionPoints;
+      params.set(
+        'xsec',
+        `${r(lon1, 6)},${r(lat1, 6)},${r(lon2, 6)},${r(lat2, 6)}`,
+      );
     }
 
     const base = window.location.origin + window.location.pathname;
