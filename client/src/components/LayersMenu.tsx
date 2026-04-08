@@ -4,12 +4,13 @@
  * Layers:
  *  - Site Data (points from store/DuckDB)
  *  - Topography (Cesium world terrain)
- *  - Local Topo (placeholder for user-provided mesh)
+ *  - Local Topo (3D Tileset served from /tiles/)
  */
 
 import React, {useState, useCallback, useRef, useEffect} from 'react';
 import {Menu} from 'lucide-react';
 import {useStoreWithCesium} from '@sqlrooms/cesium';
+import {Cesium3DTileset} from 'cesium';
 
 interface LayerItem {
   id: string;
@@ -23,12 +24,16 @@ const LAYERS: LayerItem[] = [
   {id: 'local-topo', label: 'Local Topo', defaultVisible: false},
 ];
 
+const TILES_BASE_URL =
+  import.meta.env.VITE_TILES_URL ?? 'http://localhost:8000/tiles';
+
 export const LayersMenu: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [visibility, setVisibility] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(LAYERS.map((l) => [l.id, l.defaultVisible])),
   );
   const menuRef = useRef<HTMLDivElement>(null);
+  const tilesetRef = useRef<Cesium3DTileset | null>(null);
 
   const viewer = useStoreWithCesium((s) => s.cesium.viewer);
   const layers = useStoreWithCesium((s) => s.cesium.config.layers);
@@ -48,6 +53,16 @@ export const LayersMenu: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [open]);
 
+  // Clean up tileset on unmount
+  useEffect(() => {
+    return () => {
+      if (tilesetRef.current && viewer && !viewer.isDestroyed()) {
+        viewer.scene.primitives.remove(tilesetRef.current);
+        tilesetRef.current = null;
+      }
+    };
+  }, [viewer]);
+
   const toggle = useCallback(
     (id: string) => {
       const next = !visibility[id];
@@ -65,7 +80,28 @@ export const LayersMenu: React.FC = () => {
           viewer.scene.globe.show = next;
         }
       } else if (id === 'local-topo') {
-        // Placeholder — will toggle local mesh tileset when available
+        if (!viewer || viewer.isDestroyed()) return;
+
+        if (next) {
+          // Load tileset if not already loaded
+          if (!tilesetRef.current) {
+            Cesium3DTileset.fromUrl(`${TILES_BASE_URL}/tileset.json`)
+              .then((tileset) => {
+                tilesetRef.current = tileset;
+                viewer.scene.primitives.add(tileset);
+                console.log('[LocalTopo] Tileset loaded', tileset);
+              })
+              .catch((err) => {
+                console.error('[LocalTopo] Failed to load tileset:', err);
+              });
+          } else {
+            tilesetRef.current.show = true;
+          }
+        } else {
+          if (tilesetRef.current) {
+            tilesetRef.current.show = false;
+          }
+        }
       }
     },
     [visibility, viewer, layers, toggleLayerVisibility],
@@ -104,11 +140,6 @@ export const LayersMenu: React.FC = () => {
               >
                 {layer.label}
               </span>
-              {layer.id === 'local-topo' && (
-                <span className="ml-auto text-[10px] text-muted-foreground/50">
-                  —
-                </span>
-              )}
             </label>
           ))}
         </div>
