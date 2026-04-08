@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 DATA_DIR = Path(__file__).parent / "data"
+TILES_DIR = Path(__file__).parent / "tiles"
 
 app = FastAPI(title="Chemrooms Server")
 
@@ -34,6 +35,10 @@ app.add_middleware(
 
 # Serve parquet files at /data/
 app.mount("/data", StaticFiles(directory=str(DATA_DIR)), name="data")
+
+# Serve 3D tileset files at /tiles/
+if TILES_DIR.exists():
+    app.mount("/tiles", StaticFiles(directory=str(TILES_DIR)), name="tiles")
 
 
 @app.get("/health")

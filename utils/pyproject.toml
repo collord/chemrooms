@@ -1,0 +1,12 @@
+[project]
+name = "chemrooms-utils"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "rasterio>=1.3.0",
+    "numpy>=1.24.0",
+    "trimesh>=4.0.0",
+]
+
+[project.scripts]
+tif-to-glb = "tif_to_glb:main"
