@@ -118,7 +118,27 @@ def build_mesh(x, y, z, valid, rows, cols):
     tri2 = np.column_stack([i01[mask2], i10[mask2], i11[mask2]])
 
     faces = np.vstack([tri1, tri2]).astype(np.int32)
-    mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+    mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
+
+    # Apply a visible material — tan/terrain color
+    vertex_colors = np.full((len(vertices), 4), [180, 160, 120, 255], dtype=np.uint8)
+    mesh.visual.vertex_colors = vertex_colors
+
+    # Compute vertex normals from face normals (no scipy needed)
+    face_normals = np.cross(
+        vertices[faces[:, 1]] - vertices[faces[:, 0]],
+        vertices[faces[:, 2]] - vertices[faces[:, 0]],
+    )
+    # Accumulate face normals onto vertices
+    vertex_normals = np.zeros_like(vertices)
+    for i in range(3):
+        np.add.at(vertex_normals, faces[:, i], face_normals)
+    # Normalize
+    norms = np.linalg.norm(vertex_normals, axis=1, keepdims=True)
+    norms[norms == 0] = 1
+    vertex_normals /= norms
+    mesh.vertex_normals = vertex_normals
+
     return mesh
 
 
