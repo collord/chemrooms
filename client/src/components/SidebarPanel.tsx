@@ -15,6 +15,8 @@ import {AnalytePicker} from './AnalytePicker';
 import {FilterToolbar} from './FilterToolbar';
 import {CrossSectionToggle} from './CrossSectionToggle';
 import {VerticalExaggerationSlider} from './VerticalExaggerationSlider';
+import {LayersMenu} from './LayersMenu';
+import {BookmarkButton} from './BookmarkButton';
 
 export const SidebarPanel: React.FC = () => {
   // Activate hooks
@@ -35,6 +37,10 @@ export const SidebarPanel: React.FC = () => {
 
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-3">
+      <div className="flex items-center gap-2">
+        <LayersMenu />
+        <BookmarkButton />
+      </div>
       <FilterToolbar />
       <CrossSectionToggle />
       <VerticalExaggerationSlider />
