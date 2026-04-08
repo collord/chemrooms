@@ -5,8 +5,9 @@ Input must be in EPSG:4979 (WGS84 lon/lat + ellipsoidal height in meters).
 Use QGIS to reproject from other CRSs (e.g. EPSG:5498 → EPSG:4979)
 before running this script — QGIS/PROJ handles datum and geoid corrections.
 
-Vertices are converted to ECEF Cartesian coordinates so Cesium places
-the mesh correctly on the globe.
+The glb is written in a local East-North-Up (ENU) coordinate frame centered
+on the mesh, and tileset.json includes a transform matrix that places it
+in ECEF. This avoids floating-point precision issues with large ECEF values.
 
 Usage:
     python tif_to_glb.py input.tif -o ../server/tiles/
@@ -23,6 +24,7 @@ import trimesh
 
 # WGS84 ellipsoid constants
 WGS84_A = 6378137.0  # semi-major axis (m)
+WGS84_B = 6356752.314245179  # semi-minor axis (m)
 WGS84_E2 = 6.6943799901377997e-3  # first eccentricity squared
 
 
@@ -36,7 +38,6 @@ def lonlat_to_ecef(lons_deg, lats_deg, heights):
     sin_lon = np.sin(lons)
     cos_lon = np.cos(lons)
 
-    # Prime vertical radius of curvature
     N = WGS84_A / np.sqrt(1.0 - WGS84_E2 * sin_lat**2)
 
     x = (N + heights) * cos_lat * cos_lon
@@ -44,6 +45,54 @@ def lonlat_to_ecef(lons_deg, lats_deg, heights):
     z = (N * (1.0 - WGS84_E2) + heights) * sin_lat
 
     return x, y, z
+
+
+def enu_to_ecef_matrix(lon_deg, lat_deg, height):
+    """
+    Compute the 4x4 ENU-to-ECEF transform matrix for a given origin point.
+    Equivalent to Cesium's Transforms.eastNorthUpToFixedFrame().
+    """
+    lon = np.radians(lon_deg)
+    lat = np.radians(lat_deg)
+
+    sin_lat = np.sin(lat)
+    cos_lat = np.cos(lat)
+    sin_lon = np.sin(lon)
+    cos_lon = np.cos(lon)
+
+    # ECEF position of the origin
+    N = WGS84_A / np.sqrt(1.0 - WGS84_E2 * sin_lat**2)
+    ox = (N + height) * cos_lat * cos_lon
+    oy = (N + height) * cos_lat * sin_lon
+    oz = (N * (1.0 - WGS84_E2) + height) * sin_lat
+
+    # East unit vector
+    ex, ey, ez = -sin_lon, cos_lon, 0.0
+
+    # North unit vector
+    nx, ny, nz = -sin_lat * cos_lon, -sin_lat * sin_lon, cos_lat
+
+    # Up unit vector
+    ux, uy, uz = cos_lat * cos_lon, cos_lat * sin_lon, sin_lat
+
+    # 4x4 column-major matrix: [East, North, Up, Origin]
+    # glTF uses Y-up, but Cesium handles that internally for 3D Tiles.
+    # We provide ENU (X=East, Y=North, Z=Up) which Cesium expects.
+    return np.array([
+        [ex, nx, ux, ox],
+        [ey, ny, uy, oy],
+        [ez, nz, uz, oz],
+        [0,  0,  0,  1],
+    ], dtype=np.float64)
+
+
+def ecef_to_enu(ecef_x, ecef_y, ecef_z, transform_matrix):
+    """Convert ECEF coordinates to local ENU using the inverse of the transform."""
+    inv = np.linalg.inv(transform_matrix)
+    ones = np.ones_like(ecef_x)
+    ecef = np.vstack([ecef_x, ecef_y, ecef_z, ones])  # (4, N)
+    local = inv @ ecef  # (4, N)
+    return local[0], local[1], local[2]
 
 
 def load_dem(path: str, decimate: int = 1):
@@ -63,7 +112,6 @@ def load_dem(path: str, decimate: int = 1):
     # Decimate (subsample) to reduce mesh size
     if decimate > 1:
         dem = dem[::decimate, ::decimate]
-        # Adjust transform for decimated grid
         transform = rasterio.transform.Affine(
             transform.a * decimate,
             transform.b,
@@ -76,7 +124,6 @@ def load_dem(path: str, decimate: int = 1):
     rows, cols = dem.shape
     row_idx, col_idx = np.meshgrid(np.arange(rows), np.arange(cols), indexing="ij")
 
-    # Map pixel coords to CRS coords (lon, lat for EPSG:4979)
     xs, ys = rasterio.transform.xy(
         transform, row_idx.ravel(), col_idx.ravel(), offset="center"
     )
@@ -84,7 +131,6 @@ def load_dem(path: str, decimate: int = 1):
     lats = np.array(ys, dtype=np.float64)
     heights = dem.ravel().astype(np.float64)
 
-    # Build nodata mask
     if nodata is not None:
         valid = heights != nodata
     else:
@@ -93,9 +139,9 @@ def load_dem(path: str, decimate: int = 1):
     return lons, lats, heights, valid, rows, cols
 
 
-def build_mesh(x, y, z, valid, rows, cols):
-    """Build a triangle mesh from a regular grid of ECEF vertices."""
-    vertices = np.column_stack([x, y, z])
+def build_mesh(local_x, local_y, local_z, valid, rows, cols):
+    """Build a triangle mesh from a regular grid of local ENU vertices."""
+    vertices = np.column_stack([local_x, local_y, local_z])
 
     # Build faces from grid connectivity (vectorized)
     r_idx, c_idx = np.meshgrid(
@@ -109,18 +155,16 @@ def build_mesh(x, y, z, valid, rows, cols):
     i01 = r_idx * cols + (c_idx + 1)
     i11 = (r_idx + 1) * cols + (c_idx + 1)
 
-    # Triangle 1: i00, i10, i01
     mask1 = valid[i00] & valid[i10] & valid[i01]
     tri1 = np.column_stack([i00[mask1], i10[mask1], i01[mask1]])
 
-    # Triangle 2: i01, i10, i11
     mask2 = valid[i01] & valid[i10] & valid[i11]
     tri2 = np.column_stack([i01[mask2], i10[mask2], i11[mask2]])
 
     faces = np.vstack([tri1, tri2]).astype(np.int32)
     mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
 
-    # Apply a visible material — tan/terrain color
+    # Vertex colors — tan/terrain color
     vertex_colors = np.full((len(vertices), 4), [180, 160, 120, 255], dtype=np.uint8)
     mesh.visual.vertex_colors = vertex_colors
 
@@ -129,11 +173,9 @@ def build_mesh(x, y, z, valid, rows, cols):
         vertices[faces[:, 1]] - vertices[faces[:, 0]],
         vertices[faces[:, 2]] - vertices[faces[:, 0]],
     )
-    # Accumulate face normals onto vertices
     vertex_normals = np.zeros_like(vertices)
     for i in range(3):
         np.add.at(vertex_normals, faces[:, i], face_normals)
-    # Normalize
     norms = np.linalg.norm(vertex_normals, axis=1, keepdims=True)
     norms[norms == 0] = 1
     vertex_normals /= norms
@@ -142,15 +184,17 @@ def build_mesh(x, y, z, valid, rows, cols):
     return mesh
 
 
-def build_tileset_json(lons, lats, heights):
-    """Create a minimal tileset.json with a bounding region."""
+def build_tileset_json(lons, lats, heights, transform_matrix):
+    """Create tileset.json with bounding region and ENU-to-ECEF transform."""
     lon_min, lon_max = np.radians(lons.min()), np.radians(lons.max())
     lat_min, lat_max = np.radians(lats.min()), np.radians(lats.max())
     h_min, h_max = float(heights.min()), float(heights.max())
 
-    # Geometric error: rough estimate based on extent
     extent_deg = max(np.degrees(lon_max - lon_min), np.degrees(lat_max - lat_min))
-    geometric_error = extent_deg * 111000  # ~meters
+    geometric_error = extent_deg * 111000
+
+    # Flatten transform to column-major 16-element array for 3D Tiles spec
+    transform_flat = transform_matrix.T.ravel().tolist()
 
     return {
         "asset": {"version": "1.0"},
@@ -177,6 +221,7 @@ def build_tileset_json(lons, lats, heights):
             "geometricError": 0,
             "refine": "ADD",
             "content": {"uri": "terrain.glb"},
+            "transform": transform_flat,
         },
     }
 
@@ -204,11 +249,20 @@ def main():
     lons, lats, heights, valid, rows, cols = load_dem(args.input, args.decimate)
     print(f"  Grid: {cols}x{rows} = {len(lons)} vertices ({valid.sum()} valid)")
 
-    print("Converting to ECEF...")
-    x, y, z = lonlat_to_ecef(lons, lats, heights)
+    # Compute ENU origin at the center of the DEM
+    center_lon = float((lons.min() + lons.max()) / 2)
+    center_lat = float((lats.min() + lats.max()) / 2)
+    center_height = float(np.nanmean(heights[valid]))
+    print(f"  ENU origin: ({center_lon:.6f}, {center_lat:.6f}, {center_height:.1f}m)")
+
+    # Convert all vertices to ECEF, then to local ENU
+    print("Converting to ECEF → local ENU...")
+    ecef_x, ecef_y, ecef_z = lonlat_to_ecef(lons, lats, heights)
+    transform_matrix = enu_to_ecef_matrix(center_lon, center_lat, center_height)
+    local_x, local_y, local_z = ecef_to_enu(ecef_x, ecef_y, ecef_z, transform_matrix)
 
     print("Building mesh...")
-    mesh = build_mesh(x, y, z, valid, rows, cols)
+    mesh = build_mesh(local_x, local_y, local_z, valid, rows, cols)
     print(f"  {len(mesh.vertices)} vertices, {len(mesh.faces)} faces")
 
     # Export glb
@@ -217,9 +271,9 @@ def main():
     size_mb = glb_path.stat().st_size / (1024 * 1024)
     print(f"  Wrote {glb_path} ({size_mb:.1f} MB)")
 
-    # Build tileset.json
+    # Build tileset.json with transform
     print("Building tileset.json...")
-    tileset = build_tileset_json(lons, lats, heights)
+    tileset = build_tileset_json(lons, lats, heights, transform_matrix)
     tileset_path = out / "tileset.json"
     tileset_path.write_text(json.dumps(tileset, indent=2))
     print(f"  Wrote {tileset_path}")
