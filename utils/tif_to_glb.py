@@ -259,7 +259,12 @@ def main():
     print("Converting to ECEF → local ENU...")
     ecef_x, ecef_y, ecef_z = lonlat_to_ecef(lons, lats, heights)
     transform_matrix = enu_to_ecef_matrix(center_lon, center_lat, center_height)
-    local_x, local_y, local_z = ecef_to_enu(ecef_x, ecef_y, ecef_z, transform_matrix)
+    enu_x, enu_y, enu_z = ecef_to_enu(ecef_x, ecef_y, ecef_z, transform_matrix)
+
+    # glTF is Y-up; our ENU is Z-up. Swap: X=East, Y=Up, Z=-North
+    local_x = enu_x
+    local_y = enu_z
+    local_z = -enu_y
 
     print("Building mesh...")
     mesh = build_mesh(local_x, local_y, local_z, valid, rows, cols)
