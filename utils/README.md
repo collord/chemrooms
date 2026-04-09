@@ -65,3 +65,43 @@ that scans `public/tiles/` for subdirectories containing a `tileset.json`
 and writes the manifest. Run it any time you add, remove, or rename a
 tileset directory while the dev server is running, then refresh the
 browser.
+
+## build_geoid_subset.py — NAVD88 → ellipsoidal lookup grid
+
+Most US chemistry datasets store elevations in NAVD88, but Cesium needs
+WGS84 ellipsoidal heights to position points correctly in 3D. The
+NAVD88-to-ellipsoidal offset varies smoothly across a site (often by a
+meter or more across a 1km project), so a single constant offset is
+not always good enough.
+
+This script subsets a real geoid model (GEOID18 in CONUS, others
+elsewhere) to a small bounding box and writes a tiny lookup grid to
+JSON. The runtime client loads the grid once and uses bilinear
+interpolation to compute the per-location offset.
+
+```bash
+# Pull bbox from the tileset you just built
+uv run --project utils/ utils/build_geoid_subset.py \
+  --bbox-from client/public/tiles/local/tileset.json \
+  -o client/public/geoid/local.json
+
+# Or specify a manual bbox (degrees)
+uv run --project utils/ utils/build_geoid_subset.py \
+  --bbox -116.20,41.68,-116.10,41.72 \
+  -o client/public/geoid/local.json
+```
+
+PROJ does the actual geoid work via pyproj, fetching grid files on
+demand from the PROJ CDN if they're not already cached locally
+(requires network on first run for a given region).
+
+### Flags
+
+- `--bbox-from <tileset.json>` — read the bounding box from a tileset's
+  `_extent_wgs84` field (the one written by `tif_to_glb.py`)
+- `--bbox west,south,east,north` — manual bounding box in degrees
+- `-o, --output <path>` — output JSON file
+- `--spacing-arcmin <float>` — grid spacing in arc-minutes (default: 1.0,
+  matches GEOID18's native resolution)
+- `--pad-cells <int>` — extra cells around the bbox so bilinear lookups
+  never fall off the edge (default: 2)

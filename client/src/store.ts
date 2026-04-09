@@ -46,7 +46,16 @@ export type RoomState = RoomShellSliceState &
   SqlEditorSliceState;
 
 // ---------------------------------------------------------------------------
-// Cesium configuration: location points layer
+// Cesium configuration
+//
+// The chemrooms entity layers (locations, subsurface-samples) are added
+// at runtime by setup/initEntityLayers.ts after the parquet data has
+// loaded. This lets us:
+//   - Detect available elevation columns via information_schema
+//   - Load the optional geoid grid and register the geoid_offset macro
+//   - Build SQL that produces correct ellipsoidal altitudes from NAVD88
+// We start with no entity layers so we don't see a flash of misplaced
+// points before that setup runs.
 // ---------------------------------------------------------------------------
 
 const cesiumConfig = createDefaultCesiumConfig();
@@ -57,56 +66,7 @@ const cesiumConfigWithLayers = {
     showTimeline: false,
     showAnimation: false,
     depthTestAgainstTerrain: false,
-    layers: [
-      {
-        id: 'locations',
-        type: 'sql-entities' as const,
-        visible: true,
-        tableName: 'locations',
-        heightReference: 'RELATIVE_TO_GROUND' as const,
-        sqlQuery: `
-          SELECT
-            location_id,
-            x AS longitude,
-            y AS latitude,
-            10 AS altitude,
-            loc_type,
-            COALESCE(loc_desc, location_id) AS label
-          FROM locations
-        `,
-        columnMapping: {
-          longitude: 'longitude',
-          latitude: 'latitude',
-          altitude: 'altitude',
-          label: 'label',
-        },
-      },
-      {
-        id: 'subsurface-samples',
-        type: 'sql-entities' as const,
-        visible: false,
-        tableName: 'samples',
-        heightReference: 'RELATIVE_TO_GROUND' as const,
-        sqlQuery: `
-          SELECT
-            s.sample_id AS location_id,
-            l.x AS longitude,
-            l.y AS latitude,
-            -(COALESCE(s.depth, 0) * 0.3048) AS altitude,
-            s.matrix AS loc_type,
-            s.sample_id || ' (' || ROUND(s.depth, 1) || ' ft)' AS label
-          FROM samples s
-          JOIN locations l ON l.location_id = s.location_id
-          WHERE s.depth IS NOT NULL
-        `,
-        columnMapping: {
-          longitude: 'longitude',
-          latitude: 'latitude',
-          altitude: 'altitude',
-          label: 'label',
-        },
-      },
-    ],
+    layers: [],
   },
 };
 

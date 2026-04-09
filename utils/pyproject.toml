@@ -7,6 +7,7 @@ dependencies = [
     "numpy>=1.24.0",
     "trimesh>=4.0.0",
     "pyvista>=0.43.0",
+    "pyproj>=3.7.0",
 ]
 
 [project.scripts]
