@@ -4,9 +4,10 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
+    "dev": "node ./scripts/build-tiles-manifest.mjs && vite",
+    "build": "node ./scripts/build-tiles-manifest.mjs && tsc && vite build",
     "preview": "vite preview",
+    "tiles-manifest": "node ./scripts/build-tiles-manifest.mjs",
     "link-sqlrooms": "bash ./scripts/link-sqlrooms.sh"
   },
   "dependencies": {

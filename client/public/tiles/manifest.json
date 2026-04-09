@@ -1,0 +1,16 @@
+{
+  "tilesets": [
+    {
+      "name": "blue",
+      "url": "tiles/blue/tileset.json"
+    },
+    {
+      "name": "green",
+      "url": "tiles/green/tileset.json"
+    },
+    {
+      "name": "red",
+      "url": "tiles/red/tileset.json"
+    }
+  ]
+}

@@ -22,7 +22,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 DATA_DIR = Path(__file__).parent / "data"
-TILES_DIR = Path(__file__).parent / "tiles"
 
 app = FastAPI(title="Chemrooms Server")
 
@@ -36,28 +35,10 @@ app.add_middleware(
 # Serve parquet files at /data/
 app.mount("/data", StaticFiles(directory=str(DATA_DIR)), name="data")
 
-# Serve 3D tileset files at /tiles/
-TILES_DIR.mkdir(parents=True, exist_ok=True)
-app.mount("/tiles", StaticFiles(directory=str(TILES_DIR)), name="tiles")
-
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
-
-
-@app.get("/api/tiles/manifest")
-def tiles_manifest():
-    """Return a list of available tilesets under TILES_DIR."""
-    tilesets = []
-    if TILES_DIR.exists():
-        for child in sorted(TILES_DIR.iterdir()):
-            if child.is_dir() and (child / "tileset.json").exists():
-                tilesets.append({
-                    "name": child.name,
-                    "url": f"/tiles/{child.name}/tileset.json",
-                })
-    return {"tilesets": tilesets}
 
 
 # ---------------------------------------------------------------------------

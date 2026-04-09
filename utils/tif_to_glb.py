@@ -20,6 +20,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pyvista as pv
 import rasterio
 import trimesh
 
@@ -89,7 +90,7 @@ def ecef_to_enu(ecef_x, ecef_y, ecef_z, transform_matrix):
     return local[0], local[1], local[2]
 
 
-def load_dem(path: str, decimate: int = 1):
+def load_dem(path: str):
     with rasterio.open(path) as src:
         dem = src.read(1)
         nodata = src.nodata
@@ -101,13 +102,6 @@ def load_dem(path: str, decimate: int = 1):
         print(f"  WARNING: CRS is EPSG:{epsg}, expected EPSG:4979.")
         print(f"  Reproject in QGIS first.")
 
-    if decimate > 1:
-        dem = dem[::decimate, ::decimate]
-        transform = rasterio.transform.Affine(
-            transform.a * decimate, transform.b, transform.c,
-            transform.d, transform.e * decimate, transform.f,
-        )
-
     rows, cols = dem.shape
     row_idx, col_idx = np.meshgrid(np.arange(rows), np.arange(cols), indexing="ij")
     xs, ys = rasterio.transform.xy(transform, row_idx.ravel(), col_idx.ravel(), offset="center")
@@ -118,7 +112,29 @@ def load_dem(path: str, decimate: int = 1):
     return lons, lats, heights, valid, rows, cols
 
 
-def build_mesh(local_x, local_y, local_z, valid, rows, cols, color_rgba):
+def quadric_decimate(vertices, faces, reduction):
+    """
+    Quadric edge collapse decimation via PyVista/VTK.
+    `reduction` is the fraction of triangles to remove (0.0–0.99).
+    Curved/detailed regions retain more vertices than flat areas.
+    """
+    # PyVista expects faces in [N, v0, v1, v2, N, v0, v1, v2, ...] format
+    n_faces = len(faces)
+    pv_faces = np.empty((n_faces, 4), dtype=np.int64)
+    pv_faces[:, 0] = 3
+    pv_faces[:, 1:] = faces
+    pv_mesh = pv.PolyData(vertices, pv_faces.ravel())
+
+    decimated = pv_mesh.decimate(reduction)
+
+    new_verts = np.asarray(decimated.points, dtype=np.float64)
+    # Pull triangles back out — every face has the leading "3"
+    raw = np.asarray(decimated.faces).reshape(-1, 4)
+    new_faces = raw[:, 1:].astype(np.int32)
+    return new_verts, new_faces
+
+
+def build_mesh(local_x, local_y, local_z, valid, rows, cols, color_rgba, reduction=0.0):
     vertices = np.column_stack([local_x, local_y, local_z])
 
     r_idx, c_idx = np.meshgrid(np.arange(rows - 1), np.arange(cols - 1), indexing="ij")
@@ -133,6 +149,11 @@ def build_mesh(local_x, local_y, local_z, valid, rows, cols, color_rgba):
     tri1 = np.column_stack([i00[mask1], i10[mask1], i01[mask1]])
     tri2 = np.column_stack([i01[mask2], i10[mask2], i11[mask2]])
     faces = np.vstack([tri1, tri2]).astype(np.int32)
+
+    if reduction > 0.0:
+        before = len(faces)
+        vertices, faces = quadric_decimate(vertices, faces, reduction)
+        print(f"    decimated {before} → {len(faces)} faces ({reduction:.0%} reduction)")
 
     mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
     mesh.visual.vertex_colors = np.full((len(vertices), 4), color_rgba, dtype=np.uint8)
@@ -184,12 +205,13 @@ def build_tileset_json(lons, lats, heights, transform_matrix, name):
 
 
 def write_variant(name, color_rgba, axis_spec, enu_x, enu_y, enu_z,
-                  valid, rows, cols, lons, lats, heights, transform_matrix, out):
+                  valid, rows, cols, lons, lats, heights, transform_matrix, out,
+                  reduction):
     variant_dir = out / name
     variant_dir.mkdir(parents=True, exist_ok=True)
 
     lx, ly, lz = resolve_axes(enu_x, enu_y, enu_z, axis_spec)
-    mesh = build_mesh(lx, ly, lz, valid, rows, cols, color_rgba)
+    mesh = build_mesh(lx, ly, lz, valid, rows, cols, color_rgba, reduction=reduction)
 
     glb_path = variant_dir / "terrain.glb"
     mesh.export(str(glb_path))
@@ -206,7 +228,12 @@ def main():
     )
     parser.add_argument("input", help="Input GeoTIFF file (must be EPSG:4979)")
     parser.add_argument("-o", "--output", default=".", help="Output directory")
-    parser.add_argument("--decimate", type=int, default=1, help="Subsample factor")
+    parser.add_argument(
+        "--reduction", type=float, default=0.0,
+        help="Quadric edge collapse decimation: fraction of triangles to remove "
+             "(0.0–0.99). Curvature-aware: flat areas decimate more than detailed ones. "
+             "Example: 0.9 keeps ~10%% of faces.",
+    )
     parser.add_argument(
         "--variant", choices=list(VARIANTS.keys()),
         help="Produce only this variant (omit for all three debug variants)",
@@ -217,7 +244,7 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
 
     print(f"Reading {args.input}...")
-    lons, lats, heights, valid, rows, cols = load_dem(args.input, args.decimate)
+    lons, lats, heights, valid, rows, cols = load_dem(args.input)
     print(f"  Grid: {cols}x{rows} = {len(lons)} vertices ({valid.sum()} valid)")
 
     center_lon = float((lons.min() + lons.max()) / 2)
@@ -235,7 +262,8 @@ def main():
     print(f"Building {len(to_write)} mesh variant(s)...")
     for name, (color_rgba, axis_spec) in to_write.items():
         write_variant(name, color_rgba, axis_spec, enu_x, enu_y, enu_z,
-                      valid, rows, cols, lons, lats, heights, transform_matrix, out)
+                      valid, rows, cols, lons, lats, heights, transform_matrix, out,
+                      reduction=args.reduction)
 
     print(f"\nDone. Serve from: {out}/")
 

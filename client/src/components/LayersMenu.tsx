@@ -5,8 +5,9 @@
  *  - Site Data (points from store/DuckDB)
  *  - Topography (Cesium world terrain)
  *
- * Dynamic layers: fetched from /tiles/manifest.json at startup —
- * one toggle per tileset subdirectory found on the server.
+ * Dynamic layers: fetched from <BASE_URL>tiles/manifest.json at startup —
+ * one toggle per tileset under client/public/tiles/. The manifest is
+ * generated at build time by scripts/build-tiles-manifest.mjs.
  */
 
 import React, {useState, useCallback, useRef, useEffect} from 'react';
@@ -16,11 +17,10 @@ import {Cesium3DTileset} from 'cesium';
 
 interface TilesetEntry {
   name: string;
-  url: string;
+  url: string; // relative to BASE_URL
 }
 
-const SERVER_BASE =
-  import.meta.env.VITE_DATA_URL?.replace('/data', '') ?? 'http://localhost:8000';
+const BASE_URL = import.meta.env.BASE_URL; // e.g. "/" or "/chemrooms/"
 
 export const LayersMenu: React.FC = () => {
   const [open, setOpen] = useState(false);
@@ -40,19 +40,17 @@ export const LayersMenu: React.FC = () => {
 
   // Fetch manifest on mount
   useEffect(() => {
-    const url = `${SERVER_BASE}/api/tiles/manifest`;
-    console.log('[LayersMenu] fetching manifest:', url);
+    const url = `${BASE_URL}tiles/manifest.json`;
     fetch(url)
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)))
       .then((data) => {
-        console.log('[LayersMenu] manifest:', data);
         const entries: TilesetEntry[] = data.tilesets ?? [];
         setTilesets(entries);
         setTilesetVisibility(
           Object.fromEntries(entries.map((t) => [t.name, false])),
         );
       })
-      .catch((e) => console.error('[LayersMenu] manifest fetch failed:', e));
+      .catch((e) => console.warn('[LayersMenu] no tiles manifest:', e));
   }, []);
 
   // Close on outside click
@@ -102,7 +100,7 @@ export const LayersMenu: React.FC = () => {
 
       if (next) {
         if (!tilesetRefs.current[entry.name]) {
-          const fullUrl = `${SERVER_BASE}${entry.url}`;
+          const fullUrl = `${BASE_URL}${entry.url}`;
           Cesium3DTileset.fromUrl(fullUrl)
             .then((ts) => {
               tilesetRefs.current[entry.name] = ts;
