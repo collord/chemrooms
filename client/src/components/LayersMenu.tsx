@@ -40,16 +40,19 @@ export const LayersMenu: React.FC = () => {
 
   // Fetch manifest on mount
   useEffect(() => {
-    fetch(`${SERVER_BASE}/api/tiles/manifest`)
+    const url = `${SERVER_BASE}/api/tiles/manifest`;
+    console.log('[LayersMenu] fetching manifest:', url);
+    fetch(url)
       .then((r) => r.json())
       .then((data) => {
+        console.log('[LayersMenu] manifest:', data);
         const entries: TilesetEntry[] = data.tilesets ?? [];
         setTilesets(entries);
         setTilesetVisibility(
           Object.fromEntries(entries.map((t) => [t.name, false])),
         );
       })
-      .catch(() => {/* server may not have any tilesets yet */});
+      .catch((e) => console.error('[LayersMenu] manifest fetch failed:', e));
   }, []);
 
   // Close on outside click
