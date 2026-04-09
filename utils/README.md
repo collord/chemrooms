@@ -26,26 +26,20 @@ the source of truth for any datum shift.
 
 ### Where to put the output
 
-Tilesets are static assets served by the SPA. Drop them under
-`client/public/tiles/<name>/`. Each subdirectory there becomes one
+Tilesets are static assets served by the SPA. Each tileset lives in its
+own subdirectory under `client/public/tiles/<name>/`, containing a
+`tileset.json` and a `terrain.glb`. Each subdirectory becomes one
 toggleable layer in the Layers menu.
 
 ```bash
 # from the repo root
 uv run --project utils/ utils/tif_to_glb.py path/to/dem.tif \
-  -o client/public/tiles/
+  -o client/public/tiles/mysite/
 ```
 
-By default, the script writes **three rotation variants**
-(`red/`, `green/`, `blue/`) so you can identify the correct glTF→Cesium
-axis mapping visually. Once you know which one lies flat on the globe,
-re-run with `--variant <name>` to produce only that one.
-
-```bash
-# produce only the green variant
-uv run --project utils/ utils/tif_to_glb.py path/to/dem.tif \
-  -o client/public/tiles/ --variant green
-```
+The script writes the mesh in glTF Y-up with axis mapping
+`(East, Up, -North)` and a tileset `transform` matrix that places the
+local frame onto the WGS84 ellipsoid via ENU→ECEF.
 
 ### Other flags
 

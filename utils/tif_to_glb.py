@@ -1,18 +1,18 @@
 """
-Convert a GeoTIFF DEM to 3D Tilesets (tileset.json + .glb) for Cesium.
+Convert a GeoTIFF DEM to a Cesium 3D Tileset (tileset.json + terrain.glb).
 
 Input must be in EPSG:4979 (WGS84 lon/lat + ellipsoidal height in meters).
 Use QGIS to reproject from other CRSs (e.g. EPSG:5498 → EPSG:4979)
 before running this script — QGIS/PROJ handles datum and geoid corrections.
 
-By default produces three rotation variants (red/green/blue) to identify
-the correct glTF→Cesium axis mapping. Once the correct variant is known,
-use --variant <name> to produce only that one without the debug colors.
+The mesh is written in a local East-North-Up frame centered on the DEM,
+mapped into glTF Y-up via (East, Up, -North) so that Cesium's internal
+Y-up→Z-up rotation lands it back in ENU. The tileset.json transform then
+places the local frame correctly in ECEF on the WGS84 ellipsoid.
 
 Usage:
-    python tif_to_glb.py input.tif -o ../server/tiles/
-    python tif_to_glb.py input.tif -o ../server/tiles/ --decimate 4
-    python tif_to_glb.py input.tif -o ../server/tiles/ --variant green
+    python tif_to_glb.py input.tif -o client/public/tiles/mysite/
+    python tif_to_glb.py input.tif -o client/public/tiles/mysite/ --reduction 0.9
 """
 
 import argparse
@@ -28,25 +28,18 @@ import trimesh
 WGS84_A = 6378137.0
 WGS84_E2 = 6.6943799901377997e-3
 
-# Three candidate ENU→glTF-Y-up axis mappings to try.
-# Cesium's internal Y-up→Z-up conversion is: (X,Y,Z) → (X, Z, -Y)
-# Each entry is (label, color_rgba, (x_src, y_src, z_src)) where src is
-# one of 'E', 'N', 'U', '-E', '-N', '-U' from ENU components.
-VARIANTS = {
-    "red":   ([220,  80,  80, 255], ("E", "-U",  "N")),   # current attempt
-    "green": ([80,  200,  80, 255], ("E",  "N",  "U")),   # ENU as-is
-    "blue":  ([80,  120, 220, 255], ("E",  "U", "-N")),   # first attempt
-}
+# Tan/terrain color (RGBA) for the mesh
+MESH_COLOR = [180, 160, 120, 255]
 
 
-def resolve_axes(enu_x, enu_y, enu_z, spec):
-    """Map ENU components to glTF axes according to a spec tuple."""
-    src_map = {
-        "E": enu_x, "-E": -enu_x,
-        "N": enu_y, "-N": -enu_y,
-        "U": enu_z, "-U": -enu_z,
-    }
-    return src_map[spec[0]], src_map[spec[1]], src_map[spec[2]]
+def enu_to_gltf(enu_x, enu_y, enu_z):
+    """
+    Convert ENU (East, North, Up) to glTF Y-up (East, Up, -North).
+    Cesium applies its internal Y-up→Z-up: (X, Y, Z) → (X, Z, -Y),
+    which sends (East, Up, -North) → (East, North, Up) = ENU.
+    The tile transform then maps ENU → ECEF.
+    """
+    return enu_x, enu_z, -enu_y
 
 
 def lonlat_to_ecef(lons_deg, lats_deg, heights):
@@ -173,7 +166,7 @@ def build_mesh(local_x, local_y, local_z, valid, rows, cols, color_rgba, reducti
     return mesh
 
 
-def build_tileset_json(lons, lats, heights, transform_matrix, name):
+def build_tileset_json(lons, lats, heights, transform_matrix):
     lon_min, lon_max = np.radians(lons.min()), np.radians(lons.max())
     lat_min, lat_max = np.radians(lats.min()), np.radians(lats.max())
     h_min, h_max = float(heights.min()), float(heights.max())
@@ -183,7 +176,6 @@ def build_tileset_json(lons, lats, heights, transform_matrix, name):
     return {
         "asset": {"version": "1.0"},
         "geometricError": extent_deg * 111000,
-        "_name": name,
         "_extent_wgs84": {
             "west": float(np.degrees(lon_min)),
             "south": float(np.degrees(lat_min)),
@@ -204,39 +196,20 @@ def build_tileset_json(lons, lats, heights, transform_matrix, name):
     }
 
 
-def write_variant(name, color_rgba, axis_spec, enu_x, enu_y, enu_z,
-                  valid, rows, cols, lons, lats, heights, transform_matrix, out,
-                  reduction):
-    variant_dir = out / name
-    variant_dir.mkdir(parents=True, exist_ok=True)
-
-    lx, ly, lz = resolve_axes(enu_x, enu_y, enu_z, axis_spec)
-    mesh = build_mesh(lx, ly, lz, valid, rows, cols, color_rgba, reduction=reduction)
-
-    glb_path = variant_dir / "terrain.glb"
-    mesh.export(str(glb_path))
-    size_mb = glb_path.stat().st_size / (1024 * 1024)
-    print(f"  [{name}] {len(mesh.vertices)} verts, {len(mesh.faces)} faces → {size_mb:.1f} MB")
-
-    tileset = build_tileset_json(lons, lats, heights, transform_matrix, name)
-    (variant_dir / "tileset.json").write_text(json.dumps(tileset, indent=2))
-
-
 def main():
     parser = argparse.ArgumentParser(
-        description="Convert GeoTIFF DEM (EPSG:4979) to 3D Tileset(s) for Cesium"
+        description="Convert GeoTIFF DEM (EPSG:4979) to a Cesium 3D Tileset"
     )
     parser.add_argument("input", help="Input GeoTIFF file (must be EPSG:4979)")
-    parser.add_argument("-o", "--output", default=".", help="Output directory")
+    parser.add_argument(
+        "-o", "--output", default=".",
+        help="Output directory (will contain tileset.json + terrain.glb)",
+    )
     parser.add_argument(
         "--reduction", type=float, default=0.0,
         help="Quadric edge collapse decimation: fraction of triangles to remove "
              "(0.0–0.99). Curvature-aware: flat areas decimate more than detailed ones. "
              "Example: 0.9 keeps ~10%% of faces.",
-    )
-    parser.add_argument(
-        "--variant", choices=list(VARIANTS.keys()),
-        help="Produce only this variant (omit for all three debug variants)",
     )
     args = parser.parse_args()
 
@@ -252,18 +225,25 @@ def main():
     center_height = float(np.nanmean(heights[valid]))
     print(f"  ENU origin: ({center_lon:.6f}, {center_lat:.6f}, {center_height:.1f}m)")
 
-    print("Converting to ECEF → local ENU...")
+    print("Converting to ECEF → local ENU → glTF Y-up...")
     ecef_x, ecef_y, ecef_z = lonlat_to_ecef(lons, lats, heights)
     transform_matrix = enu_to_ecef_matrix(center_lon, center_lat, center_height)
     enu_x, enu_y, enu_z = ecef_to_enu(ecef_x, ecef_y, ecef_z, transform_matrix)
+    local_x, local_y, local_z = enu_to_gltf(enu_x, enu_y, enu_z)
 
-    to_write = {args.variant: VARIANTS[args.variant]} if args.variant else VARIANTS
+    print("Building mesh...")
+    mesh = build_mesh(local_x, local_y, local_z, valid, rows, cols,
+                      MESH_COLOR, reduction=args.reduction)
+    print(f"  {len(mesh.vertices)} vertices, {len(mesh.faces)} faces")
 
-    print(f"Building {len(to_write)} mesh variant(s)...")
-    for name, (color_rgba, axis_spec) in to_write.items():
-        write_variant(name, color_rgba, axis_spec, enu_x, enu_y, enu_z,
-                      valid, rows, cols, lons, lats, heights, transform_matrix, out,
-                      reduction=args.reduction)
+    glb_path = out / "terrain.glb"
+    mesh.export(str(glb_path))
+    size_mb = glb_path.stat().st_size / (1024 * 1024)
+    print(f"  Wrote {glb_path} ({size_mb:.1f} MB)")
+
+    tileset = build_tileset_json(lons, lats, heights, transform_matrix)
+    (out / "tileset.json").write_text(json.dumps(tileset, indent=2))
+    print(f"  Wrote {out / 'tileset.json'}")
 
     print(f"\nDone. Serve from: {out}/")
 
