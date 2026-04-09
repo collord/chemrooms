@@ -97,10 +97,16 @@ function applyClippingToTileset(
 
   if (worldNormal === null || worldDistance === null) return;
 
+  // Cesium tilesets evaluate clipping planes relative to their
+  // clippingPlanesOriginMatrix, which accounts for the root tile's transform
+  // plus the internal glTF Y-up→Z-up rotation. Using modelMatrix here is
+  // wrong (it's only the user-applied additional transform).
+  // (Property exists at runtime but isn't in the TS types.)
+  const originMatrix: Matrix4 = (tileset as any).clippingPlanesOriginMatrix;
   const {normal, distance} = transformPlaneToLocal(
     worldNormal,
     worldDistance,
-    tileset.modelMatrix,
+    originMatrix,
   );
 
   if (!tileset.clippingPlanes) {
@@ -110,6 +116,38 @@ function applyClippingToTileset(
     });
   } else {
     tileset.clippingPlanes.add(new ClippingPlane(normal, distance));
+  }
+}
+
+/**
+ * Cesium entities aren't affected by globe.clippingPlanes — only terrain
+ * and tilesets are. To clip data points, we manually toggle entity.show
+ * based on which side of the world-space plane they fall on.
+ *
+ * The plane equation is `n · p + d = 0`. Cesium's clipping convention
+ * removes points where `n · p + d < 0`, so we mirror that here.
+ */
+function applyClippingToEntities(
+  viewer: any,
+  worldNormal: Cartesian3 | null,
+  worldDistance: number | null,
+) {
+  if (!viewer || viewer.isDestroyed?.()) return;
+  const entities = viewer.entities?.values;
+  if (!entities) return;
+
+  const time = viewer.clock?.currentTime;
+  for (const entity of entities) {
+    const pos = entity.position?.getValue(time);
+    if (!pos) continue;
+
+    if (worldNormal === null || worldDistance === null) {
+      entity.show = true;
+      continue;
+    }
+
+    const side = Cartesian3.dot(worldNormal, pos) + worldDistance;
+    entity.show = side >= 0;
   }
 }
 
@@ -147,7 +185,10 @@ export const LayersMenu: React.FC = () => {
       .catch((e) => console.warn('[LayersMenu] no tiles manifest:', e));
   }, []);
 
-  // Re-apply clipping plane to all loaded tilesets when cross-section changes
+  // Re-apply clipping plane to all loaded tilesets and to entities
+  // whenever the cross-section points change. Also re-apply when the
+  // entity collection changes (so newly added subsurface points get
+  // clipped too).
   useEffect(() => {
     let worldNormal: Cartesian3 | null = null;
     let worldDistance: number | null = null;
@@ -157,10 +198,20 @@ export const LayersMenu: React.FC = () => {
       worldNormal = plane.normal;
       worldDistance = plane.distance;
     }
-    for (const ts of Object.values(tilesetRefs.current)) {
-      applyClippingToTileset(ts, worldNormal, worldDistance);
-    }
-  }, [crossSectionPoints]);
+
+    const apply = () => {
+      for (const ts of Object.values(tilesetRefs.current)) {
+        applyClippingToTileset(ts, worldNormal, worldDistance);
+      }
+      applyClippingToEntities(viewer, worldNormal, worldDistance);
+    };
+
+    apply();
+
+    if (!viewer || viewer.isDestroyed?.()) return;
+    const remove = viewer.entities.collectionChanged.addEventListener(apply);
+    return () => remove();
+  }, [crossSectionPoints, viewer]);
 
   // Close on outside click
   useEffect(() => {
