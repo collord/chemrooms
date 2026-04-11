@@ -60,7 +60,7 @@ EXPORT_TABLES = [
 ]
 
 
-VIS_SPEC_TABLES = ("locations", "samples", "results")
+VIS_SPEC_TABLES = ("locations", "samples", "results", "v_results_denormalized")
 
 # DuckDB column types we treat as numeric → sequential color spec.
 NUMERIC_TYPES = {

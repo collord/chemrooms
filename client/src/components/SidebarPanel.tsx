@@ -47,6 +47,10 @@ export const SidebarPanel: React.FC = () => {
       <VerticalExaggerationSlider />
       <ColorByPicker table="locations" label="Color locations by" />
       <ColorByPicker table="samples" label="Color samples by" />
+      <ColorByPicker
+        table="v_results_denormalized"
+        label="Color results (joined) by"
+      />
 
       {selectedLocationId ? (
         <>

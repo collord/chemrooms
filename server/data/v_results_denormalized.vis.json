@@ -1,7 +1,67 @@
 {
   "version": 1,
-  "table": "results",
+  "table": "v_results_denormalized",
   "columns": {
+    "matrix": {
+      "label": "Matrix",
+      "color": {
+        "type": "categorical",
+        "palette": "category10",
+        "categories": [
+          "Groundwater",
+          "Water"
+        ]
+      }
+    },
+    "top_depth": {
+      "label": "Top Depth",
+      "color": {
+        "type": "sequential",
+        "palette": "viridis",
+        "scaleType": "linear",
+        "domain": [
+          0.0,
+          15.0
+        ]
+      }
+    },
+    "bottom_depth": {
+      "label": "Bottom Depth",
+      "color": {
+        "type": "sequential",
+        "palette": "viridis",
+        "scaleType": "linear",
+        "domain": [
+          0.0,
+          20.0
+        ]
+      }
+    },
+    "depth": {
+      "label": "Depth",
+      "color": {
+        "type": "sequential",
+        "palette": "viridis",
+        "scaleType": "linear",
+        "domain": [
+          0.0,
+          17.5
+        ]
+      }
+    },
+    "event": {
+      "label": "Event",
+      "color": {
+        "type": "categorical",
+        "palette": "category10",
+        "categories": [
+          "SYN-EVT-0.",
+          "SYN-EVT-1.",
+          "SYN-EVT-2.",
+          "SYN-EVT-3."
+        ]
+      }
+    },
     "analyte": {
       "label": "Analyte",
       "color": {
@@ -136,7 +196,71 @@
           "8260"
         ]
       }
+    },
+    "detection_limit": {
+      "label": "Detection Limit",
+      "color": {
+        "type": "sequential",
+        "palette": "viridis",
+        "scaleType": "linear",
+        "domain": [
+          1.0,
+          1.2
+        ]
+      }
+    },
+    "dv_qual": {
+      "label": "Dv Qual",
+      "color": {
+        "type": "categorical",
+        "palette": "category10",
+        "categories": [
+          "",
+          "J"
+        ]
+      }
+    },
+    "sample_year": {
+      "label": "Sample Year",
+      "color": {
+        "type": "sequential",
+        "palette": "viridis",
+        "scaleType": "linear",
+        "domain": [
+          2020.0,
+          2021.0
+        ]
+      }
+    },
+    "sample_month": {
+      "label": "Sample Month",
+      "color": {
+        "type": "categorical",
+        "palette": "category10",
+        "categories": [
+          "2020-01",
+          "2020-02",
+          "2020-03",
+          "2020-04",
+          "2020-05",
+          "2020-06",
+          "2020-07",
+          "2020-08",
+          "2020-09",
+          "2020-10",
+          "2020-11",
+          "2020-12",
+          "2021-01",
+          "2021-02",
+          "2021-03",
+          "2021-04",
+          "2021-05",
+          "2021-06",
+          "2021-07",
+          "2021-08"
+        ]
+      }
     }
   },
-  "defaultColorBy": "method_code"
+  "defaultColorBy": "sample_month"
 }

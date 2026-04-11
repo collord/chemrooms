@@ -45,6 +45,8 @@ import type {DuckDbConnector} from '@sqlrooms/duckdb';
 
 const BASE_URL = import.meta.env.BASE_URL;
 const GEOID_URL = `${BASE_URL}geoid/local.json`;
+const CHEMDUCK_MACROS_URL = `${BASE_URL}data/sql/02_macros.sql`;
+const CHEMDUCK_VIEWS_URL = `${BASE_URL}data/sql/03_views.sql`;
 
 /** Columns to check on the locations table for an elevation source. */
 const ELEVATION_COLUMN_CANDIDATES = ['elevation', 'z', 'measuring_pt'];
@@ -150,6 +152,73 @@ async function registerGeoidMacro(
   `);
 }
 
+/**
+ * Load the ChemDuck macros + views into DuckDB-WASM.
+ *
+ * The chemduck schema has a real circular dependency between the macro
+ * file and the views file:
+ *   - `v_results_denormalized` references `make_dup_id` and `dv_qualifier`
+ *     (defined in macros) at view-definition time
+ *   - Four macros (`pivot_results_by_analyte`, `analyte_pair_data`,
+ *     `analyte_composition`, `classify_concentration`) reference
+ *     `v_results_denormalized` in their body, which newer DuckDB
+ *     validates at macro-definition time
+ *
+ * The working load order is a three-pass bootstrap:
+ *   1. Try macros → fails partway through but defines the simple ones
+ *   2. Load views → succeeds because the simple macros are available
+ *   3. Retry macros → now succeeds because views exist
+ *
+ * Returns `true` on success, `false` if the SQL files couldn't be fetched
+ * (in which case the client falls back to base-table-only queries).
+ */
+async function loadChemduckSchema(
+  connector: DuckDbConnector,
+): Promise<boolean> {
+  let macrosSql: string;
+  let viewsSql: string;
+  try {
+    const [mr, vr] = await Promise.all([
+      fetch(CHEMDUCK_MACROS_URL),
+      fetch(CHEMDUCK_VIEWS_URL),
+    ]);
+    if (!mr.ok || !vr.ok) return false;
+    macrosSql = await mr.text();
+    viewsSql = await vr.text();
+  } catch {
+    return false;
+  }
+
+  // Pass 1: macros (partial — ignore the circular-reference error)
+  try {
+    await connector.query(macrosSql);
+  } catch {
+    // expected to fail at the first view-dependent macro; the simple
+    // ones that precede it still get defined
+  }
+
+  // Pass 2: views (needs the simple macros from pass 1)
+  try {
+    await connector.query(viewsSql);
+  } catch (e) {
+    console.error('[init] chemduck views failed to load:', e);
+    return false;
+  }
+
+  // Pass 3: macros again (now the views exist, so the view-dependent
+  // macros can define themselves)
+  try {
+    await connector.query(macrosSql);
+  } catch (e) {
+    console.warn(
+      '[init] chemduck macros retry had errors (views still work):',
+      e,
+    );
+  }
+
+  return true;
+}
+
 /** SQL expression for the surveyed NAVD88 elevation, or NULL if none. */
 function surveyedElevExpr(elevationColumns: string[], prefix = ''): string {
   if (elevationColumns.length === 0) return 'CAST(NULL AS DOUBLE)';
@@ -165,6 +234,7 @@ export interface LocationToSample {
 
 export interface InitResult {
   hasGeoid: boolean;
+  hasChemduckSchema: boolean;
   elevationColumns: string[];
   locationsSql: string;
   samplesSql: string;
@@ -184,6 +254,11 @@ export async function initEntityLayers(
 ): Promise<InitResult> {
   const hasGeoid = await tryLoadGeoidGrid(connector);
   await registerGeoidMacro(connector, hasGeoid);
+
+  // Load the chemduck macros + views in parallel with the geoid setup.
+  // If the SQL files aren't reachable, fall through to base-table-only
+  // queries (locations and subsurface-samples still render without them).
+  const hasChemduckSchema = await loadChemduckSchema(connector);
 
   const elevationColumns = await detectColumns(
     connector,
@@ -267,6 +342,7 @@ export async function initEntityLayers(
 
   return {
     hasGeoid,
+    hasChemduckSchema,
     elevationColumns,
     locationsSql,
     samplesSql,

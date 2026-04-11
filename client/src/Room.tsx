@@ -16,7 +16,12 @@ import {
 } from './setup/initEntityLayers';
 import {loadVisSpecs} from './vis/loadVisSpecs';
 
-const VIS_SPEC_TABLES = ['locations', 'samples', 'results'];
+const VIS_SPEC_TABLES = [
+  'locations',
+  'samples',
+  'results',
+  'v_results_denormalized',
+];
 
 const COLUMN_MAPPING = {
   longitude: 'longitude',
@@ -103,13 +108,14 @@ export const Room = () => {
           .then((result) => {
             const {
               hasGeoid,
+              hasChemduckSchema,
               elevationColumns,
               locationsSql,
               samplesSql,
               locationsNeedingTerrain,
             } = result;
             console.log(
-              `[init] hasGeoid=${hasGeoid} elevationColumns=[${elevationColumns.join(
+              `[init] hasGeoid=${hasGeoid} hasChemduckSchema=${hasChemduckSchema} elevationColumns=[${elevationColumns.join(
                 ',',
               )}] needTerrain=${locationsNeedingTerrain.length}`,
             );

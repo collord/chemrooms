@@ -61,7 +61,18 @@
           "SYN-EVT-3."
         ]
       }
+    },
+    "sample_material": {
+      "label": "Sample Material",
+      "color": {
+        "type": "categorical",
+        "palette": "category10",
+        "categories": [
+          "Groundwater",
+          "SurfaceWater"
+        ]
+      }
     }
   },
-  "defaultColorBy": "event"
+  "defaultColorBy": "sample_material"
 }
