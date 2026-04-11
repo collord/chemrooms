@@ -38,8 +38,7 @@ import {
   loadAvailableAnalyteNames,
 } from './setup/loadCatalogs';
 import {buildSamplesLayerSql} from './setup/buildSamplesLayerSql';
-import {ChemroomsEntityLayer} from './components/ChemroomsEntityLayer';
-import {useChemroomsStore} from './slices/chemrooms-slice';
+import {ChemroomsEntityLayers} from './components/ChemroomsEntityLayers';
 
 const VIS_SPEC_TABLES = [
   'locations',
@@ -84,28 +83,15 @@ export const Room = () => {
   const terrainSampledRef = useRef(false);
 
   // Setup outputs surfaced as React state so the ChemroomsEntityLayer
-  // components re-render when they change.
+  // components re-render when they change. Visibility and analyte
+  // selection are read inside ChemroomsEntityLayers (which lives under
+  // the RoomStateProvider), not here — reading them at this level would
+  // require Room itself to be inside the provider, which it can't be
+  // since it's the one rendering RoomShell.
   const [locationsSql, setLocationsSql] = useState<string | null>(null);
   const [samplesSql, setSamplesSql] = useState<string | null>(null);
   const [elevationColumns, setElevationColumns] = useState<string[]>([]);
   const [hasChemduckSchema, setHasChemduckSchema] = useState(false);
-
-  // Visibility for the entity layers (driven by LayersMenu)
-  const locationsVisible = useChemroomsStore(
-    (s) => s.chemrooms.locationsVisible,
-  );
-  const samplesVisible = useChemroomsStore((s) => s.chemrooms.samplesVisible);
-
-  // The samples layer's vis spec key depends on whether an analyte is
-  // selected. With one selected, the SQL queries `aggregate_results(...)`
-  // which returns the same column shape as v_results_denormalized.
-  // Without one, it queries the samples table directly.
-  const coloringAnalyte = useChemroomsStore(
-    (s) => s.chemrooms.config.coloringAnalyte,
-  );
-  const samplesVisSpecTable = coloringAnalyte
-    ? 'v_results_denormalized'
-    : 'samples';
 
   useEffect(() => {
     roomStore.getState().initialize?.();
@@ -265,36 +251,26 @@ export const Room = () => {
   }, [elevationColumns, hasChemduckSchema]);
 
   return (
-    <>
-      <RoomShell className="h-screen" roomStore={roomStore}>
-        <RoomShell.Sidebar>
-          <RoomShell.SidebarButton
-            title="SQL Editor"
-            onClick={sqlEditorDisclosure.onToggle}
-            isSelected={false}
-            icon={TerminalIcon}
-          />
-          <ThemeSwitch />
-        </RoomShell.Sidebar>
-        <RoomShell.LayoutComposer />
-        <RoomShell.LoadingProgress />
-        <SqlEditorModal
-          isOpen={sqlEditorDisclosure.isOpen}
-          onClose={sqlEditorDisclosure.onClose}
+    <RoomShell className="h-screen" roomStore={roomStore}>
+      <RoomShell.Sidebar>
+        <RoomShell.SidebarButton
+          title="SQL Editor"
+          onClick={sqlEditorDisclosure.onToggle}
+          isSelected={false}
+          icon={TerminalIcon}
         />
-      </RoomShell>
-      <ChemroomsEntityLayer
-        layerId="locations"
-        sqlQuery={locationsSql}
-        visSpecTable="locations"
-        visible={locationsVisible}
+        <ThemeSwitch />
+      </RoomShell.Sidebar>
+      <RoomShell.LayoutComposer />
+      <RoomShell.LoadingProgress />
+      <SqlEditorModal
+        isOpen={sqlEditorDisclosure.isOpen}
+        onClose={sqlEditorDisclosure.onClose}
       />
-      <ChemroomsEntityLayer
-        layerId="samples"
-        sqlQuery={samplesSql}
-        visSpecTable={samplesVisSpecTable}
-        visible={samplesVisible}
+      <ChemroomsEntityLayers
+        locationsSql={locationsSql}
+        samplesSql={samplesSql}
       />
-    </>
+    </RoomShell>
   );
 };
