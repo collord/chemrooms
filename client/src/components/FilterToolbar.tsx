@@ -1,10 +1,15 @@
 /**
  * Global filter controls: matrix, fraction, non-detect method.
+ *
+ * The non-detect method dropdown is driven by the chemduck
+ * `aggregation_rules` catalog (category = 'nd_method'), so new
+ * ND-handling strategies added in chemduck surface here automatically.
  */
 
 import React from 'react';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
-import type {NonDetectMethod} from '../slices/chemrooms-slice';
+import type {NdMethod} from '../slices/chemrooms-slice';
+import {AggregationRulePicker} from './AggregationRulePicker';
 
 export const FilterToolbar: React.FC = () => {
   const matrixFilter = useChemroomsStore(
@@ -13,9 +18,7 @@ export const FilterToolbar: React.FC = () => {
   const fractionFilter = useChemroomsStore(
     (s) => s.chemrooms.config.fractionFilter,
   );
-  const nonDetectMethod = useChemroomsStore(
-    (s) => s.chemrooms.config.nonDetectMethod,
-  );
+  const ndMethod = useChemroomsStore((s) => s.chemrooms.config.ndMethod);
   const availableMatrices = useChemroomsStore(
     (s) => s.chemrooms.availableMatrices,
   );
@@ -25,9 +28,7 @@ export const FilterToolbar: React.FC = () => {
   const setFractionFilter = useChemroomsStore(
     (s) => s.chemrooms.setFractionFilter,
   );
-  const setNonDetectMethod = useChemroomsStore(
-    (s) => s.chemrooms.setNonDetectMethod,
-  );
+  const setNdMethod = useChemroomsStore((s) => s.chemrooms.setNdMethod);
 
   return (
     <div className="flex flex-col gap-2 rounded-md border p-2">
@@ -70,22 +71,13 @@ export const FilterToolbar: React.FC = () => {
         </select>
       </label>
 
-      {/* Non-detect method */}
-      <label className="flex flex-col gap-1">
-        <span className="text-xs text-muted-foreground">Non-Detect Display</span>
-        <select
-          className="rounded border bg-background px-2 py-1 text-sm"
-          value={nonDetectMethod}
-          onChange={(e) =>
-            setNonDetectMethod(e.target.value as NonDetectMethod)
-          }
-        >
-          <option value="half_dl">Half Detection Limit</option>
-          <option value="at_dl">At Detection Limit</option>
-          <option value="zero">Zero</option>
-          <option value="exclude">Exclude</option>
-        </select>
-      </label>
+      {/* Non-detect method — driven by chemduck catalog */}
+      <AggregationRulePicker
+        category="nd_method"
+        label="Non-Detect Display"
+        value={ndMethod}
+        onChange={(name) => setNdMethod(name as NdMethod)}
+      />
     </div>
   );
 };

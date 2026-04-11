@@ -19,9 +19,25 @@ import type {VisSpec} from '../vis/visSpec';
 // Types
 // ---------------------------------------------------------------------------
 
-export type NonDetectMethod = 'half_dl' | 'at_dl' | 'zero' | 'exclude';
-export type ChoroplethAggMethod = 'most_recent' | 'maximum' | 'mean';
+/**
+ * Aggregation-rule names live in the chemduck `aggregation_rules` catalog
+ * table and are loaded at runtime. These types are the string shape, kept
+ * as a hint to call sites. They match chemduck's canonical vocabulary —
+ * the single source of truth is the catalog, not this file.
+ */
+export type NdMethod = 'raw' | 'half_dl' | 'dl' | 'zero' | 'exclude';
+export type EventAgg = 'most_recent' | 'maximum' | 'mean';
+export type DupAgg = 'avg' | 'max' | 'min' | 'first' | 'last';
 export type ColorMode = 'concentration' | 'exceedance';
+
+/** One entry from the chemduck `aggregation_rules` catalog. */
+export interface AggregationRule {
+  category: string; // 'event_agg' | 'dup_agg' | 'nd_method'
+  name: string;
+  label: string;
+  description: string | null;
+  displayOrder: number;
+}
 
 export interface LocationSummary {
   locationId: string;
@@ -49,10 +65,18 @@ export interface AnalyteInfo {
 export interface ChemroomsConfig {
   selectedLocationId: string | null;
   timeSeriesAnalytes: string[];
-  choroplethAnalyte: string | null;
+  /**
+   * Analyte to drive the samples layer aggregation/coloring. When null,
+   * the samples layer shows every sample uncollapsed (no aggregation).
+   */
+  coloringAnalyte: string | null;
   matrixFilter: string | null;
-  nonDetectMethod: NonDetectMethod;
-  choroplethAggMethod: ChoroplethAggMethod;
+  /** Non-detect substitution method (chemduck `aggregation_rules` nd_method). */
+  ndMethod: NdMethod;
+  /** Event-aggregation method (chemduck `aggregation_rules` event_agg). */
+  eventAgg: EventAgg;
+  /** Duplicate-aggregation method (chemduck `aggregation_rules` dup_agg). */
+  dupAgg: DupAgg;
   colorMode: ColorMode;
   selectedScreeningLevel: string | null;
   fractionFilter: string | null;
@@ -69,8 +93,12 @@ export interface ChemroomsSliceState {
     config: ChemroomsConfig;
     // Runtime state
     availableAnalytes: AnalyteInfo[];
+    /** Sorted distinct analytes loaded from v_analyte_summary. */
+    availableAnalyteNames: string[];
     availableMatrices: string[];
     availableScreeningLevels: string[];
+    /** chemduck aggregation_rules catalog, keyed by category. */
+    aggregationRules: Record<string, AggregationRule[]>;
     locationSummary: LocationSummary | null;
     analytesAtLocation: AnalyteInfo[];
     crossSectionPoints: CrossSectionPoints;
@@ -85,18 +113,21 @@ export interface ChemroomsSliceState {
     setTimeSeriesAnalytes: (analytes: string[]) => void;
     addTimeSeriesAnalyte: (analyte: string) => void;
     removeTimeSeriesAnalyte: (analyte: string) => void;
-    setChoroplethAnalyte: (analyte: string | null) => void;
+    setColoringAnalyte: (analyte: string | null) => void;
     setMatrixFilter: (matrix: string | null) => void;
-    setNonDetectMethod: (method: NonDetectMethod) => void;
-    setChoroplethAggMethod: (method: ChoroplethAggMethod) => void;
+    setNdMethod: (method: NdMethod) => void;
+    setEventAgg: (method: EventAgg) => void;
+    setDupAgg: (method: DupAgg) => void;
     setColorMode: (mode: ColorMode) => void;
     setSelectedScreeningLevel: (name: string | null) => void;
     setFractionFilter: (fraction: string | null) => void;
     setLocationSummary: (summary: LocationSummary | null) => void;
     setAnalytesAtLocation: (analytes: AnalyteInfo[]) => void;
     setAvailableAnalytes: (analytes: AnalyteInfo[]) => void;
+    setAvailableAnalyteNames: (names: string[]) => void;
     setAvailableMatrices: (matrices: string[]) => void;
     setAvailableScreeningLevels: (levels: string[]) => void;
+    setAggregationRules: (rules: AggregationRule[]) => void;
     setCrossSectionPoints: (points: CrossSectionPoints) => void;
     setVisSpec: (table: string, spec: VisSpec) => void;
     setColorBy: (table: string, column: string | null) => void;
@@ -137,10 +168,11 @@ function updateRuntime(
 const DEFAULT_CONFIG: ChemroomsConfig = {
   selectedLocationId: null,
   timeSeriesAnalytes: [],
-  choroplethAnalyte: null,
+  coloringAnalyte: null,
   matrixFilter: null,
-  nonDetectMethod: 'half_dl',
-  choroplethAggMethod: 'most_recent',
+  ndMethod: 'half_dl',
+  eventAgg: 'most_recent',
+  dupAgg: 'avg',
   colorMode: 'concentration',
   selectedScreeningLevel: null,
   fractionFilter: null,
@@ -155,8 +187,10 @@ export function createChemroomsSlice(
     chemrooms: {
       config,
       availableAnalytes: [],
+      availableAnalyteNames: [],
       availableMatrices: [],
       availableScreeningLevels: [],
+      aggregationRules: {},
       locationSummary: null,
       analytesAtLocation: [],
       crossSectionPoints: null,
@@ -209,9 +243,9 @@ export function createChemroomsSlice(
           }),
         ),
 
-      setChoroplethAnalyte: (analyte) =>
+      setColoringAnalyte: (analyte) =>
         set((state: ChemroomsSliceState) =>
-          updateConfig(state, {choroplethAnalyte: analyte}),
+          updateConfig(state, {coloringAnalyte: analyte}),
         ),
 
       setMatrixFilter: (matrix) =>
@@ -219,14 +253,19 @@ export function createChemroomsSlice(
           updateConfig(state, {matrixFilter: matrix}),
         ),
 
-      setNonDetectMethod: (method) =>
+      setNdMethod: (method) =>
         set((state: ChemroomsSliceState) =>
-          updateConfig(state, {nonDetectMethod: method}),
+          updateConfig(state, {ndMethod: method}),
         ),
 
-      setChoroplethAggMethod: (method) =>
+      setEventAgg: (method) =>
         set((state: ChemroomsSliceState) =>
-          updateConfig(state, {choroplethAggMethod: method}),
+          updateConfig(state, {eventAgg: method}),
+        ),
+
+      setDupAgg: (method) =>
+        set((state: ChemroomsSliceState) =>
+          updateConfig(state, {dupAgg: method}),
         ),
 
       setColorMode: (mode) =>
@@ -258,6 +297,25 @@ export function createChemroomsSlice(
         set((state: ChemroomsSliceState) =>
           updateRuntime(state, {availableAnalytes: analytes}),
         ),
+
+      setAvailableAnalyteNames: (names) =>
+        set((state: ChemroomsSliceState) =>
+          updateRuntime(state, {availableAnalyteNames: names}),
+        ),
+
+      setAggregationRules: (rules) =>
+        set((state: ChemroomsSliceState) => {
+          // Group by category
+          const grouped: Record<string, AggregationRule[]> = {};
+          for (const rule of rules) {
+            if (!grouped[rule.category]) grouped[rule.category] = [];
+            grouped[rule.category]!.push(rule);
+          }
+          for (const cat of Object.keys(grouped)) {
+            grouped[cat]!.sort((a, b) => a.displayOrder - b.displayOrder);
+          }
+          return updateRuntime(state, {aggregationRules: grouped});
+        }),
 
       setAvailableMatrices: (matrices) =>
         set((state: ChemroomsSliceState) =>

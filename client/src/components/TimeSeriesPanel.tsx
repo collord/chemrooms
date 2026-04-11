@@ -39,7 +39,7 @@ function buildTimeSeriesQuery(
         ELSE COALESCE(r.reporting_limit, r.method_detection_limit, r.quantitation_limit) / 2.0
       END`;
       break;
-    case 'at_dl':
+    case 'dl':
       ndExpression = `CASE
         WHEN r.detected THEN r.result
         ELSE COALESCE(r.reporting_limit, r.method_detection_limit, r.quantitation_limit)
@@ -89,9 +89,7 @@ export const TimeSeriesPanel: React.FC = () => {
   const fractionFilter = useChemroomsStore(
     (s) => s.chemrooms.config.fractionFilter,
   );
-  const nonDetectMethod = useChemroomsStore(
-    (s) => s.chemrooms.config.nonDetectMethod,
-  );
+  const ndMethod = useChemroomsStore((s) => s.chemrooms.config.ndMethod);
   const mosaicConn = useChemroomsStore((s) => s.mosaic.connection);
 
   const hasSelection =
@@ -106,7 +104,7 @@ export const TimeSeriesPanel: React.FC = () => {
       selectedAnalytes,
       matrixFilter,
       fractionFilter,
-      nonDetectMethod,
+      ndMethod,
     );
 
     return {
@@ -144,7 +142,7 @@ export const TimeSeriesPanel: React.FC = () => {
     selectedAnalytes,
     matrixFilter,
     fractionFilter,
-    nonDetectMethod,
+    ndMethod,
     mosaicConn.status,
   ]);
 

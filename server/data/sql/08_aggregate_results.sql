@@ -88,7 +88,12 @@ WITH filtered AS (
         v.location_id,
         v.x, v.y, v.geom,
         v.matrix,
-        v.top_depth, v.bottom_depth, v.depth,
+        -- NULL depths collapse to (0, 0) so a location's surface samples
+        -- and "no depth recorded" samples land in the same partition.
+        -- Distinct non-null depth intervals remain distinct partitions.
+        COALESCE(v.top_depth, 0)    AS top_depth,
+        COALESCE(v.bottom_depth, 0) AS bottom_depth,
+        COALESCE(v.depth, 0)        AS depth,
         v.sample_date,
         v.sample_id,
         v.fraction,

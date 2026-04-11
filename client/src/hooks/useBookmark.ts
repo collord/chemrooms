@@ -37,9 +37,7 @@ export function useBookmark() {
   const setFractionFilter = useChemroomsStore(
     (s) => s.chemrooms.setFractionFilter,
   );
-  const setNonDetectMethod = useChemroomsStore(
-    (s) => s.chemrooms.setNonDetectMethod,
-  );
+  const setNdMethod = useChemroomsStore((s) => s.chemrooms.setNdMethod);
   const setTimeSeriesAnalytes = useChemroomsStore(
     (s) => s.chemrooms.setTimeSeriesAnalytes,
   );
@@ -110,7 +108,9 @@ export function useBookmark() {
     if (fraction) setFractionFilter(fraction);
 
     const nd = params.get('nd');
-    if (nd) setNonDetectMethod(nd as any);
+    // Bookmark backwards compat: chemrooms used to call this 'at_dl';
+    // chemduck's canonical name is 'dl'.
+    if (nd) setNdMethod((nd === 'at_dl' ? 'dl' : nd) as any);
 
     // Selected location
     const loc = params.get('loc');
@@ -160,7 +160,7 @@ export function useBookmark() {
     setSelectedLocation,
     setMatrixFilter,
     setFractionFilter,
-    setNonDetectMethod,
+    setNdMethod,
     setTimeSeriesAnalytes,
     setCrossSectionPoints,
     enableClippingPlane,
@@ -209,8 +209,8 @@ export function useBookmark() {
     if (config.fractionFilter) {
       params.set('fraction', config.fractionFilter);
     }
-    if (config.nonDetectMethod !== 'half_dl') {
-      params.set('nd', config.nonDetectMethod);
+    if (config.ndMethod !== 'half_dl') {
+      params.set('nd', config.ndMethod);
     }
     if (config.timeSeriesAnalytes.length > 0) {
       params.set('analytes', config.timeSeriesAnalytes.join(','));

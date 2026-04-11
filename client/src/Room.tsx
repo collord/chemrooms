@@ -15,6 +15,11 @@ import {
   type LocationToSample,
 } from './setup/initEntityLayers';
 import {loadVisSpecs} from './vis/loadVisSpecs';
+import {
+  loadAggregationRules,
+  loadAvailableAnalyteNames,
+} from './setup/loadCatalogs';
+import {buildSamplesLayerSql} from './setup/buildSamplesLayerSql';
 
 const VIS_SPEC_TABLES = [
   'locations',
@@ -62,6 +67,10 @@ export const Room = () => {
   const sqlEditorDisclosure = useDisclosure();
   const initRanRef = useRef(false);
   const terrainSampledRef = useRef(false);
+  const elevationColumnsRef = useRef<string[]>([]);
+  const hasChemduckSchemaRef = useRef(false);
+  /** Last applied samples layer SQL — used to skip no-op rebuilds. */
+  const lastSamplesSqlRef = useRef<string | null>(null);
 
   useEffect(() => {
     roomStore.getState().initialize?.();
@@ -69,15 +78,13 @@ export const Room = () => {
 
   // Phase 1: once parquet data has loaded, run setup and add the entity
   // layers. Locations whose elevation must be sampled from terrain are
-  // queued in `pendingTerrainSamples` for Phase 2.
+  // queued for Phase 2.
   // Phase 2: when the Cesium viewer is ready, sample terrain for those
-  // locations, INSERT the heights into location_elevations_sampled, and
-  // re-fire the layer queries by mutating the SQL string slightly so
-  // useSql's cache key changes.
+  // locations and INSERT the heights into location_elevations_sampled,
+  // then re-fire the locations layer query.
   useEffect(() => {
     let pendingTerrainSamples: LocationToSample[] = [];
     let phase1LocationsSql = '';
-    let phase1SamplesSql = '';
 
     return roomStore.subscribe((state: RoomState) => {
       // ── Phase 1 ─────────────────────────────────────────────────────────
@@ -86,11 +93,13 @@ export const Room = () => {
 
         const {connector} = state.db;
         const {addLayer} = state.cesium;
-        const {setVisSpec} = state.chemrooms;
+        const {
+          setVisSpec,
+          setAggregationRules,
+          setAvailableAnalyteNames,
+        } = state.chemrooms;
 
-        // Fetch sidecar vis specs in parallel with the entity-layer init.
-        // Specs are stored in the chemrooms slice as they arrive; missing
-        // sidecars are silently skipped.
+        // Fetch sidecar vis specs in parallel.
         loadVisSpecs(DATA_BASE_URL, VIS_SPEC_TABLES)
           .then((loaded) => {
             for (const {table, spec} of loaded) {
@@ -105,7 +114,7 @@ export const Room = () => {
           .catch((e) => console.warn('[init] vis spec fetch failed:', e));
 
         initEntityLayers(connector)
-          .then((result) => {
+          .then(async (result) => {
             const {
               hasGeoid,
               hasChemduckSchema,
@@ -120,8 +129,10 @@ export const Room = () => {
               )}] needTerrain=${locationsNeedingTerrain.length}`,
             );
             phase1LocationsSql = locationsSql;
-            phase1SamplesSql = samplesSql;
+            elevationColumnsRef.current = elevationColumns;
+            hasChemduckSchemaRef.current = hasChemduckSchema;
             pendingTerrainSamples = locationsNeedingTerrain;
+            lastSamplesSqlRef.current = samplesSql;
 
             addLayer({
               id: 'locations',
@@ -141,6 +152,20 @@ export const Room = () => {
               sqlQuery: samplesSql,
               columnMapping: COLUMN_MAPPING,
             });
+
+            // Once chemduck views/macros are available, load the
+            // catalogs so the UI dropdowns can populate.
+            if (hasChemduckSchema) {
+              const [rules, analytes] = await Promise.all([
+                loadAggregationRules(connector),
+                loadAvailableAnalyteNames(connector),
+              ]);
+              setAggregationRules(rules);
+              setAvailableAnalyteNames(analytes);
+              console.log(
+                `[init] catalogs: ${rules.length} aggregation rules, ${analytes.length} analytes`,
+              );
+            }
           })
           .catch((e) =>
             console.error('[init] entity layers setup failed:', e),
@@ -175,16 +200,80 @@ export const Room = () => {
             return writeSampledElevations(connector, rows);
           })
           .then(() => {
-            // Invalidate useSql cache by appending a unique comment.
-            // The semantics are unchanged but the SQL string differs,
-            // so CesiumEntityLayer's useSql call refetches.
+            // Invalidate useSql cache by appending a unique stamp.
             const stamp = `-- terrain-sampled at ${Date.now()}\n`;
             updateLayer('locations', {sqlQuery: stamp + phase1LocationsSql});
-            updateLayer('subsurface-samples', {
-              sqlQuery: stamp + phase1SamplesSql,
-            });
+            // Also re-fire samples layer with current state
+            rebuildSamplesLayer(stamp);
           })
           .catch((e) => console.error('[init] terrain sampling failed:', e));
+      }
+    });
+  }, []);
+
+  /**
+   * Rebuild the samples layer SQL from current state and push it to
+   * the cesium slice. Compares against lastSamplesSqlRef to avoid
+   * pointless re-fires.
+   *
+   * Optional `prefix` is prepended to invalidate the useSql cache when
+   * the SQL bytes are otherwise unchanged (e.g. terrain sampling
+   * completed and we want to refetch with new altitude data).
+   */
+  const rebuildSamplesLayer = (prefix = '') => {
+    if (!initRanRef.current) return;
+    const state = roomStore.getState();
+    const {coloringAnalyte, eventAgg, dupAgg, ndMethod, matrixFilter} =
+      state.chemrooms.config;
+
+    // If chemduck schema didn't load, force the no-analyte fallback
+    // even if the user somehow ended up with one selected.
+    const effectiveAnalyte = hasChemduckSchemaRef.current
+      ? coloringAnalyte
+      : null;
+
+    const sql =
+      prefix +
+      buildSamplesLayerSql({
+        elevationColumns: elevationColumnsRef.current,
+        coloringAnalyte: effectiveAnalyte,
+        eventAgg,
+        dupAgg,
+        ndMethod,
+        matrixFilter,
+      });
+
+    if (sql === lastSamplesSqlRef.current) return;
+    lastSamplesSqlRef.current = sql;
+    state.cesium.updateLayer('subsurface-samples', {sqlQuery: sql});
+  };
+
+  // Subscribe to changes that should trigger a samples layer rebuild.
+  // Each setState that touches one of these fields fires the listener.
+  useEffect(() => {
+    let last = roomStore.getState().chemrooms.config;
+    return roomStore.subscribe((state: RoomState) => {
+      const cfg = state.chemrooms.config;
+      if (
+        cfg.coloringAnalyte === last.coloringAnalyte &&
+        cfg.eventAgg === last.eventAgg &&
+        cfg.dupAgg === last.dupAgg &&
+        cfg.ndMethod === last.ndMethod &&
+        cfg.matrixFilter === last.matrixFilter
+      ) {
+        return;
+      }
+      last = cfg;
+      rebuildSamplesLayer();
+
+      // When an analyte is selected, default the v_results_denormalized
+      // color-by column to 'result' so the user sees a concentration
+      // gradient immediately. Only set if the user hasn't picked one.
+      if (cfg.coloringAnalyte) {
+        const colorBy = state.chemrooms.colorBy['v_results_denormalized'];
+        if (!colorBy) {
+          state.chemrooms.setColorBy('v_results_denormalized', 'result');
+        }
       }
     });
   }, []);
