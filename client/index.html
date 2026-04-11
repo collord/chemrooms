@@ -5,6 +5,31 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Chemrooms</title>
+
+    <!--
+      Preload DuckDB-WASM from jsDelivr in parallel with the main bundle.
+      Without this, the 6.8MB WASM doesn't start downloading until after the
+      main JS bundle has parsed and DuckDB-WASM gets initialized — adding
+      almost a full second to time-to-interactive on a cold load.
+
+      The version below MUST match @duckdb/duckdb-wasm in pnpm-lock.yaml.
+      If you bump that dependency, update this URL or the preload becomes
+      stale (the app still works, just no preload benefit).
+    -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+    <link
+      rel="preload"
+      as="fetch"
+      crossorigin="anonymous"
+      type="application/wasm"
+      href="https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.31.0/dist/duckdb-eh.wasm"
+    />
+    <link
+      rel="preload"
+      as="script"
+      crossorigin="anonymous"
+      href="https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.31.0/dist/duckdb-browser-eh.worker.js"
+    />
   </head>
   <body>
     <div id="root"></div>
