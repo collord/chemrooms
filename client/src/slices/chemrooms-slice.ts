@@ -99,6 +99,13 @@ export interface ChemroomsSliceState {
     availableScreeningLevels: string[];
     /** chemduck aggregation_rules catalog, keyed by category. */
     aggregationRules: Record<string, AggregationRule[]>;
+    /**
+     * Visibility flags for the chemrooms-managed entity layers.
+     * Default: both true. LayersMenu's "Site Data" toggle drives the
+     * samples flag.
+     */
+    locationsVisible: boolean;
+    samplesVisible: boolean;
     locationSummary: LocationSummary | null;
     analytesAtLocation: AnalyteInfo[];
     crossSectionPoints: CrossSectionPoints;
@@ -128,6 +135,8 @@ export interface ChemroomsSliceState {
     setAvailableMatrices: (matrices: string[]) => void;
     setAvailableScreeningLevels: (levels: string[]) => void;
     setAggregationRules: (rules: AggregationRule[]) => void;
+    setLocationsVisible: (visible: boolean) => void;
+    setSamplesVisible: (visible: boolean) => void;
     setCrossSectionPoints: (points: CrossSectionPoints) => void;
     setVisSpec: (table: string, spec: VisSpec) => void;
     setColorBy: (table: string, column: string | null) => void;
@@ -191,6 +200,8 @@ export function createChemroomsSlice(
       availableMatrices: [],
       availableScreeningLevels: [],
       aggregationRules: {},
+      locationsVisible: true,
+      samplesVisible: true,
       locationSummary: null,
       analytesAtLocation: [],
       crossSectionPoints: null,
@@ -316,6 +327,16 @@ export function createChemroomsSlice(
           }
           return updateRuntime(state, {aggregationRules: grouped});
         }),
+
+      setLocationsVisible: (visible) =>
+        set((state: ChemroomsSliceState) =>
+          updateRuntime(state, {locationsVisible: visible}),
+        ),
+
+      setSamplesVisible: (visible) =>
+        set((state: ChemroomsSliceState) =>
+          updateRuntime(state, {samplesVisible: visible}),
+        ),
 
       setAvailableMatrices: (matrices) =>
         set((state: ChemroomsSliceState) =>

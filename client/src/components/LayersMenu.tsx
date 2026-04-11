@@ -153,7 +153,6 @@ function applyClippingToEntities(
 
 export const LayersMenu: React.FC = () => {
   const [open, setOpen] = useState(false);
-  const [siteDataVisible, setSiteDataVisible] = useState(true);
   const [topoVisible, setTopoVisible] = useState(true);
   const [tilesets, setTilesets] = useState<TilesetEntry[]>([]);
   const [tilesetVisibility, setTilesetVisibility] = useState<Record<string, boolean>>({});
@@ -162,9 +161,19 @@ export const LayersMenu: React.FC = () => {
   const tilesetRefs = useRef<Record<string, Cesium3DTileset>>({});
 
   const viewer = useStoreWithCesium((s) => s.cesium.viewer);
-  const layers = useStoreWithCesium((s) => s.cesium.config.layers);
-  const toggleLayerVisibility = useStoreWithCesium(
-    (s) => s.cesium.toggleLayerVisibility,
+  // Site Data visibility lives on the chemrooms slice now — the
+  // chemrooms-managed entity layers (locations + samples) read these
+  // flags directly via useChemroomsEntities, so flipping them here
+  // toggles entity rendering in lockstep.
+  const samplesVisible = useChemroomsStore((s) => s.chemrooms.samplesVisible);
+  const setSamplesVisible = useChemroomsStore(
+    (s) => s.chemrooms.setSamplesVisible,
+  );
+  const locationsVisible = useChemroomsStore(
+    (s) => s.chemrooms.locationsVisible,
+  );
+  const setLocationsVisible = useChemroomsStore(
+    (s) => s.chemrooms.setLocationsVisible,
   );
   const crossSectionPoints = useChemroomsStore(
     (s) => s.chemrooms.crossSectionPoints,
@@ -236,13 +245,13 @@ export const LayersMenu: React.FC = () => {
     };
   }, [viewer]);
 
-  const toggleSiteData = useCallback(() => {
-    const next = !siteDataVisible;
-    setSiteDataVisible(next);
-    for (const layer of layers) {
-      if (layer.visible !== next) toggleLayerVisibility(layer.id);
-    }
-  }, [siteDataVisible, layers, toggleLayerVisibility]);
+  const toggleLocations = useCallback(() => {
+    setLocationsVisible(!locationsVisible);
+  }, [locationsVisible, setLocationsVisible]);
+
+  const toggleSamples = useCallback(() => {
+    setSamplesVisible(!samplesVisible);
+  }, [samplesVisible, setSamplesVisible]);
 
   const toggleTopo = useCallback(() => {
     const next = !topoVisible;
@@ -303,7 +312,8 @@ export const LayersMenu: React.FC = () => {
       {open && (
         <div className="absolute left-0 z-50 mt-1 w-48 rounded-md border border-border bg-background py-1 shadow-lg">
           {/* Static layers */}
-          <LayerRow label="Site Data" checked={siteDataVisible} onChange={toggleSiteData} />
+          <LayerRow label="Locations" checked={locationsVisible} onChange={toggleLocations} />
+          <LayerRow label="Samples" checked={samplesVisible} onChange={toggleSamples} />
           <LayerRow label="Topography" checked={topoVisible} onChange={toggleTopo} />
 
           {/* Dynamic tileset layers */}

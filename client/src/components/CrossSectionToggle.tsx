@@ -44,10 +44,9 @@ export const CrossSectionToggle: React.FC = () => {
   const disableClippingPlane = useStoreWithCesium(
     (s) => s.cesium.disableClippingPlane,
   );
-  const toggleLayerVisibility = useStoreWithCesium(
-    (s) => s.cesium.toggleLayerVisibility,
+  const setSamplesVisible = useChemroomsStore(
+    (s) => s.chemrooms.setSamplesVisible,
   );
-  const layers = useStoreWithCesium((s) => s.cesium.config.layers);
   const setCrossSectionPoints = useChemroomsStore(
     (s) => s.chemrooms.setCrossSectionPoints,
   );
@@ -78,12 +77,9 @@ export const CrossSectionToggle: React.FC = () => {
 
   const showSubsurface = useCallback(
     (show: boolean) => {
-      const sub = layers.find((l) => l.id === 'subsurface-samples');
-      if (sub && sub.visible !== show) {
-        toggleLayerVisibility('subsurface-samples');
-      }
+      setSamplesVisible(show);
     },
-    [layers, toggleLayerVisibility],
+    [setSamplesVisible],
   );
 
   const removePreviewLine = useCallback(() => {

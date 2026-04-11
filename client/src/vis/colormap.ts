@@ -123,7 +123,12 @@ export function makeColorFnForColumn(
   const c = spec.color;
 
   if (c.type === 'sequential') {
-    const domain = c.domain ?? derivedDomain;
+    // Live data domain wins over the spec's hardcoded one. The spec domain
+    // is typically a global min/max baked at export time, which compresses
+    // the gradient when the data is filtered (e.g. one analyte). Using the
+    // derived domain when available makes the visual gradient meaningful
+    // for whatever subset is currently rendered.
+    const domain = derivedDomain ?? c.domain;
     if (!domain) {
       // No domain — can't normalize. Fall back to gray.
       return () => FALLBACK_COLOR;
