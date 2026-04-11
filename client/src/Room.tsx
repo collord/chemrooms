@@ -8,12 +8,15 @@ import {SqlEditorModal} from '@sqlrooms/sql-editor';
 import {ThemeSwitch, useDisclosure} from '@sqlrooms/ui';
 import {TerminalIcon} from 'lucide-react';
 import {Cartographic, sampleTerrainMostDetailed} from 'cesium';
-import {roomStore, type RoomState} from './store';
+import {roomStore, type RoomState, DATA_BASE_URL} from './store';
 import {
   initEntityLayers,
   writeSampledElevations,
   type LocationToSample,
 } from './setup/initEntityLayers';
+import {loadVisSpecs} from './vis/loadVisSpecs';
+
+const VIS_SPEC_TABLES = ['locations', 'samples', 'results'];
 
 const COLUMN_MAPPING = {
   longitude: 'longitude',
@@ -78,6 +81,23 @@ export const Room = () => {
 
         const {connector} = state.db;
         const {addLayer} = state.cesium;
+        const {setVisSpec} = state.chemrooms;
+
+        // Fetch sidecar vis specs in parallel with the entity-layer init.
+        // Specs are stored in the chemrooms slice as they arrive; missing
+        // sidecars are silently skipped.
+        loadVisSpecs(DATA_BASE_URL, VIS_SPEC_TABLES)
+          .then((loaded) => {
+            for (const {table, spec} of loaded) {
+              setVisSpec(table, spec);
+            }
+            console.log(
+              `[init] loaded ${loaded.length} vis spec(s): [${loaded
+                .map((l) => l.table)
+                .join(',')}]`,
+            );
+          })
+          .catch((e) => console.warn('[init] vis spec fetch failed:', e));
 
         initEntityLayers(connector)
           .then((result) => {

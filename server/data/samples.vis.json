@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "table": "samples",
+  "columns": {
+    "matrix": {
+      "label": "Matrix",
+      "color": {
+        "type": "categorical",
+        "palette": "category10",
+        "categories": [
+          "Groundwater",
+          "Water"
+        ]
+      }
+    },
+    "top_depth": {
+      "label": "Top Depth",
+      "color": {
+        "type": "sequential",
+        "palette": "viridis",
+        "scaleType": "linear",
+        "domain": [
+          0.0,
+          15.0
+        ]
+      }
+    },
+    "bottom_depth": {
+      "label": "Bottom Depth",
+      "color": {
+        "type": "sequential",
+        "palette": "viridis",
+        "scaleType": "linear",
+        "domain": [
+          0.0,
+          20.0
+        ]
+      }
+    },
+    "depth": {
+      "label": "Depth",
+      "color": {
+        "type": "sequential",
+        "palette": "viridis",
+        "scaleType": "linear",
+        "domain": [
+          0.0,
+          17.5
+        ]
+      }
+    },
+    "event": {
+      "label": "Event",
+      "color": {
+        "type": "categorical",
+        "palette": "category10",
+        "categories": [
+          "SYN-EVT-0.",
+          "SYN-EVT-1.",
+          "SYN-EVT-2.",
+          "SYN-EVT-3."
+        ]
+      }
+    }
+  },
+  "defaultColorBy": "event"
+}

@@ -74,7 +74,7 @@ const cesiumConfigWithLayers = {
 // Data source URL — points to parquet exports of ChemDuck tables
 // ---------------------------------------------------------------------------
 
-const DATA_BASE_URL =
+export const DATA_BASE_URL =
   import.meta.env.VITE_DATA_URL ?? 'http://localhost:8000/data';
 
 // ---------------------------------------------------------------------------

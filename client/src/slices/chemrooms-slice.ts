@@ -13,6 +13,7 @@ import type {CesiumSliceState} from '@sqlrooms/cesium';
 import type {MosaicSliceState} from '@sqlrooms/mosaic/dist/MosaicSlice';
 import type {SqlEditorSliceState} from '@sqlrooms/sql-editor';
 import type {StateCreator} from 'zustand';
+import type {VisSpec} from '../vis/visSpec';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -60,6 +61,9 @@ export interface ChemroomsConfig {
 /** Lon/lat pairs for the two cross-section endpoints (degrees). */
 export type CrossSectionPoints = [[number, number], [number, number]] | null;
 
+/** Per-table active "color by" column. */
+export type ColorBySelection = Record<string, string | null>;
+
 export interface ChemroomsSliceState {
   chemrooms: {
     config: ChemroomsConfig;
@@ -70,6 +74,10 @@ export interface ChemroomsSliceState {
     locationSummary: LocationSummary | null;
     analytesAtLocation: AnalyteInfo[];
     crossSectionPoints: CrossSectionPoints;
+    /** Vis specs loaded from `<table>.vis.json` sidecars, keyed by table. */
+    visSpecs: Record<string, VisSpec>;
+    /** Active color-by column per table; null = no coloring. */
+    colorBy: ColorBySelection;
     isLoadingFilters: boolean;
     isLoadingLocation: boolean;
     // Actions
@@ -90,6 +98,8 @@ export interface ChemroomsSliceState {
     setAvailableMatrices: (matrices: string[]) => void;
     setAvailableScreeningLevels: (levels: string[]) => void;
     setCrossSectionPoints: (points: CrossSectionPoints) => void;
+    setVisSpec: (table: string, spec: VisSpec) => void;
+    setColorBy: (table: string, column: string | null) => void;
     setIsLoadingFilters: (loading: boolean) => void;
     setIsLoadingLocation: (loading: boolean) => void;
   };
@@ -150,6 +160,8 @@ export function createChemroomsSlice(
       locationSummary: null,
       analytesAtLocation: [],
       crossSectionPoints: null,
+      visSpecs: {},
+      colorBy: {},
       isLoadingFilters: false,
       isLoadingLocation: false,
 
@@ -260,6 +272,31 @@ export function createChemroomsSlice(
       setCrossSectionPoints: (points) =>
         set((state: ChemroomsSliceState) =>
           updateRuntime(state, {crossSectionPoints: points}),
+        ),
+
+      setVisSpec: (table, spec) =>
+        set((state: ChemroomsSliceState) => {
+          const nextSpecs = {...state.chemrooms.visSpecs, [table]: spec};
+          // Auto-select defaultColorBy if no selection has been made yet
+          const nextColorBy = {...state.chemrooms.colorBy};
+          if (
+            !(table in nextColorBy) &&
+            spec.defaultColorBy &&
+            spec.columns[spec.defaultColorBy]
+          ) {
+            nextColorBy[table] = spec.defaultColorBy;
+          }
+          return updateRuntime(state, {
+            visSpecs: nextSpecs,
+            colorBy: nextColorBy,
+          });
+        }),
+
+      setColorBy: (table, column) =>
+        set((state: ChemroomsSliceState) =>
+          updateRuntime(state, {
+            colorBy: {...state.chemrooms.colorBy, [table]: column},
+          }),
         ),
 
       setIsLoadingFilters: (loading) =>

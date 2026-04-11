@@ -17,6 +17,7 @@ import {CrossSectionToggle} from './CrossSectionToggle';
 import {VerticalExaggerationSlider} from './VerticalExaggerationSlider';
 import {LayersMenu} from './LayersMenu';
 import {BookmarkButton} from './BookmarkButton';
+import {ColorByPicker} from './ColorByPicker';
 
 export const SidebarPanel: React.FC = () => {
   // Activate hooks
@@ -44,6 +45,8 @@ export const SidebarPanel: React.FC = () => {
       <FilterToolbar />
       <CrossSectionToggle />
       <VerticalExaggerationSlider />
+      <ColorByPicker table="locations" label="Color locations by" />
+      <ColorByPicker table="samples" label="Color samples by" />
 
       {selectedLocationId ? (
         <>
