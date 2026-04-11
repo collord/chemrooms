@@ -111,6 +111,19 @@ export const {roomStore, useRoomStore} = createRoomStore<RoomState>(
             type: 'url',
             url: `${DATA_BASE_URL}/screening_levels.parquet`,
           },
+          {
+            // Canonical catalog of aggregation rule names and labels.
+            // Drives the UI dropdowns (event_agg, dup_agg, nd_method)
+            // without hardcoding the rule names in TypeScript.
+            tableName: 'aggregation_rules',
+            type: 'url',
+            url: `${DATA_BASE_URL}/aggregation_rules.parquet`,
+          },
+          {
+            tableName: 'unit_conversions',
+            type: 'url',
+            url: `${DATA_BASE_URL}/unit_conversions.parquet`,
+          },
         ],
       },
       layout: {

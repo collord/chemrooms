@@ -57,6 +57,7 @@ EXPORT_TABLES = [
     "project",
     "unit_conversions",
     "project_events",
+    "aggregation_rules",
 ]
 
 

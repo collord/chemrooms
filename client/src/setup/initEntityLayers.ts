@@ -47,6 +47,12 @@ const BASE_URL = import.meta.env.BASE_URL;
 const GEOID_URL = `${BASE_URL}geoid/local.json`;
 const CHEMDUCK_MACROS_URL = `${BASE_URL}data/sql/02_macros.sql`;
 const CHEMDUCK_VIEWS_URL = `${BASE_URL}data/sql/03_views.sql`;
+// 08_aggregate_results.sql defines the high-level aggregate_results table
+// macro the UI calls. It loads AFTER views since it references
+// v_results_denormalized in its body. 07_catalogs.sql is intentionally
+// NOT loaded here because the aggregation_rules table is shipped as a
+// parquet dataSource and running 07_catalogs.sql would duplicate rows.
+const CHEMDUCK_AGG_RESULTS_URL = `${BASE_URL}data/sql/08_aggregate_results.sql`;
 
 /** Columns to check on the locations table for an elevation source. */
 const ELEVATION_COLUMN_CANDIDATES = ['elevation', 'z', 'measuring_pt'];
@@ -177,14 +183,17 @@ async function loadChemduckSchema(
 ): Promise<boolean> {
   let macrosSql: string;
   let viewsSql: string;
+  let aggResultsSql: string;
   try {
-    const [mr, vr] = await Promise.all([
+    const [mr, vr, ar] = await Promise.all([
       fetch(CHEMDUCK_MACROS_URL),
       fetch(CHEMDUCK_VIEWS_URL),
+      fetch(CHEMDUCK_AGG_RESULTS_URL),
     ]);
-    if (!mr.ok || !vr.ok) return false;
+    if (!mr.ok || !vr.ok || !ar.ok) return false;
     macrosSql = await mr.text();
     viewsSql = await vr.text();
+    aggResultsSql = await ar.text();
   } catch {
     return false;
   }
@@ -214,6 +223,15 @@ async function loadChemduckSchema(
       '[init] chemduck macros retry had errors (views still work):',
       e,
     );
+  }
+
+  // Pass 4: the aggregate_results high-level table macro. It references
+  // v_results_denormalized in its body and must load after the views.
+  try {
+    await connector.query(aggResultsSql);
+  } catch (e) {
+    console.error('[init] aggregate_results macro failed to load:', e);
+    return false;
   }
 
   return true;
