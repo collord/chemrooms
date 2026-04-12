@@ -128,14 +128,19 @@ export const LayersPanel: React.FC = () => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     let lastResult = personalLayers;
+    let skipped = 0;
     for (const file of Array.from(files)) {
       const layer = await importLayerFromFile(file);
-      if (layer) {
-        lastResult = addPersonalLayer({...layer, origin: 'personal'});
-      }
+      if (!layer) continue;
+      const res = await addPersonalLayer({...layer, origin: 'personal'});
+      lastResult = res.layers;
+      if (!res.added) skipped += 1;
     }
     setPersonalLayers(lastResult);
     if (fileInputRef.current) fileInputRef.current.value = '';
+    if (skipped > 0) {
+      console.log(`[layers] skipped ${skipped} duplicate layer(s) on import`);
+    }
   };
 
   /**
@@ -144,11 +149,11 @@ export const LayersPanel: React.FC = () => {
    * with the correct merged list — promoteBookmarkLayer alone only
    * mutates the slice, not localStorage.
    */
-  const handlePromoteBookmark = (id: string) => {
+  const handlePromoteBookmark = async (id: string) => {
     const layer = bookmarkLayers.find((l) => l.id === id);
     if (!layer) return;
     const promoted = {...layer, origin: 'personal' as const};
-    const updatedPersonal = addPersonalLayer(promoted); // writes to localStorage
+    const {layers: updatedPersonal} = await addPersonalLayer(promoted);
     setPersonalLayers(updatedPersonal);
     setBookmarkLayers(bookmarkLayers.filter((l) => l.id !== id));
   };
@@ -272,7 +277,7 @@ export const LayersPanel: React.FC = () => {
                       ? 'flex-1 truncate text-foreground'
                       : 'flex-1 truncate text-muted-foreground'
                   }
-                  title={layer.description ?? layer.name}
+                  title={`${layer.description ?? layer.name}\n#${layer.id.slice(0, 8)}`}
                 >
                   {layer.name}
                 </span>
@@ -341,7 +346,7 @@ export const LayersPanel: React.FC = () => {
                         ? 'flex-1 truncate text-foreground'
                         : 'flex-1 truncate text-muted-foreground'
                     }
-                    title={layer.description ?? layer.name}
+                    title={`${layer.description ?? layer.name}\n#${layer.id.slice(0, 8)}`}
                   >
                     {layer.name}
                   </span>

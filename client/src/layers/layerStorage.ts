@@ -22,6 +22,7 @@ import {
   type LayerConfig,
   type LayerManifest,
 } from './layerSchema';
+import {computeLayerHash, isHashedId} from './layerHash';
 
 const LOCAL_STORAGE_KEY = 'chemrooms:layers';
 const BASE_URL = import.meta.env.BASE_URL;
@@ -90,12 +91,59 @@ export function savePersonalLayers(layers: LayerConfig[]): void {
   }
 }
 
-/** Add a personal layer and persist. */
-export function addPersonalLayer(layer: LayerConfig): LayerConfig[] {
+/**
+ * Add a personal layer and persist. Rehashes the layer's id from its
+ * content so imported/promoted layers always get a canonical id, and
+ * dedupes against existing layers with the same hash.
+ *
+ * If a layer with the same content hash already exists, this is a
+ * no-op — the existing list is returned unchanged. Returns a tuple of
+ * (updated list, whether a new layer was added).
+ */
+export async function addPersonalLayer(
+  layer: LayerConfig,
+): Promise<{layers: LayerConfig[]; added: boolean; id: string}> {
+  const id = await computeLayerHash(layer);
   const existing = loadPersonalLayers();
-  const updated = [...existing, {...layer, origin: 'personal' as const}];
+  if (existing.some((l) => l.id === id)) {
+    return {layers: existing, added: false, id};
+  }
+  const updated = [
+    ...existing,
+    {...layer, id, origin: 'personal' as const},
+  ];
   savePersonalLayers(updated);
-  return updated;
+  return {layers: updated, added: true, id};
+}
+
+/**
+ * One-time migration for personal layers: rehash any entries whose id
+ * doesn't match their content (legacy UUID-based ids, or layers that
+ * were tampered with). Dedupes in case two legacy layers collapse to
+ * the same hash. Persists the result.
+ */
+export async function migratePersonalLayers(): Promise<LayerConfig[]> {
+  const existing = loadPersonalLayers();
+  if (existing.length === 0) return existing;
+
+  const seen = new Set<string>();
+  const migrated: LayerConfig[] = [];
+  let changed = false;
+
+  for (const layer of existing) {
+    const ok = await isHashedId(layer);
+    const id = ok ? layer.id : await computeLayerHash(layer);
+    if (!ok) changed = true;
+    if (seen.has(id)) {
+      changed = true;
+      continue;
+    }
+    seen.add(id);
+    migrated.push(ok ? layer : {...layer, id});
+  }
+
+  if (changed) savePersonalLayers(migrated);
+  return migrated;
 }
 
 /** Remove a personal layer by id and persist. */

@@ -31,9 +31,11 @@ export const FreezeLayerButton: React.FC = () => {
     (s) => s.chemrooms.setPersonalLayers,
   );
 
-  const [justFroze, setJustFroze] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'frozen' | 'duplicate'>(
+    'idle',
+  );
 
-  const handleClick = useCallback(() => {
+  const handleClick = useCallback(async () => {
     if (!coloringAnalyte) return;
 
     const defaultName = matrixFilter
@@ -42,7 +44,7 @@ export const FreezeLayerButton: React.FC = () => {
     const name = window.prompt('Layer name:', defaultName);
     if (!name) return;
 
-    const layer = freezeCurrentState({
+    const layer = await freezeCurrentState({
       name,
       analyte: coloringAnalyte,
       matrix: matrixFilter,
@@ -52,11 +54,11 @@ export const FreezeLayerButton: React.FC = () => {
       colorBy: colorByResults ?? null,
     });
 
-    const updated = addPersonalLayer(layer);
-    setPersonalLayers(updated);
+    const {layers, added} = await addPersonalLayer(layer);
+    setPersonalLayers(layers);
 
-    setJustFroze(true);
-    setTimeout(() => setJustFroze(false), 1500);
+    setStatus(added ? 'frozen' : 'duplicate');
+    setTimeout(() => setStatus('idle'), 1800);
   }, [
     coloringAnalyte,
     matrixFilter,
@@ -81,7 +83,13 @@ export const FreezeLayerButton: React.FC = () => {
       className="flex items-center justify-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
     >
       <Snowflake className="h-3.5 w-3.5" />
-      <span>{justFroze ? 'Frozen!' : 'Freeze layer'}</span>
+      <span>
+        {status === 'frozen'
+          ? 'Frozen!'
+          : status === 'duplicate'
+            ? 'Already frozen'
+            : 'Freeze layer'}
+      </span>
     </button>
   );
 };

@@ -49,6 +49,7 @@
  */
 
 import {z} from 'zod';
+import {computeLayerHash} from './layerHash';
 
 // ---------------------------------------------------------------------------
 // Data source types
@@ -179,8 +180,10 @@ export const LayerConfig = z.object({
 
   /**
    * Stable identifier. For shared layers, this is the filename stem
-   * (e.g. "benzene-gw-most-recent"). For personal layers, a UUID.
-   * For bookmark layers, derived from the hash of the config.
+   * (e.g. "benzene-gw-most-recent"). For personal and bookmark layers,
+   * a 16-hex-char content hash (SHA-256 over the essential fields).
+   * Two users freezing the same recipe get the same id; editing
+   * cosmetic fields (name, description) preserves it.
    */
   id: z.string(),
 
@@ -267,8 +270,12 @@ export function parseLayerConfig(raw: unknown): LayerConfig | null {
  * Build a LayerConfig from the current interactive sidebar state.
  * This is the "freeze" operation — snapshot the current view as a
  * named, persistable layer config.
+ *
+ * The id is derived from the content hash: two users who freeze the
+ * same recipe get the same id, and re-freezing is idempotent. Async
+ * because Web Crypto's digest() returns a Promise.
  */
-export function freezeCurrentState(params: {
+export async function freezeCurrentState(params: {
   name: string;
   description?: string;
   analyte: string;
@@ -279,11 +286,10 @@ export function freezeCurrentState(params: {
   colorBy: string | null;
   palette?: string;
   scaleType?: 'linear' | 'log' | 'sqrt';
-}): LayerConfig {
-  const id = crypto.randomUUID();
-  return {
+}): Promise<LayerConfig> {
+  const draft: LayerConfig = {
     version: 1,
-    id,
+    id: '',
     name: params.name,
     description: params.description,
     dataSource: {type: 'chemduck'},
@@ -309,6 +315,8 @@ export function freezeCurrentState(params: {
     createdAt: new Date().toISOString(),
     origin: 'personal',
   };
+  const id = await computeLayerHash(draft);
+  return {...draft, id};
 }
 
 /**

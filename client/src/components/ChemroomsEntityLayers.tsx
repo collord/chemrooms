@@ -41,7 +41,7 @@ import {
 import {buildSamplesLayerSql} from '../setup/buildSamplesLayerSql';
 import {ChemroomsEntityLayer} from './ChemroomsEntityLayer';
 import {DATA_BASE_URL} from '../store';
-import {loadPersonalLayers} from '../layers/layerStorage';
+import {migratePersonalLayers} from '../layers/layerStorage';
 import type {LayerConfig} from '../layers/layerSchema';
 
 const VIS_SPEC_TABLES = [
@@ -140,12 +140,26 @@ export const ChemroomsEntityLayers: React.FC = () => {
   const [samplesSql, setSamplesSql] = useState<string | null>(null);
 
   // ── Hydrate personal layers from localStorage on mount ─────────────
+  // Runs migratePersonalLayers so any legacy UUID-based ids get
+  // rehashed to content hashes in place. Idempotent on fresh stores.
   useEffect(() => {
-    const layers = loadPersonalLayers();
-    if (layers.length > 0) {
-      setPersonalLayers(layers);
-      console.log(`[init] loaded ${layers.length} personal layer(s) from localStorage`);
-    }
+    let cancelled = false;
+    migratePersonalLayers()
+      .then((layers) => {
+        if (cancelled) return;
+        if (layers.length > 0) {
+          setPersonalLayers(layers);
+          console.log(
+            `[init] loaded ${layers.length} personal layer(s) from localStorage`,
+          );
+        }
+      })
+      .catch((e) =>
+        console.warn('[init] personal layer migration failed:', e),
+      );
+    return () => {
+      cancelled = true;
+    };
   }, [setPersonalLayers]);
 
   // ── Phase 1: initial setup ─────────────────────────────────────────
