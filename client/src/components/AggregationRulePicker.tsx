@@ -8,7 +8,10 @@
  */
 
 import React from 'react';
-import {useChemroomsStore} from '../slices/chemrooms-slice';
+import {
+  useChemroomsStore,
+  type AggregationRule,
+} from '../slices/chemrooms-slice';
 
 interface AggregationRulePickerProps {
   /** aggregation_rules.category: 'event_agg' | 'dup_agg' | 'nd_method' */
@@ -22,6 +25,9 @@ interface AggregationRulePickerProps {
   disabled?: boolean;
 }
 
+/** Stable module-level empty array for missing categories. */
+const EMPTY_RULES: AggregationRule[] = [];
+
 export const AggregationRulePicker: React.FC<AggregationRulePickerProps> = ({
   category,
   label,
@@ -29,8 +35,13 @@ export const AggregationRulePicker: React.FC<AggregationRulePickerProps> = ({
   onChange,
   disabled = false,
 }) => {
+  // IMPORTANT: the selector must return a stable reference when the
+  // category isn't loaded yet. `?? []` inline creates a fresh array on
+  // every call, which Zustand treats as a change, causing infinite
+  // re-renders (React error #185). Use a module-level EMPTY_RULES
+  // instead.
   const rules = useChemroomsStore(
-    (s) => s.chemrooms.aggregationRules[category] ?? [],
+    (s) => s.chemrooms.aggregationRules[category] ?? EMPTY_RULES,
   );
 
   // If the catalog hasn't loaded yet, render a placeholder so the
