@@ -11,6 +11,7 @@
     "link-sqlrooms": "bash ./scripts/link-sqlrooms.sh"
   },
   "dependencies": {
+    "@esri/wayback-core": "^1.0.10",
     "@sqlrooms/cesium": "link:../../sqlrooms/packages/cesium",
     "@sqlrooms/data-table": "^0.28.0",
     "@sqlrooms/duckdb": "^0.28.0",

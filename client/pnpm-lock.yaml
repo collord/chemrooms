@@ -11,6 +11,9 @@ importers:
 
   .:
     dependencies:
+      '@esri/wayback-core':
+        specifier: ^1.0.10
+        version: 1.0.10
       '@sqlrooms/cesium':
         specifier: link:../../sqlrooms/packages/cesium
         version: link:../../sqlrooms/packages/cesium
@@ -405,6 +408,9 @@ packages:
     engines: {node: '>=12'}
     cpu: [x64]
     os: [win32]
+
+  '@esri/wayback-core@1.0.10':
+    resolution: {integrity: sha512-gN3p868TRVPEUL2X34yqjvjOux40CpnnGcvMLzKpzePvV19OyAblv0rGHab8oM4bP9HY2IXRyDlkx7EZa8B3TA==}
 
   '@floating-ui/core@1.7.5':
     resolution: {integrity: sha512-1Ih4WTWyw0+lKyFMcBHGbb5U5FtuHJuujoyyr5zTaWS5EYMeT6Jb2AuDeftsCsEuchO+mM2ij5+q9crhydzLhQ==}
@@ -2881,6 +2887,8 @@ snapshots:
 
   '@esbuild/win32-x64@0.21.5':
     optional: true
+
+  '@esri/wayback-core@1.0.10': {}
 
   '@floating-ui/core@1.7.5':
     dependencies:

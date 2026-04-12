@@ -28,6 +28,7 @@ import {useStoreWithCesium} from '@sqlrooms/cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
 import {useTilesetManager} from '../hooks/useTilesetManager';
 import {useClippingPlaneSync} from '../hooks/useClippingPlaneSync';
+import {useWaybackImagery} from '../hooks/useWaybackImagery';
 import {
   removePersonalLayer,
   togglePersonalLayerVisibility,
@@ -42,6 +43,9 @@ export const LayersPanel: React.FC = () => {
   const {tilesets, tilesetRefs, toggleTileset} = useTilesetManager();
   useClippingPlaneSync(tilesetRefs);
 
+  // ESRI Wayback (historical World Imagery snapshots).
+  const wayback = useWaybackImagery();
+
   const toggleTopo = useCallback(() => {
     const next = !topoVisible;
     setTopoVisible(next);
@@ -49,6 +53,15 @@ export const LayersPanel: React.FC = () => {
       viewer.scene.globe.show = next;
     }
   }, [topoVisible, viewer]);
+
+  const toggleWayback = useCallback(() => {
+    if (wayback.isActive) {
+      wayback.clear();
+    } else if (wayback.items.length > 0) {
+      // Default to the most recent release on first activation.
+      wayback.setActiveReleaseNum(wayback.items[0]!.releaseNum);
+    }
+  }, [wayback]);
 
   // ── Live recipe ─────────────────────────────────────────────────────
   const locationsVisible = useChemroomsStore(
@@ -86,6 +99,7 @@ export const LayersPanel: React.FC = () => {
   // ── Render ──────────────────────────────────────────────────────────
   const totalCount =
     1 + // topography always present
+    1 + // wayback always counted (whether active or not)
     tilesets.length +
     2 + // locations + samples (live)
     personalLayers.length;
@@ -119,6 +133,30 @@ export const LayersPanel: React.FC = () => {
             checked={topoVisible}
             onChange={toggleTopo}
           />
+          <LayerRow
+            label="Wayback Imagery"
+            checked={wayback.isActive}
+            onChange={toggleWayback}
+            note={wayback.items.length === 0 ? 'loading…' : undefined}
+          />
+          {wayback.isActive && wayback.items.length > 0 && (
+            <div className="flex items-center gap-2 pl-6 text-[11px] text-muted-foreground">
+              <span className="shrink-0">Release:</span>
+              <select
+                className="min-w-0 flex-1 rounded border bg-background px-1 py-0.5 text-[11px]"
+                value={wayback.activeReleaseNum ?? ''}
+                onChange={(e) =>
+                  wayback.setActiveReleaseNum(Number(e.target.value))
+                }
+              >
+                {wayback.items.map((item) => (
+                  <option key={item.releaseNum} value={item.releaseNum}>
+                    {item.releaseDateLabel}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           {tilesets.map((entry) => (
             <LayerRow
               key={entry.name}
