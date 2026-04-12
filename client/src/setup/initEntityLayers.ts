@@ -83,20 +83,49 @@ async function detectColumns(
 /**
  * Try to load the geoid grid into a DuckDB table. Returns true if loaded,
  * false if the file isn't reachable.
+ *
+ * DuckDB-WASM doesn't have the httpfs extension loaded by default, so
+ * `read_json('https://...')` or relative URLs fail. Instead, we fetch
+ * the JSON via the browser's fetch API, create the table with DDL,
+ * then bulk-INSERT the rows.
  */
 async function tryLoadGeoidGrid(connector: DuckDbConnector): Promise<boolean> {
+  let rows: Array<{
+    row_idx: number;
+    col_idx: number;
+    lon: number;
+    lat: number;
+    offset_m: number;
+  }>;
   try {
-    const head = await fetch(GEOID_URL, {method: 'HEAD'});
-    if (!head.ok) return false;
+    const resp = await fetch(GEOID_URL);
+    if (!resp.ok) return false;
+    rows = await resp.json();
+    if (!Array.isArray(rows) || rows.length === 0) return false;
   } catch {
     return false;
   }
 
   try {
     await connector.query(`
-      CREATE OR REPLACE TABLE geoid_grid AS
-      SELECT * FROM read_json('${GEOID_URL}', auto_detect = true)
+      CREATE OR REPLACE TABLE geoid_grid (
+        row_idx INTEGER,
+        col_idx INTEGER,
+        lon DOUBLE,
+        lat DOUBLE,
+        offset_m DOUBLE
+      )
     `);
+    // Bulk insert — small dataset so a single VALUES clause is fine.
+    const valuesSql = rows
+      .map(
+        (r) =>
+          `(${r.row_idx}, ${r.col_idx}, ${r.lon}, ${r.lat}, ${r.offset_m})`,
+      )
+      .join(',\n');
+    await connector.query(
+      `INSERT INTO geoid_grid (row_idx, col_idx, lon, lat, offset_m) VALUES ${valuesSql}`,
+    );
     return true;
   } catch (e) {
     console.warn('[init] failed to load geoid grid:', e);
