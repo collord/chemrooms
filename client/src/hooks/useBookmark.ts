@@ -4,17 +4,27 @@
  * Captured state:
  *  - Camera: lon, lat, alt, heading, pitch, roll
  *  - Vertical exaggeration
- *  - Visible layers
+ *  - Visible globe/topo layers
  *  - Selected location
- *  - Filters: matrix, fraction, non-detect method
+ *  - Recipe: analyte, matrix, fraction, ND method, eventAgg, dupAgg, colorBy
  *  - Time-series analytes
  *  - Cross-section plane (two picked surface points)
+ *  - Visible personal layers (encoded as compact JSON, repeated `layer=` params)
+ *
+ * Frozen layers shared via bookmark land in `chemrooms.bookmarkLayers`
+ * (transient, not persisted) on the receiver's side. They render
+ * alongside the receiver's own personal layers but are visually
+ * distinguished and can be promoted to personal storage.
  */
 
 import {useEffect, useRef} from 'react';
 import {Cartesian3, Cartographic, Math as CesiumMath} from 'cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
 import {useStoreWithCesium} from '@sqlrooms/cesium';
+import {
+  deserializeLayerFromUrl,
+  serializeLayerForUrl,
+} from '../layers/layerSchema';
 
 /** Round to N decimal places. */
 function r(n: number, d = 4): number {
@@ -27,6 +37,10 @@ export function useBookmark() {
   const config = useChemroomsStore((s) => s.chemrooms.config);
   const crossSectionPoints = useChemroomsStore(
     (s) => s.chemrooms.crossSectionPoints,
+  );
+  const personalLayers = useChemroomsStore((s) => s.chemrooms.personalLayers);
+  const colorByResults = useChemroomsStore(
+    (s) => s.chemrooms.colorBy['v_results_denormalized'],
   );
   const setSelectedLocation = useChemroomsStore(
     (s) => s.chemrooms.setSelectedLocation,
@@ -43,6 +57,15 @@ export function useBookmark() {
   );
   const setCrossSectionPoints = useChemroomsStore(
     (s) => s.chemrooms.setCrossSectionPoints,
+  );
+  const setColoringAnalyte = useChemroomsStore(
+    (s) => s.chemrooms.setColoringAnalyte,
+  );
+  const setEventAgg = useChemroomsStore((s) => s.chemrooms.setEventAgg);
+  const setDupAgg = useChemroomsStore((s) => s.chemrooms.setDupAgg);
+  const setColorBy = useChemroomsStore((s) => s.chemrooms.setColorBy);
+  const setBookmarkLayers = useChemroomsStore(
+    (s) => s.chemrooms.setBookmarkLayers,
   );
   const enableClippingPlane = useStoreWithCesium(
     (s) => s.cesium.enableClippingPlane,
@@ -116,9 +139,36 @@ export function useBookmark() {
     const loc = params.get('loc');
     if (loc) setSelectedLocation(loc);
 
-    // Analytes
+    // Analytes (time-series — for the location detail panel)
     const analytes = params.get('analytes');
     if (analytes) setTimeSeriesAnalytes(analytes.split(','));
+
+    // Recipe state — the live "what's in the sidebar" view
+    const ca = params.get('ca'); // coloringAnalyte
+    if (ca) setColoringAnalyte(ca);
+
+    const ea = params.get('ea'); // eventAgg
+    if (ea) setEventAgg(ea as any);
+
+    const da = params.get('da'); // dupAgg
+    if (da) setDupAgg(da as any);
+
+    const cbr = params.get('cbr'); // colorBy['v_results_denormalized']
+    if (cbr) setColorBy('v_results_denormalized', cbr);
+
+    // Frozen layers shipped via this bookmark — land in bookmarkLayers
+    // (transient). The receiver can promote them to personal storage
+    // via the LayersPanel.
+    const layerParams = params.getAll('layer');
+    if (layerParams.length > 0) {
+      const decoded = layerParams
+        .map((p) => deserializeLayerFromUrl(p))
+        .filter((l): l is NonNullable<typeof l> => l !== null)
+        .map((l) => ({...l, origin: 'bookmark' as const}));
+      if (decoded.length > 0) {
+        setBookmarkLayers(decoded);
+      }
+    }
 
     // Cross-section: replay the clipping plane from two surface points
     const xsec = params.get('xsec');
@@ -163,6 +213,11 @@ export function useBookmark() {
     setNdMethod,
     setTimeSeriesAnalytes,
     setCrossSectionPoints,
+    setColoringAnalyte,
+    setEventAgg,
+    setDupAgg,
+    setColorBy,
+    setBookmarkLayers,
     enableClippingPlane,
     toggleLayerVisibility,
     layers,
@@ -214,6 +269,28 @@ export function useBookmark() {
     }
     if (config.timeSeriesAnalytes.length > 0) {
       params.set('analytes', config.timeSeriesAnalytes.join(','));
+    }
+
+    // Recipe state — only include if non-default to keep URLs short
+    if (config.coloringAnalyte) {
+      params.set('ca', config.coloringAnalyte);
+    }
+    if (config.eventAgg !== 'most_recent') {
+      params.set('ea', config.eventAgg);
+    }
+    if (config.dupAgg !== 'avg') {
+      params.set('da', config.dupAgg);
+    }
+    if (colorByResults) {
+      params.set('cbr', colorByResults);
+    }
+
+    // Visible personal layers — encoded as repeated `layer=` params.
+    // Only visible ones go in the bookmark; hidden saved layers are
+    // a personal-storage detail that doesn't need sharing.
+    for (const layer of personalLayers) {
+      if (!layer.visible) continue;
+      params.append('layer', serializeLayerForUrl(layer));
     }
 
     // Cross-section points

@@ -22,14 +22,25 @@
  * only owns the UI.
  */
 
-import React, {useCallback, useState} from 'react';
-import {ChevronDown, ChevronRight, Layers, Trash2} from 'lucide-react';
+import React, {useCallback, useRef, useState} from 'react';
+import {
+  BookmarkPlus,
+  ChevronDown,
+  ChevronRight,
+  Download,
+  Layers,
+  Trash2,
+  Upload,
+} from 'lucide-react';
 import {useStoreWithCesium} from '@sqlrooms/cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
 import {useTilesetManager} from '../hooks/useTilesetManager';
 import {useClippingPlaneSync} from '../hooks/useClippingPlaneSync';
 import {useWaybackImagery} from '../hooks/useWaybackImagery';
 import {
+  addPersonalLayer,
+  exportLayerAsJson,
+  importLayerFromFile,
   removePersonalLayer,
   togglePersonalLayerVisibility,
 } from '../layers/layerStorage';
@@ -85,6 +96,17 @@ export const LayersPanel: React.FC = () => {
   const setPersonalLayers = useChemroomsStore(
     (s) => s.chemrooms.setPersonalLayers,
   );
+  const bookmarkLayers = useChemroomsStore(
+    (s) => s.chemrooms.bookmarkLayers,
+  );
+  const setBookmarkLayers = useChemroomsStore(
+    (s) => s.chemrooms.setBookmarkLayers,
+  );
+  const toggleBookmarkLayer = useChemroomsStore(
+    (s) => s.chemrooms.toggleBookmarkLayer,
+  );
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleToggleFrozen = (id: string) => {
     const updated = togglePersonalLayerVisibility(id);
@@ -94,6 +116,41 @@ export const LayersPanel: React.FC = () => {
   const handleRemoveFrozen = (id: string) => {
     const updated = removePersonalLayer(id);
     setPersonalLayers(updated);
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelected = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    let lastResult = personalLayers;
+    for (const file of Array.from(files)) {
+      const layer = await importLayerFromFile(file);
+      if (layer) {
+        lastResult = addPersonalLayer({...layer, origin: 'personal'});
+      }
+    }
+    setPersonalLayers(lastResult);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  /**
+   * Promote a bookmark layer into personal storage. We do this
+   * imperatively in the handler so the localStorage write happens
+   * with the correct merged list — promoteBookmarkLayer alone only
+   * mutates the slice, not localStorage.
+   */
+  const handlePromoteBookmark = (id: string) => {
+    const layer = bookmarkLayers.find((l) => l.id === id);
+    if (!layer) return;
+    const promoted = {...layer, origin: 'personal' as const};
+    const updatedPersonal = addPersonalLayer(promoted); // writes to localStorage
+    setPersonalLayers(updatedPersonal);
+    setBookmarkLayers(bookmarkLayers.filter((l) => l.id !== id));
   };
 
   // ── Render ──────────────────────────────────────────────────────────
@@ -220,6 +277,13 @@ export const LayersPanel: React.FC = () => {
                   {layer.name}
                 </span>
                 <button
+                  onClick={() => exportLayerAsJson(layer)}
+                  className="text-muted-foreground/50 transition-colors hover:text-foreground"
+                  title="Export layer as JSON file"
+                >
+                  <Download className="h-3 w-3" />
+                </button>
+                <button
                   onClick={() => handleRemoveFrozen(layer.id)}
                   className="text-muted-foreground/50 transition-colors hover:text-red-500"
                   title="Delete layer"
@@ -228,6 +292,69 @@ export const LayersPanel: React.FC = () => {
                 </button>
               </div>
             ))
+          )}
+          <div className="flex justify-end pt-1">
+            <button
+              onClick={handleImportClick}
+              className="flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title="Import a layer from a .layer.json file"
+            >
+              <Upload className="h-3 w-3" />
+              Import
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,application/json"
+              multiple
+              onChange={handleFileSelected}
+              className="hidden"
+            />
+          </div>
+
+          {/* ── From bookmark ──────────────────────────────────────── */}
+          {bookmarkLayers.length > 0 && (
+            <>
+              <SectionLabel>
+                From bookmark
+                <span className="ml-1 text-[10px] tabular-nums opacity-60">
+                  ({bookmarkLayers.length})
+                </span>
+              </SectionLabel>
+              <div className="px-1 py-0.5 text-[10px] italic text-muted-foreground/60">
+                Loaded from URL — not saved to your layers
+              </div>
+              {bookmarkLayers.map((layer) => (
+                <div
+                  key={layer.id}
+                  className="flex items-center gap-2 rounded px-1 py-0.5 text-xs hover:bg-muted/50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={layer.visible}
+                    onChange={() => toggleBookmarkLayer(layer.id)}
+                    className="accent-primary"
+                  />
+                  <span
+                    className={
+                      layer.visible
+                        ? 'flex-1 truncate text-foreground'
+                        : 'flex-1 truncate text-muted-foreground'
+                    }
+                    title={layer.description ?? layer.name}
+                  >
+                    {layer.name}
+                  </span>
+                  <button
+                    onClick={() => handlePromoteBookmark(layer.id)}
+                    className="text-muted-foreground/50 transition-colors hover:text-foreground"
+                    title="Save this layer to your personal layers"
+                  >
+                    <BookmarkPlus className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </>
           )}
         </div>
       )}

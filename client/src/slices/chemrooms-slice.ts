@@ -119,6 +119,13 @@ export interface ChemroomsSliceState {
      * snapshot of a recipe (analyte + filters + agg + visual encoding).
      */
     personalLayers: LayerConfig[];
+    /**
+     * Layers loaded from a bookmark URL hash. Transient — not
+     * persisted to localStorage. Rendered alongside personal layers
+     * but visually distinguished in the LayersPanel; the user can
+     * promote them to personal storage if they want to keep them.
+     */
+    bookmarkLayers: LayerConfig[];
     isLoadingFilters: boolean;
     isLoadingLocation: boolean;
     // Actions
@@ -147,6 +154,9 @@ export interface ChemroomsSliceState {
     addPersonalLayer: (layer: LayerConfig) => void;
     removePersonalLayer: (id: string) => void;
     togglePersonalLayer: (id: string) => void;
+    setBookmarkLayers: (layers: LayerConfig[]) => void;
+    toggleBookmarkLayer: (id: string) => void;
+    promoteBookmarkLayer: (id: string) => void;
     setCrossSectionPoints: (points: CrossSectionPoints) => void;
     setVisSpec: (table: string, spec: VisSpec) => void;
     setColorBy: (table: string, column: string | null) => void;
@@ -218,6 +228,7 @@ export function createChemroomsSlice(
       visSpecs: {},
       colorBy: {},
       personalLayers: [],
+      bookmarkLayers: [],
       isLoadingFilters: false,
       isLoadingLocation: false,
 
@@ -378,6 +389,39 @@ export function createChemroomsSlice(
             ),
           }),
         ),
+
+      setBookmarkLayers: (layers) =>
+        set((state: ChemroomsSliceState) =>
+          updateRuntime(state, {bookmarkLayers: layers}),
+        ),
+
+      toggleBookmarkLayer: (id) =>
+        set((state: ChemroomsSliceState) =>
+          updateRuntime(state, {
+            bookmarkLayers: state.chemrooms.bookmarkLayers.map((l) =>
+              l.id === id ? {...l, visible: !l.visible} : l,
+            ),
+          }),
+        ),
+
+      /**
+       * Move a bookmark layer into the personal-layers list, removing
+       * it from bookmarks. The layer's id is preserved so toggles
+       * remain consistent. The promoted layer's origin flips to
+       * 'personal' so the next persist call writes it to localStorage.
+       */
+      promoteBookmarkLayer: (id) =>
+        set((state: ChemroomsSliceState) => {
+          const layer = state.chemrooms.bookmarkLayers.find((l) => l.id === id);
+          if (!layer) return state;
+          const promoted: LayerConfig = {...layer, origin: 'personal'};
+          return updateRuntime(state, {
+            bookmarkLayers: state.chemrooms.bookmarkLayers.filter(
+              (l) => l.id !== id,
+            ),
+            personalLayers: [...state.chemrooms.personalLayers, promoted],
+          });
+        }),
 
       setAvailableMatrices: (matrices) =>
         set((state: ChemroomsSliceState) =>

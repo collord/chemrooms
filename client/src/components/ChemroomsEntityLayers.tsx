@@ -42,6 +42,7 @@ import {buildSamplesLayerSql} from '../setup/buildSamplesLayerSql';
 import {ChemroomsEntityLayer} from './ChemroomsEntityLayer';
 import {DATA_BASE_URL} from '../store';
 import {loadPersonalLayers} from '../layers/layerStorage';
+import type {LayerConfig} from '../layers/layerSchema';
 
 const VIS_SPEC_TABLES = [
   'locations',
@@ -106,6 +107,9 @@ export const ChemroomsEntityLayers: React.FC = () => {
   );
   const personalLayers = useChemroomsStore(
     (s) => s.chemrooms.personalLayers,
+  );
+  const bookmarkLayers = useChemroomsStore(
+    (s) => s.chemrooms.bookmarkLayers,
   );
 
   const locationsVisible = useChemroomsStore(
@@ -292,17 +296,18 @@ export const ChemroomsEntityLayers: React.FC = () => {
     setColorBy('v_results_denormalized', 'result');
   }, [coloringAnalyte, colorByResults, setColorBy]);
 
-  // ── Build per-personal-layer SQL ────────────────────────────────────
-  // Each saved layer has its own query parameters (analyte, matrix,
-  // event_agg, etc.), independent of the live recipe sidebar. We
-  // precompute the SQL string for each layer here so React's render
-  // pipeline can pass them as stable props to ChemroomsEntityLayer.
-  // Recomputed when the layer list changes or the elevation columns
-  // change (which only happens once after init).
-  const personalLayerSql = useMemo(() => {
-    if (!hasChemduckSchema || !initRanRef.current) return new Map<string, string>();
+  // ── Build per-saved-layer SQL ───────────────────────────────────────
+  // Each saved layer (personal or bookmark) has its own query
+  // parameters (analyte, matrix, event_agg, etc.), independent of the
+  // live recipe sidebar. We precompute the SQL string for each layer
+  // here so React's render pipeline can pass them as stable props to
+  // ChemroomsEntityLayer. Recomputed when the layer list changes or
+  // the elevation columns change (only once after init).
+  const buildLayerSqlMap = (layers: LayerConfig[]) => {
+    if (!hasChemduckSchema || !initRanRef.current)
+      return new Map<string, string>();
     const map = new Map<string, string>();
-    for (const layer of personalLayers) {
+    for (const layer of layers) {
       if (layer.dataSource.type !== 'chemduck') continue;
       if (!layer.query) continue;
       const sql = buildSamplesLayerSql({
@@ -316,7 +321,19 @@ export const ChemroomsEntityLayers: React.FC = () => {
       map.set(layer.id, sql);
     }
     return map;
-  }, [personalLayers, elevationColumns, hasChemduckSchema]);
+  };
+
+  const personalLayerSql = useMemo(
+    () => buildLayerSqlMap(personalLayers),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [personalLayers, elevationColumns, hasChemduckSchema],
+  );
+
+  const bookmarkLayerSql = useMemo(
+    () => buildLayerSqlMap(bookmarkLayers),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [bookmarkLayers, elevationColumns, hasChemduckSchema],
+  );
 
   // ── Render the entity layer components ─────────────────────────────
   // When an analyte is selected the "samples" layer switches to the
@@ -345,8 +362,21 @@ export const ChemroomsEntityLayers: React.FC = () => {
         const sql = personalLayerSql.get(layer.id) ?? null;
         return (
           <ChemroomsEntityLayer
-            key={layer.id}
+            key={`personal:${layer.id}`}
             layerId={`personal:${layer.id}`}
+            sqlQuery={sql}
+            visSpecTable="v_results_denormalized"
+            visible={layer.visible}
+            colorByOverride={layer.visual.colorBy}
+          />
+        );
+      })}
+      {bookmarkLayers.map((layer) => {
+        const sql = bookmarkLayerSql.get(layer.id) ?? null;
+        return (
+          <ChemroomsEntityLayer
+            key={`bookmark:${layer.id}`}
+            layerId={`bookmark:${layer.id}`}
             sqlQuery={sql}
             visSpecTable="v_results_denormalized"
             visible={layer.visible}
