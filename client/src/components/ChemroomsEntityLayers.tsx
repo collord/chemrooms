@@ -82,6 +82,12 @@ export const ChemroomsEntityLayers: React.FC = () => {
   );
   const connector = useStoreWithCesium((s) => s.db.connector);
   const viewer = useStoreWithCesium((s) => s.cesium.viewer);
+  // refreshTableSchemas() rebuilds the SQL editor's schema panel from
+  // duckdb_tables() + duckdb_views(). Called after we create the
+  // chemduck views so they show up alongside the parquet-loaded tables.
+  const refreshTableSchemas = useStoreWithCesium(
+    (s) => s.db.refreshTableSchemas,
+  );
 
   // ── chemrooms slice reads ──────────────────────────────────────────
   const setVisSpec = useChemroomsStore((s) => s.chemrooms.setVisSpec);
@@ -190,6 +196,14 @@ export const ChemroomsEntityLayers: React.FC = () => {
           console.log(
             `[init] catalogs: ${rules.length} aggregation rules, ${analytes.length} analytes`,
           );
+
+          // Refresh the SQL editor's schema panel so the chemduck
+          // views (v_results_denormalized, v_results_with_screening,
+          // v_most_recent_results, etc.) appear alongside the
+          // parquet-loaded tables. Without this, the panel only
+          // shows the snapshot taken when the parquets first loaded
+          // — before loadChemduckSchema created the views.
+          await refreshTableSchemas();
         }
       })
       .catch((e) => console.error('[init] entity layers setup failed:', e));
@@ -199,6 +213,7 @@ export const ChemroomsEntityLayers: React.FC = () => {
     setVisSpec,
     setAggregationRules,
     setAvailableAnalyteNames,
+    refreshTableSchemas,
   ]);
 
   // ── Phase 2: terrain sampling when viewer is ready ─────────────────
