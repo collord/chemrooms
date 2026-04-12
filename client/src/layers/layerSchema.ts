@@ -1,0 +1,380 @@
+/**
+ * Layer schema — the canonical representation of a "frozen" data view.
+ *
+ * A layer config is a small JSON recipe that fully describes:
+ *   - WHERE the data comes from (built-in DuckDB tables or an external file)
+ *   - HOW the data is filtered and aggregated (analyte, matrix, event_agg, etc.)
+ *   - HOW the data is visually encoded (color column, palette, point size, etc.)
+ *
+ * It contains NO actual data — just parameters and references. At render
+ * time, the client turns a layer config into a DuckDB query + Cesium
+ * entities, pulling data from the project's parquet-backed tables or
+ * from an external URL.
+ *
+ * The same schema is used for:
+ *   - Shared layers (JSON files deployed with the project, read-only)
+ *   - Personal layers (localStorage, per-user, read-write)
+ *   - Bookmark layers (serialized into the URL hash for sharing)
+ *   - Future: collaborative layers (stored via API, git-backed)
+ *
+ * The interactive sidebar state is conceptually an unsaved layer.
+ * "Freezing" a layer = taking the current sidebar state and persisting
+ * it as a LayerConfig with a name.
+ *
+ * ## Data source types
+ *
+ * `chemduck`
+ *   The default. No external data — queries the project's DuckDB tables
+ *   via aggregate_results(). The `query` field provides the parameters.
+ *
+ * `geoparquet`
+ *   An external GeoParquet file loaded into DuckDB-WASM at runtime.
+ *   The URL can be relative (static deploy) or absolute (object storage).
+ *   Once loaded, the data is queryable like any other table.
+ *
+ * `geojson`
+ *   A GeoJSON file loaded as Cesium entities (polygons, lines, points).
+ *   Not loaded into DuckDB — rendered directly by Cesium.
+ *
+ * `geojson-inline`
+ *   Small GeoJSON embedded directly in the layer config. For site
+ *   boundaries, annotations, and other lightweight vectors that should
+ *   travel with the config rather than requiring a separate fetch.
+ *   Keep under ~50KB to stay URL-serializable.
+ *
+ * `imagery`
+ *   A georeferenced raster image (PNG/JPEG) draped on terrain via
+ *   Cesium's imagery layer system. For plume maps, aerial photos,
+ *   interpolated surfaces, etc.
+ */
+
+import {z} from 'zod';
+
+// ---------------------------------------------------------------------------
+// Data source types
+// ---------------------------------------------------------------------------
+
+/** Bounding box in WGS84 degrees. */
+export const Extent = z.object({
+  west: z.number(),
+  south: z.number(),
+  east: z.number(),
+  north: z.number(),
+});
+export type Extent = z.infer<typeof Extent>;
+
+export const ChemduckDataSource = z.object({
+  type: z.literal('chemduck'),
+});
+
+export const GeoParquetDataSource = z.object({
+  type: z.literal('geoparquet'),
+  /** URL to the .geoparquet file (relative or absolute). */
+  url: z.string(),
+  /** Table name to register in DuckDB-WASM after loading. */
+  tableName: z.string(),
+});
+
+export const GeoJsonDataSource = z.object({
+  type: z.literal('geojson'),
+  /** URL to the .geojson file. */
+  url: z.string(),
+});
+
+export const GeoJsonInlineDataSource = z.object({
+  type: z.literal('geojson-inline'),
+  /** The GeoJSON FeatureCollection, embedded directly. */
+  data: z.any(), // GeoJSON.FeatureCollection — validated at runtime by Cesium
+});
+
+export const ImageryDataSource = z.object({
+  type: z.literal('imagery'),
+  /** URL to the image file (PNG, JPEG, etc.). */
+  url: z.string(),
+  /** Geographic extent the image covers. */
+  extent: Extent,
+});
+
+export const DataSource = z.discriminatedUnion('type', [
+  ChemduckDataSource,
+  GeoParquetDataSource,
+  GeoJsonDataSource,
+  GeoJsonInlineDataSource,
+  ImageryDataSource,
+]);
+export type DataSource = z.infer<typeof DataSource>;
+
+// ---------------------------------------------------------------------------
+// Query configuration (for chemduck and geoparquet sources)
+// ---------------------------------------------------------------------------
+
+/**
+ * Parameters for the chemduck aggregate_results() macro.
+ *
+ * Field names match the chemduck aggregation_rules catalog vocabulary.
+ * All filter fields are optional — omitting them means "no filter."
+ */
+export const QueryConfig = z.object({
+  /** Analyte to filter on (exact match). Required for aggregation. */
+  analyte: z.string(),
+  /** Matrix filter. Null = all matrices. */
+  matrix: z.string().nullable().default(null),
+  /** Inclusive start date (ISO 8601). Null = no lower bound. */
+  startDate: z.string().nullable().default(null),
+  /** Inclusive end date (ISO 8601). Null = no upper bound. */
+  endDate: z.string().nullable().default(null),
+  /** Event-aggregation rule name (from aggregation_rules catalog). */
+  eventAgg: z.string().default('most_recent'),
+  /** Duplicate-aggregation rule name. */
+  dupAgg: z.string().default('avg'),
+  /** Non-detect substitution method name. */
+  ndMethod: z.string().default('half_dl'),
+});
+export type QueryConfig = z.infer<typeof QueryConfig>;
+
+// ---------------------------------------------------------------------------
+// Visual encoding
+// ---------------------------------------------------------------------------
+
+/**
+ * How the layer's data is rendered on the map.
+ *
+ * For `chemduck` and `geoparquet` sources, the default render type is
+ * `point` (Cesium point entities). For `imagery`, it's `imagery`
+ * (draped on terrain). For `geojson`/`geojson-inline`, it's `vector`
+ * (Cesium polygon/polyline/point entities from GeoJSON geometry).
+ *
+ * Color fields can override or extend the vis spec defaults. If
+ * omitted, the vis spec for the underlying table is used as-is.
+ */
+export const VisualEncoding = z.object({
+  /** Render type hint. Inferred from dataSource.type if omitted. */
+  renderType: z
+    .enum(['point', 'vector', 'imagery'])
+    .default('point'),
+  /** Column to color by. Null = default from vis spec or single color. */
+  colorBy: z.string().nullable().default(null),
+  /** Override the vis spec's default palette for this layer. */
+  palette: z.string().optional(),
+  /** Override the scale type for sequential coloring. */
+  scaleType: z.enum(['linear', 'log', 'sqrt']).optional(),
+  /** Override the domain for sequential coloring. Null = derive from data. */
+  domain: z.tuple([z.number(), z.number()]).optional(),
+  /** Point size in pixels (for point render type). */
+  pointSize: z.number().default(8),
+  /** Opacity (0–1). */
+  opacity: z.number().min(0).max(1).default(1),
+  /** Solid fallback color (CSS string) when colorBy is null. */
+  color: z.string().default('#00ffff'),
+});
+export type VisualEncoding = z.infer<typeof VisualEncoding>;
+
+// ---------------------------------------------------------------------------
+// Full layer config
+// ---------------------------------------------------------------------------
+
+export const LayerConfig = z.object({
+  /** Schema version. Increment on breaking changes. */
+  version: z.literal(1).default(1),
+
+  /**
+   * Stable identifier. For shared layers, this is the filename stem
+   * (e.g. "benzene-gw-most-recent"). For personal layers, a UUID.
+   * For bookmark layers, derived from the hash of the config.
+   */
+  id: z.string(),
+
+  /** Human-readable display name. */
+  name: z.string(),
+
+  /** Optional longer description (shown in tooltips, layer panel). */
+  description: z.string().optional(),
+
+  // ── Data ──────────────────────────────────────────────────────────
+
+  /**
+   * Where the layer's data comes from.
+   * Defaults to `{type: 'chemduck'}` (query the built-in DuckDB tables).
+   */
+  dataSource: DataSource.default({type: 'chemduck'}),
+
+  /**
+   * Query parameters for chemduck aggregate_results().
+   * Only meaningful when dataSource.type is 'chemduck'.
+   * Omit for non-query layers (imagery, raw geojson).
+   */
+  query: QueryConfig.optional(),
+
+  // ── Visual ────────────────────────────────────────────────────────
+
+  /** How to render the data. */
+  visual: VisualEncoding.default({}),
+
+  /** Whether the layer is currently visible on the map. */
+  visible: z.boolean().default(true),
+
+  // ── Metadata ──────────────────────────────────────────────────────
+
+  /** ISO 8601 timestamp of when the layer was created/frozen. */
+  createdAt: z.string().optional(),
+
+  /**
+   * Where this layer config was loaded from. Not persisted — set at
+   * runtime by the loader so the UI can distinguish shared vs personal.
+   */
+  origin: z
+    .enum(['shared', 'personal', 'bookmark'])
+    .optional(),
+});
+export type LayerConfig = z.infer<typeof LayerConfig>;
+
+// ---------------------------------------------------------------------------
+// Layer manifest (for shared layers deployed as static files)
+// ---------------------------------------------------------------------------
+
+/**
+ * The manifest file (`layers/manifest.json`) lists all shared layers
+ * available in the current deployment. Built at deploy time by a
+ * manifest builder script (similar to the tiles manifest).
+ */
+export const LayerManifest = z.object({
+  layers: z.array(
+    z.object({
+      /** Filename stem, used as the layer id. */
+      id: z.string(),
+      /** Relative path to the layer config JSON file. */
+      url: z.string(),
+    }),
+  ),
+});
+export type LayerManifest = z.infer<typeof LayerManifest>;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Parse + validate a layer config from unknown JSON. */
+export function parseLayerConfig(raw: unknown): LayerConfig | null {
+  const result = LayerConfig.safeParse(raw);
+  if (!result.success) {
+    console.warn('[layer] failed to parse config:', result.error);
+    return null;
+  }
+  return result.data;
+}
+
+/**
+ * Build a LayerConfig from the current interactive sidebar state.
+ * This is the "freeze" operation — snapshot the current view as a
+ * named, persistable layer config.
+ */
+export function freezeCurrentState(params: {
+  name: string;
+  description?: string;
+  analyte: string;
+  matrix: string | null;
+  eventAgg: string;
+  dupAgg: string;
+  ndMethod: string;
+  colorBy: string | null;
+  palette?: string;
+  scaleType?: 'linear' | 'log' | 'sqrt';
+}): LayerConfig {
+  const id = crypto.randomUUID();
+  return {
+    version: 1,
+    id,
+    name: params.name,
+    description: params.description,
+    dataSource: {type: 'chemduck'},
+    query: {
+      analyte: params.analyte,
+      matrix: params.matrix,
+      startDate: null,
+      endDate: null,
+      eventAgg: params.eventAgg,
+      dupAgg: params.dupAgg,
+      ndMethod: params.ndMethod,
+    },
+    visual: {
+      renderType: 'point',
+      colorBy: params.colorBy,
+      palette: params.palette,
+      scaleType: params.scaleType,
+      pointSize: 8,
+      opacity: 1,
+      color: '#00ffff',
+    },
+    visible: true,
+    createdAt: new Date().toISOString(),
+    origin: 'personal',
+  };
+}
+
+/**
+ * Serialize a layer config to a compact string suitable for URL hash
+ * parameters. Uses JSON + URI encoding. For chemduck recipe-only layers
+ * this is typically 200-400 bytes.
+ */
+export function serializeLayerForUrl(layer: LayerConfig): string {
+  // Strip defaults and metadata to minimize URL length
+  const compact: Record<string, unknown> = {
+    id: layer.id,
+    n: layer.name,
+  };
+  if (layer.query) {
+    compact.q = {
+      a: layer.query.analyte,
+      ...(layer.query.matrix && {m: layer.query.matrix}),
+      ...(layer.query.startDate && {sd: layer.query.startDate}),
+      ...(layer.query.endDate && {ed: layer.query.endDate}),
+      ...(layer.query.eventAgg !== 'most_recent' && {ea: layer.query.eventAgg}),
+      ...(layer.query.dupAgg !== 'avg' && {da: layer.query.dupAgg}),
+      ...(layer.query.ndMethod !== 'half_dl' && {nd: layer.query.ndMethod}),
+    };
+  }
+  if (layer.visual.colorBy) compact.cb = layer.visual.colorBy;
+  if (layer.visual.palette) compact.p = layer.visual.palette;
+  if (layer.visual.scaleType) compact.st = layer.visual.scaleType;
+  if (!layer.visible) compact.v = 0;
+  return encodeURIComponent(JSON.stringify(compact));
+}
+
+/**
+ * Deserialize a layer config from a URL hash string produced by
+ * serializeLayerForUrl. Returns null if parsing fails.
+ */
+export function deserializeLayerFromUrl(encoded: string): LayerConfig | null {
+  try {
+    const compact = JSON.parse(decodeURIComponent(encoded));
+    const query = compact.q
+      ? {
+          analyte: compact.q.a,
+          matrix: compact.q.m ?? null,
+          startDate: compact.q.sd ?? null,
+          endDate: compact.q.ed ?? null,
+          eventAgg: compact.q.ea ?? 'most_recent',
+          dupAgg: compact.q.da ?? 'avg',
+          ndMethod: compact.q.nd ?? 'half_dl',
+        }
+      : undefined;
+
+    return parseLayerConfig({
+      version: 1,
+      id: compact.id,
+      name: compact.n,
+      dataSource: {type: 'chemduck'},
+      query,
+      visual: {
+        renderType: 'point',
+        colorBy: compact.cb ?? null,
+        palette: compact.p,
+        scaleType: compact.st,
+      },
+      visible: compact.v !== 0,
+      origin: 'bookmark',
+    });
+  } catch {
+    return null;
+  }
+}
