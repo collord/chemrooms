@@ -1,9 +1,13 @@
 /**
- * Global filter controls: matrix, fraction, non-detect method.
+ * Recipe filter controls: matrix, fraction, non-detect method.
  *
  * The non-detect method dropdown is driven by the chemduck
  * `aggregation_rules` catalog (category = 'nd_method'), so new
  * ND-handling strategies added in chemduck surface here automatically.
+ *
+ * All controls grey out together via the `disabled` prop. SidebarPanel
+ * passes `disabled={!coloringAnalyte}` since these are part of the
+ * recipe being authored — only meaningful once an analyte is picked.
  */
 
 import React from 'react';
@@ -11,7 +15,13 @@ import {useChemroomsStore} from '../slices/chemrooms-slice';
 import type {NdMethod} from '../slices/chemrooms-slice';
 import {AggregationRulePicker} from './AggregationRulePicker';
 
-export const FilterToolbar: React.FC = () => {
+interface FilterToolbarProps {
+  disabled?: boolean;
+}
+
+export const FilterToolbar: React.FC<FilterToolbarProps> = ({
+  disabled = false,
+}) => {
   const matrixFilter = useChemroomsStore(
     (s) => s.chemrooms.config.matrixFilter,
   );
@@ -31,17 +41,14 @@ export const FilterToolbar: React.FC = () => {
   const setNdMethod = useChemroomsStore((s) => s.chemrooms.setNdMethod);
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border p-2">
-      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Filters
-      </span>
-
+    <>
       {/* Matrix */}
       <label className="flex flex-col gap-1">
         <span className="text-xs text-muted-foreground">Matrix</span>
         <select
-          className="rounded border bg-background px-2 py-1 text-sm"
+          className="rounded border bg-background px-2 py-1 text-sm disabled:opacity-50"
           value={matrixFilter ?? ''}
+          disabled={disabled}
           onChange={(e) =>
             setMatrixFilter(e.target.value === '' ? null : e.target.value)
           }
@@ -59,8 +66,9 @@ export const FilterToolbar: React.FC = () => {
       <label className="flex flex-col gap-1">
         <span className="text-xs text-muted-foreground">Fraction</span>
         <select
-          className="rounded border bg-background px-2 py-1 text-sm"
+          className="rounded border bg-background px-2 py-1 text-sm disabled:opacity-50"
           value={fractionFilter ?? ''}
+          disabled={disabled}
           onChange={(e) =>
             setFractionFilter(e.target.value === '' ? null : e.target.value)
           }
@@ -77,7 +85,8 @@ export const FilterToolbar: React.FC = () => {
         label="Non-Detect Display"
         value={ndMethod}
         onChange={(name) => setNdMethod(name as NdMethod)}
+        disabled={disabled}
       />
-    </div>
+    </>
   );
 };

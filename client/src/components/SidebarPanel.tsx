@@ -1,15 +1,19 @@
 /**
- * Sidebar panel.
+ * Sidebar panel — three sections, top to bottom:
  *
- * Top-down information flow:
- *  1. Analyte (drives whether the samples layer is aggregated)
- *  2. Event aggregation rule (only meaningful with an analyte)
- *  3. Layers / Bookmark
- *  4. Filters (matrix, fraction, ND method)
- *  5. Cross-section toggle
- *  6. Vertical exaggeration
- *  7. Color-by pickers (locations, samples, joined results)
- *  8. Selected location detail + analyte picker (when a location is clicked)
+ *   1. The active recipe (boxed): analyte + filters + aggregation +
+ *      color encoding + freeze button. All controls below the analyte
+ *      grey out together when no analyte is selected.
+ *
+ *   2. Saved layers (accordion): list of frozen personal layers, with
+ *      visibility toggles and delete buttons. Empty until the user
+ *      clicks Freeze layer.
+ *
+ *   3. Scene tools: Bookmark, Cross Section, Vertical Exaggeration.
+ *      Per-scene state, not part of the recipe.
+ *
+ * The selected location detail card and time-series analyte picker
+ * (when a location is clicked) appear at the bottom.
  */
 
 import React from 'react';
@@ -28,6 +32,8 @@ import {BookmarkButton} from './BookmarkButton';
 import {ColorByPicker} from './ColorByPicker';
 import {TopAnalytePicker} from './TopAnalytePicker';
 import {AggregationRulePicker} from './AggregationRulePicker';
+import {FreezeLayerButton} from './FreezeLayerButton';
+import {LayersPanel} from './LayersPanel';
 
 export const SidebarPanel: React.FC = () => {
   // Activate hooks
@@ -51,30 +57,39 @@ export const SidebarPanel: React.FC = () => {
   const eventAgg = useChemroomsStore((s) => s.chemrooms.config.eventAgg);
   const setEventAgg = useChemroomsStore((s) => s.chemrooms.setEventAgg);
 
+  const recipeDisabled = !coloringAnalyte;
+
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-3">
-      <TopAnalytePicker />
-      <AggregationRulePicker
-        category="event_agg"
-        label="Show value"
-        value={eventAgg}
-        onChange={(name) => setEventAgg(name as EventAgg)}
-        disabled={!coloringAnalyte}
-      />
-      <div className="flex items-center gap-2">
-        <LayersMenu />
-        <BookmarkButton />
+      {/* ── 1. The active recipe ───────────────────────────────────── */}
+      <div className="flex flex-col gap-2 rounded-md border border-border p-3">
+        <TopAnalytePicker />
+        <AggregationRulePicker
+          category="event_agg"
+          label="Show value"
+          value={eventAgg}
+          onChange={(name) => setEventAgg(name as EventAgg)}
+          disabled={recipeDisabled}
+        />
+        <FilterToolbar disabled={recipeDisabled} />
+        <ColorByPicker disabled={recipeDisabled} />
+        <FreezeLayerButton />
       </div>
-      <FilterToolbar />
-      <CrossSectionToggle />
-      <VerticalExaggerationSlider />
-      <ColorByPicker table="locations" label="Color locations by" />
-      <ColorByPicker table="samples" label="Color samples by" />
-      <ColorByPicker
-        table="v_results_denormalized"
-        label="Color results (joined) by"
-      />
 
+      {/* ── 2. Saved layers ────────────────────────────────────────── */}
+      <LayersPanel />
+
+      {/* ── 3. Scene tools ─────────────────────────────────────────── */}
+      <div className="flex flex-col gap-2 rounded-md border border-border p-3">
+        <div className="flex items-center gap-2">
+          <LayersMenu />
+          <BookmarkButton />
+        </div>
+        <CrossSectionToggle />
+        <VerticalExaggerationSlider />
+      </div>
+
+      {/* ── Selected location detail (when a point is clicked) ─────── */}
       {selectedLocationId ? (
         <>
           {isLoadingLocation ? (
@@ -89,9 +104,9 @@ export const SidebarPanel: React.FC = () => {
           ) : null}
         </>
       ) : (
-        <div className="text-muted-foreground py-8 text-center text-sm">
-          Click a location on the map to view details and select analytes for
-          time-series analysis.
+        <div className="text-muted-foreground py-2 text-center text-[11px] italic">
+          Click a location on the map to view details and select analytes
+          for time-series analysis.
         </div>
       )}
     </div>

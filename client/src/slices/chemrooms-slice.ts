@@ -14,6 +14,7 @@ import type {MosaicSliceState} from '@sqlrooms/mosaic/dist/MosaicSlice';
 import type {SqlEditorSliceState} from '@sqlrooms/sql-editor';
 import type {StateCreator} from 'zustand';
 import type {VisSpec} from '../vis/visSpec';
+import type {LayerConfig} from '../layers/layerSchema';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -113,6 +114,11 @@ export interface ChemroomsSliceState {
     visSpecs: Record<string, VisSpec>;
     /** Active color-by column per table; null = no coloring. */
     colorBy: ColorBySelection;
+    /**
+     * Personal layers persisted in localStorage. Each is a frozen
+     * snapshot of a recipe (analyte + filters + agg + visual encoding).
+     */
+    personalLayers: LayerConfig[];
     isLoadingFilters: boolean;
     isLoadingLocation: boolean;
     // Actions
@@ -137,6 +143,10 @@ export interface ChemroomsSliceState {
     setAggregationRules: (rules: AggregationRule[]) => void;
     setLocationsVisible: (visible: boolean) => void;
     setSamplesVisible: (visible: boolean) => void;
+    setPersonalLayers: (layers: LayerConfig[]) => void;
+    addPersonalLayer: (layer: LayerConfig) => void;
+    removePersonalLayer: (id: string) => void;
+    togglePersonalLayer: (id: string) => void;
     setCrossSectionPoints: (points: CrossSectionPoints) => void;
     setVisSpec: (table: string, spec: VisSpec) => void;
     setColorBy: (table: string, column: string | null) => void;
@@ -207,6 +217,7 @@ export function createChemroomsSlice(
       crossSectionPoints: null,
       visSpecs: {},
       colorBy: {},
+      personalLayers: [],
       isLoadingFilters: false,
       isLoadingLocation: false,
 
@@ -336,6 +347,36 @@ export function createChemroomsSlice(
       setSamplesVisible: (visible) =>
         set((state: ChemroomsSliceState) =>
           updateRuntime(state, {samplesVisible: visible}),
+        ),
+
+      setPersonalLayers: (layers) =>
+        set((state: ChemroomsSliceState) =>
+          updateRuntime(state, {personalLayers: layers}),
+        ),
+
+      addPersonalLayer: (layer) =>
+        set((state: ChemroomsSliceState) =>
+          updateRuntime(state, {
+            personalLayers: [...state.chemrooms.personalLayers, layer],
+          }),
+        ),
+
+      removePersonalLayer: (id) =>
+        set((state: ChemroomsSliceState) =>
+          updateRuntime(state, {
+            personalLayers: state.chemrooms.personalLayers.filter(
+              (l) => l.id !== id,
+            ),
+          }),
+        ),
+
+      togglePersonalLayer: (id) =>
+        set((state: ChemroomsSliceState) =>
+          updateRuntime(state, {
+            personalLayers: state.chemrooms.personalLayers.map((l) =>
+              l.id === id ? {...l, visible: !l.visible} : l,
+            ),
+          }),
         ),
 
       setAvailableMatrices: (matrices) =>

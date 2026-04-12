@@ -41,6 +41,7 @@ import {
 import {buildSamplesLayerSql} from '../setup/buildSamplesLayerSql';
 import {ChemroomsEntityLayer} from './ChemroomsEntityLayer';
 import {DATA_BASE_URL} from '../store';
+import {loadPersonalLayers} from '../layers/layerStorage';
 
 const VIS_SPEC_TABLES = [
   'locations',
@@ -91,6 +92,9 @@ export const ChemroomsEntityLayers: React.FC = () => {
     (s) => s.chemrooms.setAvailableAnalyteNames,
   );
   const setColorBy = useChemroomsStore((s) => s.chemrooms.setColorBy);
+  const setPersonalLayers = useChemroomsStore(
+    (s) => s.chemrooms.setPersonalLayers,
+  );
   const colorByResults = useChemroomsStore(
     (s) => s.chemrooms.colorBy['v_results_denormalized'],
   );
@@ -121,6 +125,15 @@ export const ChemroomsEntityLayers: React.FC = () => {
   const [hasChemduckSchema, setHasChemduckSchema] = useState(false);
   const [locationsSql, setLocationsSql] = useState<string | null>(null);
   const [samplesSql, setSamplesSql] = useState<string | null>(null);
+
+  // ── Hydrate personal layers from localStorage on mount ─────────────
+  useEffect(() => {
+    const layers = loadPersonalLayers();
+    if (layers.length > 0) {
+      setPersonalLayers(layers);
+      console.log(`[init] loaded ${layers.length} personal layer(s) from localStorage`);
+    }
+  }, [setPersonalLayers]);
 
   // ── Phase 1: initial setup ─────────────────────────────────────────
   useEffect(() => {
