@@ -29,10 +29,17 @@ export interface UseChemroomsEntitiesArgs {
   layerId: string;
   /** SQL to run. Must produce columns: location_id, longitude, latitude, altitude, label. */
   sqlQuery: string | null;
-  /** Vis spec table key to look up colorBy for. */
+  /** Vis spec table key to look up palette for. */
   visSpecTable: string;
   /** Whether the layer should render. */
   visible: boolean;
+  /**
+   * Optional override for the colorBy column. When provided, it takes
+   * precedence over the slice's colorBy[visSpecTable] value. Used by
+   * personal/saved layers that store their own colorBy in the layer
+   * config rather than the global slice state.
+   */
+  colorByOverride?: string | null;
 }
 
 const FALLBACK_COLOR = Color.CYAN;
@@ -43,9 +50,11 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
   const visSpec = useChemroomsStore(
     (s) => s.chemrooms.visSpecs[args.visSpecTable],
   );
-  const colorByCol = useChemroomsStore(
+  const sliceColorBy = useChemroomsStore(
     (s) => s.chemrooms.colorBy[args.visSpecTable],
   );
+  const colorByCol =
+    args.colorByOverride !== undefined ? args.colorByOverride : sliceColorBy;
 
   useEffect(() => {
     if (

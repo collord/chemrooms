@@ -24,7 +24,7 @@
  * changes via their own hook-driven effects.
  */
 
-import React, {useEffect, useRef, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {Cartographic, sampleTerrainMostDetailed} from 'cesium';
 import {useStoreWithCesium} from '@sqlrooms/cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
@@ -97,6 +97,9 @@ export const ChemroomsEntityLayers: React.FC = () => {
   );
   const colorByResults = useChemroomsStore(
     (s) => s.chemrooms.colorBy['v_results_denormalized'],
+  );
+  const personalLayers = useChemroomsStore(
+    (s) => s.chemrooms.personalLayers,
   );
 
   const locationsVisible = useChemroomsStore(
@@ -274,7 +277,33 @@ export const ChemroomsEntityLayers: React.FC = () => {
     setColorBy('v_results_denormalized', 'result');
   }, [coloringAnalyte, colorByResults, setColorBy]);
 
-  // ── Render the two entity layer components ─────────────────────────
+  // ── Build per-personal-layer SQL ────────────────────────────────────
+  // Each saved layer has its own query parameters (analyte, matrix,
+  // event_agg, etc.), independent of the live recipe sidebar. We
+  // precompute the SQL string for each layer here so React's render
+  // pipeline can pass them as stable props to ChemroomsEntityLayer.
+  // Recomputed when the layer list changes or the elevation columns
+  // change (which only happens once after init).
+  const personalLayerSql = useMemo(() => {
+    if (!hasChemduckSchema || !initRanRef.current) return new Map<string, string>();
+    const map = new Map<string, string>();
+    for (const layer of personalLayers) {
+      if (layer.dataSource.type !== 'chemduck') continue;
+      if (!layer.query) continue;
+      const sql = buildSamplesLayerSql({
+        elevationColumns,
+        coloringAnalyte: layer.query.analyte,
+        eventAgg: layer.query.eventAgg,
+        dupAgg: layer.query.dupAgg,
+        ndMethod: layer.query.ndMethod,
+        matrixFilter: layer.query.matrix,
+      });
+      map.set(layer.id, sql);
+    }
+    return map;
+  }, [personalLayers, elevationColumns, hasChemduckSchema]);
+
+  // ── Render the entity layer components ─────────────────────────────
   // When an analyte is selected the "samples" layer switches to the
   // aggregated results query with per-row coloring. The plain
   // locations/samples cyan overview hides — it's replaced by the
@@ -297,6 +326,19 @@ export const ChemroomsEntityLayers: React.FC = () => {
         visSpecTable={samplesVisSpecTable}
         visible={samplesVisible}
       />
+      {personalLayers.map((layer) => {
+        const sql = personalLayerSql.get(layer.id) ?? null;
+        return (
+          <ChemroomsEntityLayer
+            key={layer.id}
+            layerId={`personal:${layer.id}`}
+            sqlQuery={sql}
+            visSpecTable="v_results_denormalized"
+            visible={layer.visible}
+            colorByOverride={layer.visual.colorBy}
+          />
+        );
+      })}
     </>
   );
 };
