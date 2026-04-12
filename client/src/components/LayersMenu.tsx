@@ -208,11 +208,18 @@ export const LayersMenu: React.FC = () => {
       worldDistance = plane.distance;
     }
 
+    let applying = false;
     const apply = () => {
-      for (const ts of Object.values(tilesetRefs.current)) {
-        applyClippingToTileset(ts, worldNormal, worldDistance);
+      if (applying) return;
+      applying = true;
+      try {
+        for (const ts of Object.values(tilesetRefs.current)) {
+          applyClippingToTileset(ts, worldNormal, worldDistance);
+        }
+        applyClippingToEntities(viewer, worldNormal, worldDistance);
+      } finally {
+        applying = false;
       }
-      applyClippingToEntities(viewer, worldNormal, worldDistance);
     };
 
     apply();

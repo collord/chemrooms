@@ -117,22 +117,34 @@ export const VerticalExaggerationSlider: React.FC = () => {
   // The collectionChanged event gives us removed entities — we drop their
   // cached base altitudes so a newly-added entity with the same id (e.g.
   // a re-fetched locations layer) doesn't get the stale base.
+  //
+  // IMPORTANT: applyExaggeration rewrites entity.position, which fires
+  // definitionChanged → collectionChanged → this listener. Without a
+  // re-entrancy guard, that's an infinite loop when exaggeration > 1.
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
 
+    let applying = false;
     const listener = viewer.entities.collectionChanged.addEventListener(
       (_collection, _added, removed) => {
+        if (applying) return;
+
         for (const e of removed) {
           baseAltitudes.delete(e.id);
         }
 
         const current = appliedValueRef.current;
         if (current === 1) return;
-        // Force a re-pass: any newly-added entity will get its base
-        // altitude recorded on first encounter and the current exag
-        // applied.
-        appliedValueRef.current = -1; // sentinel: bypass the equality short-circuit
-        applyExaggeration(current);
+
+        applying = true;
+        try {
+          // Temporarily reset so applyExaggeration doesn't skip via
+          // the equality short-circuit.
+          appliedValueRef.current = -1;
+          applyExaggeration(current);
+        } finally {
+          applying = false;
+        }
       },
     );
     return () => listener();
