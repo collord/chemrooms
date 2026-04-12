@@ -262,9 +262,13 @@ export const ChemroomsEntityLayers: React.FC = () => {
   }, [coloringAnalyte, colorByResults, setColorBy]);
 
   // ── Render the two entity layer components ─────────────────────────
-  const samplesVisSpecTable = coloringAnalyte
-    ? 'v_results_denormalized'
-    : 'samples';
+  // When an analyte is selected the "samples" layer switches to the
+  // aggregated results query with per-row coloring. The plain
+  // locations/samples cyan overview hides — it's replaced by the
+  // richer view. When the user clears the analyte, the cyan dots
+  // come back as the full-extent preview.
+  const hasAnalyte = Boolean(coloringAnalyte);
+  const samplesVisSpecTable = hasAnalyte ? 'v_results_denormalized' : 'samples';
 
   return (
     <>
@@ -272,7 +276,7 @@ export const ChemroomsEntityLayers: React.FC = () => {
         layerId="locations"
         sqlQuery={locationsSql}
         visSpecTable="locations"
-        visible={locationsVisible}
+        visible={locationsVisible && !hasAnalyte}
       />
       <ChemroomsEntityLayer
         layerId="samples"
