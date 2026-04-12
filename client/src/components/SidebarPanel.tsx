@@ -27,7 +27,6 @@ import {AnalytePicker} from './AnalytePicker';
 import {FilterToolbar} from './FilterToolbar';
 import {CrossSectionToggle} from './CrossSectionToggle';
 import {VerticalExaggerationSlider} from './VerticalExaggerationSlider';
-import {LayersMenu} from './LayersMenu';
 import {BookmarkButton} from './BookmarkButton';
 import {ColorByPicker} from './ColorByPicker';
 import {TopAnalytePicker} from './TopAnalytePicker';
@@ -81,10 +80,7 @@ export const SidebarPanel: React.FC = () => {
 
       {/* ── 3. Scene tools ─────────────────────────────────────────── */}
       <div className="flex flex-col gap-2 rounded-md border border-border p-3">
-        <div className="flex items-center gap-2">
-          <LayersMenu />
-          <BookmarkButton />
-        </div>
+        <BookmarkButton />
         <CrossSectionToggle />
         <VerticalExaggerationSlider />
       </div>
