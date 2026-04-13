@@ -335,6 +335,28 @@ describe('computeLayerHash', () => {
       expect(point).not.toBe(polygon);
     });
 
+    it('reacts to geometryEncoding', async () => {
+      const wkb = await computeLayerHash(
+        makeLayer({
+          dataSource: geoParquet({
+            url: baseUrl,
+            tableName: 'wells',
+            geometryEncoding: 'wkb',
+          }),
+        }),
+      );
+      const native = await computeLayerHash(
+        makeLayer({
+          dataSource: geoParquet({
+            url: baseUrl,
+            tableName: 'wells',
+            geometryEncoding: 'native',
+          }),
+        }),
+      );
+      expect(wkb).not.toBe(native);
+    });
+
     it('reacts to is3d', async () => {
       const flat = await computeLayerHash(
         makeLayer({

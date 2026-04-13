@@ -39,6 +39,7 @@ import {
   loadAvailableAnalyteNames,
 } from '../setup/loadCatalogs';
 import {buildSamplesLayerSql} from '../setup/buildSamplesLayerSql';
+import {buildLayerSql} from '../layers/buildLayerSql';
 import {ChemroomsEntityLayer} from './ChemroomsEntityLayer';
 import {DATA_BASE_URL} from '../store';
 import {migratePersonalLayers} from '../layers/layerStorage';
@@ -317,21 +318,23 @@ export const ChemroomsEntityLayers: React.FC = () => {
   // here so React's render pipeline can pass them as stable props to
   // ChemroomsEntityLayer. Recomputed when the layer list changes or
   // the elevation columns change (only once after init).
+  //
+  // Routing happens in buildLayerSql, which dispatches on
+  // dataSource.type. Chemduck layers still need the chemduck schema
+  // to be loaded and the elevation-columns introspection to have
+  // run; geoparquet layers don't, because their tables were
+  // registered by the runtime loader independently of the chemduck
+  // bootstrap.
   const buildLayerSqlMap = (layers: LayerConfig[]) => {
-    if (!hasChemduckSchema || !initRanRef.current)
-      return new Map<string, string>();
-    const map = new Map<string, string>();
+    if (!initRanRef.current) return new Map<string, string | null>();
+    const map = new Map<string, string | null>();
     for (const layer of layers) {
-      if (layer.dataSource.type !== 'chemduck') continue;
-      if (!layer.query) continue;
-      const sql = buildSamplesLayerSql({
-        elevationColumns,
-        coloringAnalyte: layer.query.analyte,
-        eventAgg: layer.query.eventAgg,
-        dupAgg: layer.query.dupAgg,
-        ndMethod: layer.query.ndMethod,
-        matrixFilter: layer.query.matrix,
-      });
+      if (layer.dataSource.type === 'chemduck' && !hasChemduckSchema) {
+        // Chemduck schema not loaded yet — skip this layer for now,
+        // it'll be picked up the next time the memo recomputes.
+        continue;
+      }
+      const sql = buildLayerSql(layer, {elevationColumns});
       map.set(layer.id, sql);
     }
     return map;
@@ -379,7 +382,7 @@ export const ChemroomsEntityLayers: React.FC = () => {
             key={`personal:${layer.id}`}
             layerId={`personal:${layer.id}`}
             sqlQuery={sql}
-            visSpecTable="v_results_denormalized"
+            visSpecTable={visSpecTableFor(layer)}
             visible={layer.visible}
             colorByOverride={layer.visual.colorBy}
           />
@@ -392,7 +395,7 @@ export const ChemroomsEntityLayers: React.FC = () => {
             key={`bookmark:${layer.id}`}
             layerId={`bookmark:${layer.id}`}
             sqlQuery={sql}
-            visSpecTable="v_results_denormalized"
+            visSpecTable={visSpecTableFor(layer)}
             visible={layer.visible}
             colorByOverride={layer.visual.colorBy}
           />
@@ -401,3 +404,22 @@ export const ChemroomsEntityLayers: React.FC = () => {
     </>
   );
 };
+
+/**
+ * Pick the vis-spec table key for a saved layer. Chemduck-recipe
+ * layers go through the chemduck `v_results_denormalized` vis spec
+ * (which provides palette/colorBy defaults); other layer types use
+ * a per-layer key that won't match any registered vis spec, so
+ * useChemroomsEntities falls through to the cyan default. That's
+ * the right behavior for a freshly dropped geoparquet — it shows
+ * up as cyan dots until the user picks a colorBy column.
+ */
+function visSpecTableFor(layer: LayerConfig): string {
+  if (layer.dataSource.type === 'chemduck') {
+    return 'v_results_denormalized';
+  }
+  if (layer.dataSource.type === 'geoparquet') {
+    return `geoparquet:${layer.dataSource.tableName}`;
+  }
+  return `layer:${layer.id}`;
+}

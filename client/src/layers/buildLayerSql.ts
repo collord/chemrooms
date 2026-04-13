@@ -91,6 +91,16 @@ export function buildLayerSql(
       const tableIdent = quoteIdent(ds.tableName);
       const geomIdent = quoteIdent(ds.geometryColumn);
 
+      // Spatial functions need a GEOMETRY value. When the column
+      // is stored as raw WKB bytes (the read_parquet path), wrap it
+      // in ST_GeomFromWKB so ST_X/ST_Y/ST_Z can operate on it. When
+      // the column is already a native GEOMETRY (the st_read path),
+      // use it directly.
+      const geomExpr =
+        ds.geometryEncoding === 'wkb'
+          ? `ST_GeomFromWKB(${geomIdent})`
+          : geomIdent;
+
       // Identity: an explicit idColumn beats a synthesized row number.
       // The synthesized form uses ROW_NUMBER() so freshly dropped-in
       // files render without the user having to specify anything,
@@ -109,7 +119,7 @@ export function buildLayerSql(
 
       // Altitude: pull Z when the geometry is 3D, otherwise NULL
       // (entity falls back to terrain-clamped rendering).
-      const altExpr = ds.is3d ? `ST_Z(${geomIdent})` : 'NULL';
+      const altExpr = ds.is3d ? `ST_Z(${geomExpr})` : 'NULL';
 
       // Properties: each column listed in propertiesColumns becomes
       // a passthrough in the SELECT so the entity renderer can
@@ -123,8 +133,8 @@ export function buildLayerSql(
       return `
         SELECT
           ${idExpr} AS location_id,
-          ST_X(${geomIdent}) AS longitude,
-          ST_Y(${geomIdent}) AS latitude,
+          ST_X(${geomExpr}) AS longitude,
+          ST_Y(${geomExpr}) AS latitude,
           ${altExpr} AS altitude,
           ${labelExpr} AS label${propsSelect}
         FROM ${tableIdent}

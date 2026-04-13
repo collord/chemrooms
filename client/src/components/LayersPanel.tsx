@@ -44,12 +44,16 @@ import {
   removePersonalLayer,
   togglePersonalLayerVisibility,
 } from '../layers/layerStorage';
+import {registerGeoparquetLayer} from '../layers/registerGeoparquetLayer';
 
 export const LayersPanel: React.FC = () => {
   const [open, setOpen] = useState(true);
+  const [dragActive, setDragActive] = useState(false);
+  const [dropError, setDropError] = useState<string | null>(null);
 
   // ── Site context ────────────────────────────────────────────────────
   const viewer = useStoreWithCesium((s) => s.cesium.viewer);
+  const connector = useStoreWithCesium((s) => s.db.connector);
   const [topoVisible, setTopoVisible] = useState(true);
   const {tilesets, tilesetRefs, toggleTileset} = useTilesetManager();
   useClippingPlaneSync(tilesetRefs);
@@ -144,6 +148,85 @@ export const LayersPanel: React.FC = () => {
   };
 
   /**
+   * Drag-and-drop ingest for spatial files. Currently routes any
+   * .parquet / .geoparquet through registerGeoparquetLayer; future
+   * formats (shapefile, gpkg, csv) would dispatch here based on
+   * extension or sniffed magic bytes.
+   *
+   * Errors are surfaced as a small inline message so the user knows
+   * something went wrong without having to check the console.
+   */
+  const handleFilesDropped = useCallback(
+    async (files: FileList) => {
+      if (!connector) {
+        setDropError('Database not ready yet — try again in a moment.');
+        return;
+      }
+      setDropError(null);
+      let lastResult = personalLayers;
+      let added = 0;
+      let skipped = 0;
+      for (const file of Array.from(files)) {
+        const lower = file.name.toLowerCase();
+        if (!lower.endsWith('.parquet') && !lower.endsWith('.geoparquet')) {
+          setDropError(
+            `Unsupported format: ${file.name}. Drop a .parquet or .geoparquet file.`,
+          );
+          continue;
+        }
+        try {
+          const {layer} = await registerGeoparquetLayer(connector, file);
+          const res = await addPersonalLayer(layer);
+          lastResult = res.layers;
+          if (res.added) added += 1;
+          else skipped += 1;
+        } catch (e) {
+          console.error('[layers] geoparquet ingest failed:', e);
+          setDropError(
+            `Failed to load ${file.name}: ${e instanceof Error ? e.message : String(e)}`,
+          );
+        }
+      }
+      if (added > 0 || skipped > 0) {
+        setPersonalLayers(lastResult);
+      }
+    },
+    [connector, personalLayers, setPersonalLayers],
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    // preventDefault is required to make the drop zone actually accept files
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer.types.includes('Files')) {
+      setDragActive(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // currentTarget vs target: only deactivate if we're leaving the
+    // drop zone itself, not just moving between children
+    if (e.currentTarget === e.target) {
+      setDragActive(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDragActive(false);
+      const files = e.dataTransfer.files;
+      if (files && files.length > 0) {
+        void handleFilesDropped(files);
+      }
+    },
+    [handleFilesDropped],
+  );
+
+  /**
    * Promote a bookmark layer into personal storage. We do this
    * imperatively in the handler so the localStorage write happens
    * with the correct merged list — promoteBookmarkLayer alone only
@@ -167,7 +250,16 @@ export const LayersPanel: React.FC = () => {
     personalLayers.length;
 
   return (
-    <div className="rounded-md border border-border">
+    <div
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={
+        dragActive
+          ? 'rounded-md border-2 border-dashed border-primary bg-primary/10 transition-colors'
+          : 'rounded-md border border-border transition-colors'
+      }
+    >
       <button
         onClick={() => setOpen((o) => !o)}
         className="flex w-full items-center gap-2 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted"
@@ -255,6 +347,16 @@ export const LayersPanel: React.FC = () => {
               </span>
             )}
           </SectionLabel>
+          {dragActive && (
+            <div className="rounded border border-dashed border-primary bg-primary/5 px-2 py-1 text-[11px] text-primary">
+              Drop a .parquet / .geoparquet file to load it as a layer
+            </div>
+          )}
+          {dropError && (
+            <div className="rounded border border-red-400/50 bg-red-500/10 px-2 py-1 text-[11px] text-red-500">
+              {dropError}
+            </div>
+          )}
           {personalLayers.length === 0 ? (
             <div className="px-1 py-1 text-[11px] italic text-muted-foreground/60">
               None — pick an analyte and click Freeze layer

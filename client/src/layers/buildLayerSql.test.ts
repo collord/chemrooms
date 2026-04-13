@@ -105,7 +105,7 @@ describe('buildLayerSql dispatch', () => {
     expect(buildLayerSql(layer, ctx)).toBeNull();
   });
 
-  it('uses ST_X / ST_Y on the geometry column for point geoparquet', () => {
+  it('wraps WKB-encoded geometry in ST_GeomFromWKB by default', () => {
     const layer = parseLayerConfig({
       version: 1,
       id: 'test',
@@ -117,8 +117,25 @@ describe('buildLayerSql dispatch', () => {
       },
     })!;
     const sql = buildLayerSql(layer, ctx)!;
+    expect(sql).toContain('ST_X(ST_GeomFromWKB("geometry"))');
+    expect(sql).toContain('ST_Y(ST_GeomFromWKB("geometry"))');
+  });
+
+  it('omits ST_GeomFromWKB when geometryEncoding is native', () => {
+    const layer = parseLayerConfig({
+      version: 1,
+      id: 'test',
+      name: 'wells',
+      dataSource: {
+        type: 'geoparquet',
+        url: 'https://example.com/wells.parquet',
+        tableName: 'wells',
+        geometryEncoding: 'native',
+      },
+    })!;
+    const sql = buildLayerSql(layer, ctx)!;
     expect(sql).toContain('ST_X("geometry")');
-    expect(sql).toContain('ST_Y("geometry")');
+    expect(sql).not.toContain('ST_GeomFromWKB');
   });
 
   it('honors a custom geometryColumn name', () => {
@@ -131,6 +148,7 @@ describe('buildLayerSql dispatch', () => {
         url: 'https://example.com/wells.parquet',
         tableName: 'wells',
         geometryColumn: 'shape',
+        geometryEncoding: 'native',
       },
     })!;
     const sql = buildLayerSql(layer, ctx)!;
@@ -138,7 +156,7 @@ describe('buildLayerSql dispatch', () => {
     expect(sql).not.toContain('ST_X("geometry")');
   });
 
-  it('emits ST_Z when is3d is true', () => {
+  it('emits ST_Z on the wrapped geometry when is3d is true', () => {
     const layer = parseLayerConfig({
       version: 1,
       id: 'test',
@@ -151,7 +169,7 @@ describe('buildLayerSql dispatch', () => {
       },
     })!;
     const sql = buildLayerSql(layer, ctx)!;
-    expect(sql).toContain('ST_Z("geometry")');
+    expect(sql).toContain('ST_Z(ST_GeomFromWKB("geometry"))');
   });
 
   it('uses NULL altitude when is3d is false (default)', () => {

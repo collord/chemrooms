@@ -163,6 +163,27 @@ export const GeoParquetDataSource = z.object({
   geometryType: GeometryType.default('point'),
 
   /**
+   * How the geometry column is physically stored.
+   *
+   * - `wkb` (default): raw WKB bytes in a BLOB column. This is what
+   *   DuckDB's `read_parquet` returns for a geoparquet file by default,
+   *   because plain `read_parquet` doesn't know about the geoparquet
+   *   spec. The dispatcher wraps the column in `ST_GeomFromWKB(...)`
+   *   so spatial functions can operate on it.
+   *
+   * - `native`: the column is already a DuckDB GEOMETRY type, e.g.
+   *   when the file was loaded via `st_read` (which is GDAL-driven
+   *   and gives proper geometries) or when a CREATE-TABLE-AS step
+   *   has already wrapped the WKB. The dispatcher uses the column
+   *   directly without wrapping.
+   *
+   * The runtime loader picks the right encoding based on which load
+   * method it used. Defaults to wkb because that's the cheapest and
+   * most-likely path for a freshly dropped geoparquet.
+   */
+  geometryEncoding: z.enum(['wkb', 'native']).default('wkb'),
+
+  /**
    * Whether the geometry has a Z component. When true the dispatcher
    * pulls altitude via ST_Z; when false altitude is NULL and the
    * entity falls back to terrain-clamped rendering.

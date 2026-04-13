@@ -59,6 +59,7 @@ function canonicalizeDataSource(ds: LayerConfig['dataSource']): unknown {
         expectedHash: ds.expectedHash ?? null,
         geometryColumn: ds.geometryColumn,
         geometryType: ds.geometryType,
+        geometryEncoding: ds.geometryEncoding,
         is3d: ds.is3d,
         idColumn: ds.idColumn,
         labelColumn: ds.labelColumn,
