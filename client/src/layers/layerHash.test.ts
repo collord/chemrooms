@@ -357,6 +357,37 @@ describe('computeLayerHash', () => {
       expect(wkb).not.toBe(native);
     });
 
+    it('reacts to drapeMode', async () => {
+      const auto = await computeLayerHash(
+        makeLayer({
+          dataSource: geoParquet({
+            url: baseUrl,
+            tableName: 'wells',
+            drapeMode: 'auto',
+          }),
+        }),
+      );
+      const drape = await computeLayerHash(
+        makeLayer({
+          dataSource: geoParquet({
+            url: baseUrl,
+            tableName: 'wells',
+            drapeMode: 'drape',
+          }),
+        }),
+      );
+      const absolute = await computeLayerHash(
+        makeLayer({
+          dataSource: geoParquet({
+            url: baseUrl,
+            tableName: 'wells',
+            drapeMode: 'absolute',
+          }),
+        }),
+      );
+      expect(new Set([auto, drape, absolute]).size).toBe(3);
+    });
+
     it('reacts to is3d', async () => {
       const flat = await computeLayerHash(
         makeLayer({

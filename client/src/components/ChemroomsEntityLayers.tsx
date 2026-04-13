@@ -40,7 +40,9 @@ import {
 } from '../setup/loadCatalogs';
 import {buildSamplesLayerSql} from '../setup/buildSamplesLayerSql';
 import {buildLayerSql} from '../layers/buildLayerSql';
+import {resolveDrapeMode} from '../layers/vectorGeometry';
 import {ChemroomsEntityLayer} from './ChemroomsEntityLayer';
+import {ChemroomsVectorLayer} from './ChemroomsVectorLayer';
 import {DATA_BASE_URL} from '../store';
 import {
   isEphemeralLayer,
@@ -424,32 +426,20 @@ export const ChemroomsEntityLayers: React.FC = () => {
         visSpecTable={samplesVisSpecTable}
         visible={samplesVisible}
       />
-      {personalLayers.map((layer) => {
-        const sql = personalLayerSql.get(layer.id) ?? null;
-        return (
-          <ChemroomsEntityLayer
-            key={`personal:${layer.id}`}
-            layerId={`personal:${layer.id}`}
-            sqlQuery={sql}
-            visSpecTable={visSpecTableFor(layer)}
-            visible={layer.visible}
-            colorByOverride={layer.visual.colorBy}
-          />
-        );
-      })}
-      {bookmarkLayers.map((layer) => {
-        const sql = bookmarkLayerSql.get(layer.id) ?? null;
-        return (
-          <ChemroomsEntityLayer
-            key={`bookmark:${layer.id}`}
-            layerId={`bookmark:${layer.id}`}
-            sqlQuery={sql}
-            visSpecTable={visSpecTableFor(layer)}
-            visible={layer.visible}
-            colorByOverride={layer.visual.colorBy}
-          />
-        );
-      })}
+      {personalLayers.map((layer) =>
+        renderSavedLayer(
+          'personal',
+          layer,
+          personalLayerSql.get(layer.id) ?? null,
+        ),
+      )}
+      {bookmarkLayers.map((layer) =>
+        renderSavedLayer(
+          'bookmark',
+          layer,
+          bookmarkLayerSql.get(layer.id) ?? null,
+        ),
+      )}
     </>
   );
 };
@@ -471,4 +461,58 @@ function visSpecTableFor(layer: LayerConfig): string {
     return `geoparquet:${layer.dataSource.tableName}`;
   }
   return `layer:${layer.id}`;
+}
+
+/**
+ * Whether a geoparquet layer should go through the vector rendering
+ * pipeline (polyline/polygon via useChemroomsVectorEntities) rather
+ * than the point pipeline (useChemroomsEntities). Chemduck and
+ * point-geoparquet layers go to points; everything else with a
+ * supported non-point geometry type goes to vector.
+ */
+function isVectorLayer(layer: LayerConfig): boolean {
+  if (layer.dataSource.type !== 'geoparquet') return false;
+  return layer.dataSource.geometryType !== 'point';
+}
+
+/**
+ * Render a single saved layer (personal or bookmark) — dispatches
+ * between the point entity pipeline and the vector pipeline based
+ * on the layer's geometry type. Lives here rather than inline in
+ * the render loop so the point/vector branch isn't duplicated
+ * across the two layer-list renders.
+ */
+function renderSavedLayer(
+  kind: 'personal' | 'bookmark',
+  layer: LayerConfig,
+  sql: string | null,
+): React.ReactElement {
+  const key = `${kind}:${layer.id}`;
+  if (isVectorLayer(layer)) {
+    // Resolve the drape decision up-front so the hook gets a
+    // concrete 'drape' | 'absolute' value rather than having to
+    // re-derive it from the layer config.
+    const ds =
+      layer.dataSource.type === 'geoparquet' ? layer.dataSource : null;
+    const drape = ds ? resolveDrapeMode(ds.drapeMode, ds.is3d) : 'drape';
+    return (
+      <ChemroomsVectorLayer
+        key={key}
+        layerId={key}
+        sqlQuery={sql}
+        visible={layer.visible}
+        drapeMode={drape}
+      />
+    );
+  }
+  return (
+    <ChemroomsEntityLayer
+      key={key}
+      layerId={key}
+      sqlQuery={sql}
+      visSpecTable={visSpecTableFor(layer)}
+      visible={layer.visible}
+      colorByOverride={layer.visual.colorBy}
+    />
+  );
 }

@@ -80,16 +80,58 @@ export function buildLayerSql(
     case 'geoparquet': {
       const ds = layer.dataSource;
 
-      // Only point geometries flow through the SQL/entity pipeline.
-      // Line/polygon variants are reserved for a future vector
-      // renderer; returning null here causes the entity-layer
-      // dispatcher in ChemroomsEntityLayers to skip this layer.
-      if (ds.geometryType !== 'point') {
-        return null;
-      }
+      // The two render paths produce different SQL shapes:
+      //
+      // - **Point**: SELECT columns matching the entity-pipeline
+      //   contract — location_id, longitude, latitude, altitude,
+      //   label, plus passthrough properties. Consumed by
+      //   useChemroomsEntities, which creates Cesium point entities.
+      //
+      // - **Non-point (line/polygon/multi*)**: SELECT a GeoJSON
+      //   string per row via ST_AsGeoJSON plus the same identity/
+      //   label/properties columns. Consumed by
+      //   useChemroomsVectorEntities, which parses the GeoJSON and
+      //   creates Cesium polyline/polygon entities with
+      //   clampToGround controlled by the layer's drapeMode.
+      //
+      // The component-level dispatch (ChemroomsEntityLayers) picks
+      // the right hook for each geoparquet layer based on
+      // dataSource.geometryType — this function produces SQL
+      // shaped for whichever renderer will consume it.
 
       const tableIdent = quoteIdent(ds.tableName);
       const geomIdent = quoteIdent(ds.geometryColumn);
+
+      if (ds.geometryType !== 'point') {
+        // Non-point path: emit a row per feature with the geometry
+        // as a GeoJSON string plus the standard id/label/props
+        // columns. No altitude wrangling here — the vector renderer
+        // handles 2D-vs-3D placement via its drapeMode argument.
+        const idExpr = ds.idColumn
+          ? quoteIdent(ds.idColumn)
+          : `('row-' || ROW_NUMBER() OVER ())`;
+        const labelExpr = ds.labelColumn
+          ? quoteIdent(ds.labelColumn)
+          : ds.idColumn
+            ? quoteIdent(ds.idColumn)
+            : `('row-' || ROW_NUMBER() OVER ())`;
+        const geomExpr =
+          ds.geometryEncoding === 'wkb'
+            ? `ST_GeomFromWKB(${geomIdent})`
+            : geomIdent;
+        const propsSelect =
+          ds.propertiesColumns.length > 0
+            ? ',\n  ' + ds.propertiesColumns.map(quoteIdent).join(',\n  ')
+            : '';
+
+        return `
+          SELECT
+            ${idExpr} AS location_id,
+            ${labelExpr} AS label,
+            ST_AsGeoJSON(${geomExpr}) AS geom${propsSelect}
+          FROM ${tableIdent}
+        `;
+      }
 
       // Spatial functions need a GEOMETRY value. When the column
       // is stored as raw WKB bytes (the read_parquet path), wrap it

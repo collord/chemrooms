@@ -215,17 +215,6 @@ export async function registerGeoparquetLayer(
   const id = await computeLayerHash(draft);
   const layer = {...draft, id};
 
-  // Soft-warn for non-point geometry: registration succeeded but
-  // buildLayerSql will return null and the entity pipeline will
-  // skip the layer until the vector renderer exists.
-  if (layer.dataSource.type === 'geoparquet' && layer.dataSource.geometryType !== 'point') {
-    console.warn(
-      `[registerGeoparquetLayer] registered ${tableName} as ${layer.dataSource.geometryType} — ` +
-        `non-point geometries are not yet rendered by the entity pipeline; ` +
-        `the layer will appear in the panel but won't draw anything until the vector renderer is built.`,
-    );
-  }
-
   return {tableName, layer};
 }
 

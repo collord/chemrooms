@@ -237,17 +237,17 @@ describe('registerGeoparquetLayer', () => {
     expect(layer.origin).toBe('personal');
   });
 
-  it('warns about non-point geometries (registered but not yet rendered)', async () => {
+  it('registers non-point geometries without warning (vector renderer handles them)', async () => {
     const connector = makeMockConnector();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    await registerGeoparquetLayer(
+    const {layer} = await registerGeoparquetLayer(
       connector as never,
       'https://example.com/parcels.parquet',
       {geometryType: 'polygon'},
     );
-    expect(warn).toHaveBeenCalled();
-    const message = warn.mock.calls[0]?.[0] ?? '';
-    expect(String(message)).toContain('polygon');
+    expect(warn).not.toHaveBeenCalled();
+    if (layer.dataSource.type !== 'geoparquet') return;
+    expect(layer.dataSource.geometryType).toBe('polygon');
     warn.mockRestore();
   });
 

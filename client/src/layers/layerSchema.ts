@@ -191,6 +191,29 @@ export const GeoParquetDataSource = z.object({
   is3d: z.boolean().default(false),
 
   /**
+   * How the vector renderer should place this layer's geometries
+   * relative to terrain.
+   *
+   * - `auto` (default): drape when is3d is false, render absolute
+   *   when is3d is true. Matches the intuitive "the surface layer
+   *   hugs the terrain, the subsurface layer sits at its real Z"
+   *   behavior.
+   * - `drape`: force terrain-clamped rendering regardless of
+   *   geometry Z. Uses Cesium's native `clampToGround` (polylines)
+   *   and `heightReference: CLAMP_TO_GROUND` (polygons), which the
+   *   GPU subdivides and re-samples against terrain edges so a
+   *   line crossing a ridge follows the ridge exactly.
+   * - `absolute`: force absolute-position rendering. Use for true
+   *   3D geometries (plume shells, stratigraphic horizons, borehole
+   *   sticks) whose Z is meaningful.
+   *
+   * Points don't use this field — point altitude resolution happens
+   * in useChemroomsEntities via the `is3d` flag and the dispatcher's
+   * ST_Z / NULL decision.
+   */
+  drapeMode: z.enum(['auto', 'drape', 'absolute']).default('auto'),
+
+  /**
    * Column to use as the entity id. Null = synthesize from row
    * number, which is always unique and always present, so a freshly
    * dragged-in file renders without the user having to specify

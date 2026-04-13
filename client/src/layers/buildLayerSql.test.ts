@@ -268,9 +268,8 @@ describe('buildLayerSql dispatch', () => {
     expect(sql).toContain('"result"');
   });
 
-  it('returns null for non-point geometryType (deferred to vector renderer)', () => {
+  it('emits vector-shaped SQL for non-point geometryType (for the vector renderer)', () => {
     for (const geometryType of [
-      'multipoint',
       'linestring',
       'multilinestring',
       'polygon',
@@ -279,16 +278,79 @@ describe('buildLayerSql dispatch', () => {
       const layer = parseLayerConfig({
         version: 1,
         id: 'test',
-        name: 'wells',
+        name: 'parcels',
         dataSource: {
           type: 'geoparquet',
-          url: 'https://example.com/wells.parquet',
-          tableName: 'wells',
+          url: 'https://example.com/parcels.parquet',
+          tableName: 'parcels',
           geometryType,
+          geometryEncoding: 'native',
         },
       })!;
-      expect(buildLayerSql(layer, ctx)).toBeNull();
+      const sql = buildLayerSql(layer, ctx);
+      expect(sql).not.toBeNull();
+      expect(sql).toContain('ST_AsGeoJSON("geometry") AS geom');
+      expect(sql).toContain('AS location_id');
+      expect(sql).toContain('AS label');
+      expect(sql).toContain('FROM "parcels"');
     }
+  });
+
+  it('wraps geometry in ST_GeomFromWKB for non-point wkb-encoded sources', () => {
+    const layer = parseLayerConfig({
+      version: 1,
+      id: 'test',
+      name: 'parcels',
+      dataSource: {
+        type: 'geoparquet',
+        url: 'https://example.com/parcels.parquet',
+        tableName: 'parcels',
+        geometryType: 'polygon',
+        geometryEncoding: 'wkb',
+      },
+    })!;
+    const sql = buildLayerSql(layer, ctx)!;
+    expect(sql).toContain('ST_AsGeoJSON(ST_GeomFromWKB("geometry"))');
+  });
+
+  it('passes through propertiesColumns in vector SQL too', () => {
+    const layer = parseLayerConfig({
+      version: 1,
+      id: 'test',
+      name: 'parcels',
+      dataSource: {
+        type: 'geoparquet',
+        url: 'https://example.com/parcels.parquet',
+        tableName: 'parcels',
+        geometryType: 'polygon',
+        geometryEncoding: 'native',
+        propertiesColumns: ['parcel_id', 'owner', 'acres'],
+      },
+    })!;
+    const sql = buildLayerSql(layer, ctx)!;
+    expect(sql).toContain('"parcel_id"');
+    expect(sql).toContain('"owner"');
+    expect(sql).toContain('"acres"');
+  });
+
+  it('uses explicit idColumn and labelColumn in vector SQL', () => {
+    const layer = parseLayerConfig({
+      version: 1,
+      id: 'test',
+      name: 'parcels',
+      dataSource: {
+        type: 'geoparquet',
+        url: 'https://example.com/parcels.parquet',
+        tableName: 'parcels',
+        geometryType: 'polygon',
+        geometryEncoding: 'native',
+        idColumn: 'parcel_id',
+        labelColumn: 'owner',
+      },
+    })!;
+    const sql = buildLayerSql(layer, ctx)!;
+    expect(sql).toContain('"parcel_id" AS location_id');
+    expect(sql).toContain('"owner" AS label');
   });
 
   it('produces the same SQL for floating and pinned geoparquet refs', () => {
