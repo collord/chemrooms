@@ -105,6 +105,174 @@ describe('buildLayerSql dispatch', () => {
     expect(buildLayerSql(layer, ctx)).toBeNull();
   });
 
+  it('uses ST_X / ST_Y on the geometry column for point geoparquet', () => {
+    const layer = parseLayerConfig({
+      version: 1,
+      id: 'test',
+      name: 'wells',
+      dataSource: {
+        type: 'geoparquet',
+        url: 'https://example.com/wells.parquet',
+        tableName: 'wells',
+      },
+    })!;
+    const sql = buildLayerSql(layer, ctx)!;
+    expect(sql).toContain('ST_X("geometry")');
+    expect(sql).toContain('ST_Y("geometry")');
+  });
+
+  it('honors a custom geometryColumn name', () => {
+    const layer = parseLayerConfig({
+      version: 1,
+      id: 'test',
+      name: 'wells',
+      dataSource: {
+        type: 'geoparquet',
+        url: 'https://example.com/wells.parquet',
+        tableName: 'wells',
+        geometryColumn: 'shape',
+      },
+    })!;
+    const sql = buildLayerSql(layer, ctx)!;
+    expect(sql).toContain('ST_X("shape")');
+    expect(sql).not.toContain('ST_X("geometry")');
+  });
+
+  it('emits ST_Z when is3d is true', () => {
+    const layer = parseLayerConfig({
+      version: 1,
+      id: 'test',
+      name: 'wells',
+      dataSource: {
+        type: 'geoparquet',
+        url: 'https://example.com/wells.parquet',
+        tableName: 'wells',
+        is3d: true,
+      },
+    })!;
+    const sql = buildLayerSql(layer, ctx)!;
+    expect(sql).toContain('ST_Z("geometry")');
+  });
+
+  it('uses NULL altitude when is3d is false (default)', () => {
+    const layer = parseLayerConfig({
+      version: 1,
+      id: 'test',
+      name: 'wells',
+      dataSource: {
+        type: 'geoparquet',
+        url: 'https://example.com/wells.parquet',
+        tableName: 'wells',
+      },
+    })!;
+    const sql = buildLayerSql(layer, ctx)!;
+    expect(sql).not.toContain('ST_Z');
+    expect(sql).toContain('NULL AS altitude');
+  });
+
+  it('synthesizes a row-number id when idColumn is null', () => {
+    const layer = parseLayerConfig({
+      version: 1,
+      id: 'test',
+      name: 'wells',
+      dataSource: {
+        type: 'geoparquet',
+        url: 'https://example.com/wells.parquet',
+        tableName: 'wells',
+      },
+    })!;
+    const sql = buildLayerSql(layer, ctx)!;
+    expect(sql).toContain('ROW_NUMBER() OVER ()');
+    expect(sql).toContain("'row-'");
+  });
+
+  it('uses the explicit idColumn when set', () => {
+    const layer = parseLayerConfig({
+      version: 1,
+      id: 'test',
+      name: 'wells',
+      dataSource: {
+        type: 'geoparquet',
+        url: 'https://example.com/wells.parquet',
+        tableName: 'wells',
+        idColumn: 'well_id',
+      },
+    })!;
+    const sql = buildLayerSql(layer, ctx)!;
+    expect(sql).toContain('"well_id" AS location_id');
+    expect(sql).not.toContain('ROW_NUMBER');
+  });
+
+  it('uses labelColumn when set, otherwise falls back to idColumn', () => {
+    const labeled = parseLayerConfig({
+      version: 1,
+      id: 'test',
+      name: 'wells',
+      dataSource: {
+        type: 'geoparquet',
+        url: 'https://example.com/wells.parquet',
+        tableName: 'wells',
+        idColumn: 'well_id',
+        labelColumn: 'well_name',
+      },
+    })!;
+    expect(buildLayerSql(labeled, ctx)).toContain('"well_name" AS label');
+
+    const fallback = parseLayerConfig({
+      version: 1,
+      id: 'test',
+      name: 'wells',
+      dataSource: {
+        type: 'geoparquet',
+        url: 'https://example.com/wells.parquet',
+        tableName: 'wells',
+        idColumn: 'well_id',
+      },
+    })!;
+    expect(buildLayerSql(fallback, ctx)).toContain('"well_id" AS label');
+  });
+
+  it('passes through propertiesColumns for click-to-attributes', () => {
+    const layer = parseLayerConfig({
+      version: 1,
+      id: 'test',
+      name: 'wells',
+      dataSource: {
+        type: 'geoparquet',
+        url: 'https://example.com/wells.parquet',
+        tableName: 'wells',
+        propertiesColumns: ['depth_m', 'analyte', 'result'],
+      },
+    })!;
+    const sql = buildLayerSql(layer, ctx)!;
+    expect(sql).toContain('"depth_m"');
+    expect(sql).toContain('"analyte"');
+    expect(sql).toContain('"result"');
+  });
+
+  it('returns null for non-point geometryType (deferred to vector renderer)', () => {
+    for (const geometryType of [
+      'multipoint',
+      'linestring',
+      'multilinestring',
+      'polygon',
+      'multipolygon',
+    ] as const) {
+      const layer = parseLayerConfig({
+        version: 1,
+        id: 'test',
+        name: 'wells',
+        dataSource: {
+          type: 'geoparquet',
+          url: 'https://example.com/wells.parquet',
+          tableName: 'wells',
+          geometryType,
+        },
+      })!;
+      expect(buildLayerSql(layer, ctx)).toBeNull();
+    }
+  });
+
   it('produces the same SQL for floating and pinned geoparquet refs', () => {
     // The pin/float distinction lives at the schema/identity layer —
     // it changes the layer's content hash but not the SQL the loader

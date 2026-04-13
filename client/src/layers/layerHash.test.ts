@@ -10,7 +10,22 @@
 
 import {describe, it, expect} from 'vitest';
 import {computeLayerHash, isHashedId} from './layerHash';
-import type {LayerConfig} from './layerSchema';
+import {
+  GeoParquetDataSource,
+  type LayerConfig,
+} from './layerSchema';
+
+/**
+ * Build a complete GeoParquetDataSource by running a partial through
+ * the schema's own parser, which applies all the defaults. Lets test
+ * fixtures stay focused on the fields they actually care about
+ * without having to enumerate every new schema field.
+ */
+function geoParquet(
+  fields: {url: string; tableName: string} & Record<string, unknown>,
+): LayerConfig['dataSource'] {
+  return GeoParquetDataSource.parse({type: 'geoparquet', ...fields});
+}
 
 function makeLayer(overrides: Partial<LayerConfig> = {}): LayerConfig {
   return {
@@ -183,11 +198,10 @@ describe('computeLayerHash', () => {
       );
       const b = await computeLayerHash(
         makeLayer({
-          dataSource: {
-            type: 'geoparquet',
+          dataSource: geoParquet({
             url: 'https://example.com/x.parquet',
             tableName: 'x',
-          },
+          }),
         }),
       );
       expect(a).not.toBe(b);
@@ -204,21 +218,16 @@ describe('computeLayerHash', () => {
     it('floating and pinned refs to the same URL produce different hashes', async () => {
       const floating = await computeLayerHash(
         makeLayer({
-          dataSource: {
-            type: 'geoparquet',
-            url: baseUrl,
-            tableName: 'wells',
-          },
+          dataSource: geoParquet({url: baseUrl, tableName: 'wells'}),
         }),
       );
       const pinned = await computeLayerHash(
         makeLayer({
-          dataSource: {
-            type: 'geoparquet',
+          dataSource: geoParquet({
             url: baseUrl,
             tableName: 'wells',
             expectedHash: pinHash,
-          },
+          }),
         }),
       );
       expect(floating).not.toBe(pinned);
@@ -227,22 +236,20 @@ describe('computeLayerHash', () => {
     it('two pins to different bytes produce different hashes', async () => {
       const a = await computeLayerHash(
         makeLayer({
-          dataSource: {
-            type: 'geoparquet',
+          dataSource: geoParquet({
             url: baseUrl,
             tableName: 'wells',
             expectedHash: pinHash,
-          },
+          }),
         }),
       );
       const b = await computeLayerHash(
         makeLayer({
-          dataSource: {
-            type: 'geoparquet',
+          dataSource: geoParquet({
             url: baseUrl,
             tableName: 'wells',
             expectedHash: otherPinHash,
-          },
+          }),
         }),
       );
       expect(a).not.toBe(b);
@@ -251,22 +258,20 @@ describe('computeLayerHash', () => {
     it('two pins to the same bytes produce the same hash', async () => {
       const a = await computeLayerHash(
         makeLayer({
-          dataSource: {
-            type: 'geoparquet',
+          dataSource: geoParquet({
             url: baseUrl,
             tableName: 'wells',
             expectedHash: pinHash,
-          },
+          }),
         }),
       );
       const b = await computeLayerHash(
         makeLayer({
-          dataSource: {
-            type: 'geoparquet',
+          dataSource: geoParquet({
             url: baseUrl,
             tableName: 'wells',
             expectedHash: pinHash,
-          },
+          }),
         }),
       );
       expect(a).toBe(b);
@@ -275,23 +280,187 @@ describe('computeLayerHash', () => {
     it('two floating refs to the same URL produce the same hash', async () => {
       const a = await computeLayerHash(
         makeLayer({
-          dataSource: {
-            type: 'geoparquet',
-            url: baseUrl,
-            tableName: 'wells',
-          },
+          dataSource: geoParquet({url: baseUrl, tableName: 'wells'}),
         }),
       );
       const b = await computeLayerHash(
         makeLayer({
-          dataSource: {
-            type: 'geoparquet',
-            url: baseUrl,
-            tableName: 'wells',
-          },
+          dataSource: geoParquet({url: baseUrl, tableName: 'wells'}),
         }),
       );
       expect(a).toBe(b);
+    });
+
+    it('reacts to geometryColumn', async () => {
+      const a = await computeLayerHash(
+        makeLayer({
+          dataSource: geoParquet({
+            url: baseUrl,
+            tableName: 'wells',
+            geometryColumn: 'geometry',
+          }),
+        }),
+      );
+      const b = await computeLayerHash(
+        makeLayer({
+          dataSource: geoParquet({
+            url: baseUrl,
+            tableName: 'wells',
+            geometryColumn: 'geom',
+          }),
+        }),
+      );
+      expect(a).not.toBe(b);
+    });
+
+    it('reacts to geometryType', async () => {
+      const point = await computeLayerHash(
+        makeLayer({
+          dataSource: geoParquet({
+            url: baseUrl,
+            tableName: 'wells',
+            geometryType: 'point',
+          }),
+        }),
+      );
+      const polygon = await computeLayerHash(
+        makeLayer({
+          dataSource: geoParquet({
+            url: baseUrl,
+            tableName: 'wells',
+            geometryType: 'polygon',
+          }),
+        }),
+      );
+      expect(point).not.toBe(polygon);
+    });
+
+    it('reacts to is3d', async () => {
+      const flat = await computeLayerHash(
+        makeLayer({
+          dataSource: geoParquet({
+            url: baseUrl,
+            tableName: 'wells',
+            is3d: false,
+          }),
+        }),
+      );
+      const tall = await computeLayerHash(
+        makeLayer({
+          dataSource: geoParquet({
+            url: baseUrl,
+            tableName: 'wells',
+            is3d: true,
+          }),
+        }),
+      );
+      expect(flat).not.toBe(tall);
+    });
+
+    it('reacts to idColumn', async () => {
+      const synth = await computeLayerHash(
+        makeLayer({
+          dataSource: geoParquet({url: baseUrl, tableName: 'wells'}),
+        }),
+      );
+      const explicit = await computeLayerHash(
+        makeLayer({
+          dataSource: geoParquet({
+            url: baseUrl,
+            tableName: 'wells',
+            idColumn: 'well_id',
+          }),
+        }),
+      );
+      expect(synth).not.toBe(explicit);
+    });
+
+    it('reacts to labelColumn', async () => {
+      const a = await computeLayerHash(
+        makeLayer({
+          dataSource: geoParquet({
+            url: baseUrl,
+            tableName: 'wells',
+            labelColumn: 'well_name',
+          }),
+        }),
+      );
+      const b = await computeLayerHash(
+        makeLayer({
+          dataSource: geoParquet({
+            url: baseUrl,
+            tableName: 'wells',
+            labelColumn: 'site_id',
+          }),
+        }),
+      );
+      expect(a).not.toBe(b);
+    });
+
+    it('reacts to sourceCrs (provenance is part of identity)', async () => {
+      const a = await computeLayerHash(
+        makeLayer({
+          dataSource: geoParquet({
+            url: baseUrl,
+            tableName: 'wells',
+            sourceCrs: 'EPSG:4326',
+          }),
+        }),
+      );
+      const b = await computeLayerHash(
+        makeLayer({
+          dataSource: geoParquet({
+            url: baseUrl,
+            tableName: 'wells',
+            sourceCrs: 'EPSG:26917',
+          }),
+        }),
+      );
+      expect(a).not.toBe(b);
+    });
+
+    it('reacts to propertiesColumns membership', async () => {
+      const empty = await computeLayerHash(
+        makeLayer({
+          dataSource: geoParquet({
+            url: baseUrl,
+            tableName: 'wells',
+            propertiesColumns: [],
+          }),
+        }),
+      );
+      const some = await computeLayerHash(
+        makeLayer({
+          dataSource: geoParquet({
+            url: baseUrl,
+            tableName: 'wells',
+            propertiesColumns: ['well_name'],
+          }),
+        }),
+      );
+      expect(empty).not.toBe(some);
+    });
+
+    it('treats propertiesColumns as a set — reordering does not change the hash', async () => {
+      const ab = await computeLayerHash(
+        makeLayer({
+          dataSource: geoParquet({
+            url: baseUrl,
+            tableName: 'wells',
+            propertiesColumns: ['a', 'b'],
+          }),
+        }),
+      );
+      const ba = await computeLayerHash(
+        makeLayer({
+          dataSource: geoParquet({
+            url: baseUrl,
+            tableName: 'wells',
+            propertiesColumns: ['b', 'a'],
+          }),
+        }),
+      );
+      expect(ab).toBe(ba);
     });
 
     it('applies pin/float to geojson sources too', async () => {

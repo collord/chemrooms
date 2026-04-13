@@ -14,29 +14,27 @@
  * - `chemduck` — delegates to buildSamplesLayerSql, the chemduck recipe
  *   builder. Requires `query` to be set; returns null otherwise.
  *
- * - `geoparquet` — assumes the table has been registered into DuckDB-WASM
- *   by an external loader (not yet wired) under `dataSource.tableName`,
- *   and that the parquet has columns matching the entity-rendering
- *   contract: `location_id`, `longitude`, `latitude`, `altitude`, `label`.
- *   Schema heterogeneity (parquets with arbitrary column names) is the
- *   next design problem — see TODO below.
+ * - `geoparquet` (point geometry only) — assumes the table has been
+ *   registered into DuckDB-WASM by an external loader (not yet wired)
+ *   and that the spatial extension is loaded. Uses ST_X/ST_Y/ST_Z to
+ *   pull coordinates from the WKB geometry column described by
+ *   `geometryColumn`, synthesizes a stable id from `idColumn` (or the
+ *   row number when null), and passes through any `propertiesColumns`
+ *   for click-to-attributes. CRS reprojection is the loader's job —
+ *   the dispatcher assumes the registered table is already in WGS84.
  *
- * - `geojson`, `geojson-inline`, `imagery` — these don't go through the
- *   SQL/entity pipeline. Cesium has its own renderers for them
- *   (GeoJsonDataSource, ImageryLayer). Returns null so the entity-layer
- *   pipeline skips them; their renderers will be wired separately.
+ * - `geoparquet` (line / polygon / multi*) — returns null. These
+ *   geometry types are reserved for a future vector renderer that
+ *   will convert WKB → Cesium polyline/polygon entities (probably
+ *   via ST_AsGeoJSON for simplicity). The entity-layer dispatcher in
+ *   ChemroomsEntityLayers skips null SQL, so non-point geoparquet
+ *   layers won't render at all until that renderer is built.
  *
- * ## TODO: parquet column mapping
- *
- * The current `geoparquet` branch hardcodes the canonical column names.
- * Real geoparquet files in the wild won't always have those names — a
- * regulator's wells.parquet might use `lon`/`lat`/`well_id`. The next
- * design step is to either (a) extend GeoParquetDataSource with a
- * `columnMap` field, (b) load a vis-spec sidecar alongside the parquet,
- * or (c) introspect the parquet schema at registration time and try to
- * auto-detect canonical roles. (c) is the most magical but also the
- * most fragile; (a) is the most explicit. This decision needs to be
- * made before the runtime loader is wired.
+ * - `geojson`, `geojson-inline`, `imagery` — don't go through the
+ *   SQL/entity pipeline at all. Cesium has its own renderers for
+ *   them (GeoJsonDataSource, ImageryLayer). Returns null so the
+ *   entity-layer pipeline skips them; their renderers will be wired
+ *   separately.
  */
 
 import type {LayerConfig} from './layerSchema';
@@ -80,17 +78,56 @@ export function buildLayerSql(
     }
 
     case 'geoparquet': {
-      // See TODO above on column mapping. For now we assume the parquet
-      // has the canonical entity-pipeline columns.
-      const ident = quoteIdent(layer.dataSource.tableName);
+      const ds = layer.dataSource;
+
+      // Only point geometries flow through the SQL/entity pipeline.
+      // Line/polygon variants are reserved for a future vector
+      // renderer; returning null here causes the entity-layer
+      // dispatcher in ChemroomsEntityLayers to skip this layer.
+      if (ds.geometryType !== 'point') {
+        return null;
+      }
+
+      const tableIdent = quoteIdent(ds.tableName);
+      const geomIdent = quoteIdent(ds.geometryColumn);
+
+      // Identity: an explicit idColumn beats a synthesized row number.
+      // The synthesized form uses ROW_NUMBER() so freshly dropped-in
+      // files render without the user having to specify anything,
+      // and the entity ids stay stable across re-queries because
+      // ROW_NUMBER() is deterministic over a sorted table.
+      const idExpr = ds.idColumn
+        ? quoteIdent(ds.idColumn)
+        : `('row-' || ROW_NUMBER() OVER ())`;
+
+      // Label: explicit labelColumn > idColumn > synthesized id.
+      const labelExpr = ds.labelColumn
+        ? quoteIdent(ds.labelColumn)
+        : ds.idColumn
+          ? quoteIdent(ds.idColumn)
+          : `('row-' || ROW_NUMBER() OVER ())`;
+
+      // Altitude: pull Z when the geometry is 3D, otherwise NULL
+      // (entity falls back to terrain-clamped rendering).
+      const altExpr = ds.is3d ? `ST_Z(${geomIdent})` : 'NULL';
+
+      // Properties: each column listed in propertiesColumns becomes
+      // a passthrough in the SELECT so the entity renderer can
+      // attach them for click-to-attributes. Sanitized identically
+      // to tableName.
+      const propsSelect =
+        ds.propertiesColumns.length > 0
+          ? ',\n  ' + ds.propertiesColumns.map(quoteIdent).join(',\n  ')
+          : '';
+
       return `
         SELECT
-          location_id,
-          longitude,
-          latitude,
-          altitude,
-          label
-        FROM ${ident}
+          ${idExpr} AS location_id,
+          ST_X(${geomIdent}) AS longitude,
+          ST_Y(${geomIdent}) AS latitude,
+          ${altExpr} AS altitude,
+          ${labelExpr} AS label${propsSelect}
+        FROM ${tableIdent}
       `;
     }
 

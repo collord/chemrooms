@@ -114,15 +114,95 @@ export const ChemduckDataSource = z.object({
   type: z.literal('chemduck'),
 });
 
+/**
+ * Geometry types we recognize in the schema. Only `point` currently
+ * flows through the SQL/entity rendering pipeline; line and polygon
+ * variants are reserved for a future vector renderer (which will
+ * convert WKB → Cesium polyline/polygon entities, probably via
+ * ST_AsGeoJSON for simplicity). The dispatch decision lives in
+ * buildLayerSql — non-point types return null SQL so the
+ * entity-layer pipeline skips them and the vector renderer (when
+ * built) picks them up via a separate dispatch path.
+ */
+export const GeometryType = z.enum([
+  'point',
+  'multipoint',
+  'linestring',
+  'multilinestring',
+  'polygon',
+  'multipolygon',
+]);
+export type GeometryType = z.infer<typeof GeometryType>;
+
 export const GeoParquetDataSource = z.object({
   type: z.literal('geoparquet'),
   /** URL to the .geoparquet file (relative or absolute). */
   url: z.string(),
   /** Table name to register in DuckDB-WASM after loading. */
   tableName: z.string(),
-  /** Optional pin: if set, loader verifies the bytes match. */
+  /** Optional pin: if set, loader verifies the source bytes match. */
   expectedHash: ContentHash.optional(),
+
+  /**
+   * Name of the WKB geometry column. The geoparquet convention is
+   * `geometry`, but real-world files in the wild use whatever the
+   * authoring tool emitted. The runtime loader can introspect the
+   * parquet's `geo` metadata key to default this; users can override
+   * via the layer config.
+   */
+  geometryColumn: z.string().default('geometry'),
+
+  /**
+   * Geometry type of the column above. Determines which render
+   * pipeline handles this layer (point → entity pipeline, others →
+   * future vector renderer). Defaults to `point` because that's the
+   * only type currently rendered, but the field exists in the schema
+   * so layers can be honest about non-point data and the dispatcher
+   * can route correctly without guesswork.
+   */
+  geometryType: GeometryType.default('point'),
+
+  /**
+   * Whether the geometry has a Z component. When true the dispatcher
+   * pulls altitude via ST_Z; when false altitude is NULL and the
+   * entity falls back to terrain-clamped rendering.
+   */
+  is3d: z.boolean().default(false),
+
+  /**
+   * Column to use as the entity id. Null = synthesize from row
+   * number, which is always unique and always present, so a freshly
+   * dragged-in file renders without the user having to specify
+   * anything.
+   */
+  idColumn: z.string().nullable().default(null),
+
+  /**
+   * Column to use as the entity display label. Null = fall back to
+   * the id column (or the synthesized row number).
+   */
+  labelColumn: z.string().nullable().default(null),
+
+  /**
+   * Source CRS as an EPSG ref (e.g. 'EPSG:26917'). Provenance only:
+   * the runtime loader is responsible for reprojecting to EPSG:4326
+   * at registration time using ST_Transform, so query-side SQL can
+   * assume WGS84 throughout. Null = the source was already in 4326
+   * or unknown / not yet introspected.
+   */
+  sourceCrs: z.string().nullable().default(null),
+
+  /**
+   * Column names to expose to click-to-attributes. The entity
+   * renderer attaches these as properties on the created Cesium
+   * entity so a click handler can pop a table. Empty array = no
+   * attributes exposed (the layer is "see only"). The runtime
+   * loader can default this to "all non-geometry columns" when
+   * introspecting the parquet schema.
+   */
+  propertiesColumns: z.array(z.string()).default([]),
 });
+export type GeoParquetDataSource = z.infer<typeof GeoParquetDataSource>;
 
 export const GeoJsonDataSource = z.object({
   type: z.literal('geojson'),

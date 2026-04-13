@@ -57,6 +57,15 @@ function canonicalizeDataSource(ds: LayerConfig['dataSource']): unknown {
         url: ds.url,
         tableName: ds.tableName,
         expectedHash: ds.expectedHash ?? null,
+        geometryColumn: ds.geometryColumn,
+        geometryType: ds.geometryType,
+        is3d: ds.is3d,
+        idColumn: ds.idColumn,
+        labelColumn: ds.labelColumn,
+        sourceCrs: ds.sourceCrs,
+        // propertiesColumns are sorted before hashing so reordering
+        // the same set produces the same id (it's a set, not a list)
+        propertiesColumns: [...ds.propertiesColumns].sort(),
       };
     case 'geojson':
       return {
