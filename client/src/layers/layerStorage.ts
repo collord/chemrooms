@@ -211,21 +211,39 @@ export async function migratePersonalLayers(): Promise<LayerConfig[]> {
   return migrated;
 }
 
-/** Remove a personal layer by id and persist. */
-export function removePersonalLayer(id: string): LayerConfig[] {
-  const existing = loadPersonalLayers();
-  const updated = existing.filter((l) => l.id !== id);
-  savePersonalLayers(updated);
+/**
+ * Remove a personal layer by id and persist.
+ *
+ * `currentList` is the caller's view of the slice (defaults to
+ * localStorage-only, for backward compatibility). Callers whose
+ * slice may contain ephemeral layers MUST pass their slice state,
+ * otherwise the returned list won't include the ephemerals and
+ * `setPersonalLayers(returned)` will wipe them. Ephemerals are
+ * filtered out of the localStorage write so they never accidentally
+ * get promoted.
+ */
+export function removePersonalLayer(
+  id: string,
+  currentList: LayerConfig[] = loadPersonalLayers(),
+): LayerConfig[] {
+  const updated = currentList.filter((l) => l.id !== id);
+  savePersonalLayers(updated.filter((l) => !isEphemeralLayer(l)));
   return updated;
 }
 
-/** Update a personal layer's visibility and persist. */
-export function togglePersonalLayerVisibility(id: string): LayerConfig[] {
-  const existing = loadPersonalLayers();
-  const updated = existing.map((l) =>
+/**
+ * Update a personal layer's visibility and persist. Same
+ * currentList contract as removePersonalLayer — callers with
+ * ephemeral layers in the slice must pass the slice state.
+ */
+export function togglePersonalLayerVisibility(
+  id: string,
+  currentList: LayerConfig[] = loadPersonalLayers(),
+): LayerConfig[] {
+  const updated = currentList.map((l) =>
     l.id === id ? {...l, visible: !l.visible} : l,
   );
-  savePersonalLayers(updated);
+  savePersonalLayers(updated.filter((l) => !isEphemeralLayer(l)));
   return updated;
 }
 

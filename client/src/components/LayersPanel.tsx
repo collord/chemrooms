@@ -113,12 +113,12 @@ export const LayersPanel: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleToggleFrozen = (id: string) => {
-    const updated = togglePersonalLayerVisibility(id);
+    const updated = togglePersonalLayerVisibility(id, personalLayers);
     setPersonalLayers(updated);
   };
 
   const handleRemoveFrozen = (id: string) => {
-    const updated = removePersonalLayer(id);
+    const updated = removePersonalLayer(id, personalLayers);
     setPersonalLayers(updated);
   };
 

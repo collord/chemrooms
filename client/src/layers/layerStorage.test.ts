@@ -368,4 +368,57 @@ describe('togglePersonalLayerVisibility', () => {
     const afterSecond = togglePersonalLayerVisibility(layer.id);
     expect(afterSecond[0]!.visible).toBe(true);
   });
+
+  it('preserves ephemeral neighbors when currentList is passed', async () => {
+    const chemduck = await freezeCurrentState(baseParams);
+    const ephemeral = makeEphemeralGeoparquetLayer();
+
+    // Simulate a slice containing both a persisted chemduck layer
+    // and an ephemeral dropped-file layer.
+    const sliceState = [
+      {...chemduck, origin: 'personal' as const},
+      ephemeral,
+    ];
+    savePersonalLayers([chemduck]); // only chemduck is persisted
+
+    const result = togglePersonalLayerVisibility(chemduck.id, sliceState);
+    // The returned list still has both layers
+    expect(result).toHaveLength(2);
+    expect(result.some((l) => l.id === ephemeral.id)).toBe(true);
+    // localStorage still has only the chemduck layer
+    expect(loadPersonalLayers()).toHaveLength(1);
+  });
+
+  it('can toggle an ephemeral layer without persisting it', async () => {
+    const ephemeral = makeEphemeralGeoparquetLayer();
+    const sliceState = [ephemeral];
+
+    const result = togglePersonalLayerVisibility(ephemeral.id, sliceState);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.visible).toBe(false);
+    expect(loadPersonalLayers()).toHaveLength(0);
+  });
+});
+
+describe('removePersonalLayer with ephemerals', () => {
+  it('preserves ephemeral neighbors when currentList is passed', async () => {
+    const chemduck = await freezeCurrentState(baseParams);
+    const ephemeral = makeEphemeralGeoparquetLayer();
+    const sliceState = [
+      {...chemduck, origin: 'personal' as const},
+      ephemeral,
+    ];
+    savePersonalLayers([chemduck]);
+
+    const result = removePersonalLayer(chemduck.id, sliceState);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe(ephemeral.id);
+    expect(loadPersonalLayers()).toHaveLength(0);
+  });
+
+  it('can remove an ephemeral layer from the slice', async () => {
+    const ephemeral = makeEphemeralGeoparquetLayer();
+    const result = removePersonalLayer(ephemeral.id, [ephemeral]);
+    expect(result).toHaveLength(0);
+  });
 });
