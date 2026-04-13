@@ -130,7 +130,10 @@ describe('registerGeoparquetLayer', () => {
     expect(result.layer.id).toBe(expected);
   });
 
-  it('defaults to point geometry, wkb encoding, 2D, geometry-column "geometry"', async () => {
+  it('defaults to point geometry, native encoding, 2D, geometry-column "geometry"', async () => {
+    // Native encoding is the right default: loadFile(read_parquet) +
+    // spatial extension auto-decodes the WKB column to a GEOMETRY type,
+    // so the dispatcher should NOT wrap the column in ST_GeomFromWKB.
     const connector = makeMockConnector();
     const {layer} = await registerGeoparquetLayer(
       connector as never,
@@ -139,9 +142,20 @@ describe('registerGeoparquetLayer', () => {
     expect(layer.dataSource.type).toBe('geoparquet');
     if (layer.dataSource.type !== 'geoparquet') return;
     expect(layer.dataSource.geometryType).toBe('point');
-    expect(layer.dataSource.geometryEncoding).toBe('wkb');
+    expect(layer.dataSource.geometryEncoding).toBe('native');
     expect(layer.dataSource.is3d).toBe(false);
     expect(layer.dataSource.geometryColumn).toBe('geometry');
+  });
+
+  it('respects an explicit geometryEncoding override', async () => {
+    const connector = makeMockConnector();
+    const {layer} = await registerGeoparquetLayer(
+      connector as never,
+      'https://example.com/wells.parquet',
+      {geometryEncoding: 'wkb'},
+    );
+    if (layer.dataSource.type !== 'geoparquet') return;
+    expect(layer.dataSource.geometryEncoding).toBe('wkb');
   });
 
   it('honors geometry overrides passed via options', async () => {

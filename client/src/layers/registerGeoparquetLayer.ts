@@ -165,6 +165,12 @@ export async function registerGeoparquetLayer(
       ? `session:${encodeURIComponent(source.name)}`
       : source;
 
+  // Default encoding is 'native' because loadFile(read_parquet) + a
+  // loaded spatial extension auto-decodes a geoparquet's WKB geometry
+  // column into a native GEOMETRY type. The dispatcher's ST_GeomFromWKB
+  // wrap is only needed for the (hypothetical) case where someone has
+  // a plain parquet with a BLOB column they want to interpret as WKB
+  // — not the path this loader takes.
   const draft = parseLayerConfig({
     version: 1,
     id: '',
@@ -176,7 +182,7 @@ export async function registerGeoparquetLayer(
       geometryColumn: options.geometryColumn,
       geometryType: options.geometryType,
       is3d: options.is3d,
-      geometryEncoding: options.geometryEncoding,
+      geometryEncoding: options.geometryEncoding ?? 'native',
     },
     visible: true,
     createdAt: new Date().toISOString(),
