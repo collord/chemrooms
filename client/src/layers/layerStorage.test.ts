@@ -9,13 +9,68 @@
 import {describe, it, expect, beforeEach} from 'vitest';
 import {
   addPersonalLayer,
+  isEphemeralLayer,
   loadPersonalLayers,
   migratePersonalLayers,
   removePersonalLayer,
   togglePersonalLayerVisibility,
   savePersonalLayers,
 } from './layerStorage';
-import {freezeCurrentState, type LayerConfig} from './layerSchema';
+import {
+  freezeCurrentState,
+  GeoParquetDataSource,
+  type LayerConfig,
+} from './layerSchema';
+
+function makeEphemeralGeoparquetLayer(name = 'dropped wells'): LayerConfig {
+  const ds = GeoParquetDataSource.parse({
+    type: 'geoparquet',
+    url: `session:${encodeURIComponent(name)}.parquet`,
+    tableName: `t_${name.replace(/\W/g, '_')}_abc123`,
+  });
+  return {
+    version: 1,
+    id: 'placeholder',
+    name,
+    dataSource: ds,
+    visual: {
+      renderType: 'point',
+      colorBy: null,
+      pointSize: 8,
+      opacity: 1,
+      color: '#00ffff',
+    },
+    visible: true,
+    createdAt: '2026-04-13T00:00:00Z',
+    origin: 'personal',
+  };
+}
+
+function makeLegacyFileUrlLayer(name = 'legacy wells'): LayerConfig {
+  // Simulates a layer persisted by a pre-fix version of addPersonalLayer
+  // that used the file:// scheme for dropped files.
+  const ds = GeoParquetDataSource.parse({
+    type: 'geoparquet',
+    url: `file://${name}.parquet`,
+    tableName: 't_legacy_abc123',
+  });
+  return {
+    version: 1,
+    id: 'placeholder',
+    name,
+    dataSource: ds,
+    visual: {
+      renderType: 'point',
+      colorBy: null,
+      pointSize: 8,
+      opacity: 1,
+      color: '#00ffff',
+    },
+    visible: true,
+    createdAt: '2026-04-13T00:00:00Z',
+    origin: 'personal',
+  };
+}
 
 const baseParams = {
   name: 'Benzene most recent',
@@ -161,6 +216,144 @@ describe('removePersonalLayer', () => {
     await addPersonalLayer(layer);
     const after = removePersonalLayer('not-a-real-id');
     expect(after).toHaveLength(1);
+  });
+});
+
+describe('isEphemeralLayer', () => {
+  it('returns true for geoparquet layers with session: URLs', () => {
+    expect(isEphemeralLayer(makeEphemeralGeoparquetLayer())).toBe(true);
+  });
+
+  it('returns true for geoparquet layers with legacy file:// URLs', () => {
+    expect(isEphemeralLayer(makeLegacyFileUrlLayer())).toBe(true);
+  });
+
+  it('returns false for chemduck layers', async () => {
+    const layer = await freezeCurrentState(baseParams);
+    expect(isEphemeralLayer(layer)).toBe(false);
+  });
+
+  it('returns false for geoparquet layers with http(s) URLs', () => {
+    const ds = GeoParquetDataSource.parse({
+      type: 'geoparquet',
+      url: 'https://example.com/wells.parquet',
+      tableName: 'wells',
+    });
+    const layer: LayerConfig = {
+      version: 1,
+      id: 'x',
+      name: 'wells',
+      dataSource: ds,
+      visual: {
+        renderType: 'point',
+        colorBy: null,
+        pointSize: 8,
+        opacity: 1,
+        color: '#00ffff',
+      },
+      visible: true,
+      createdAt: '2026-04-13T00:00:00Z',
+      origin: 'personal',
+    };
+    expect(isEphemeralLayer(layer)).toBe(false);
+  });
+});
+
+describe('addPersonalLayer with ephemeral layers', () => {
+  it('returns the layer in the list but does not persist it', async () => {
+    const ephemeral = makeEphemeralGeoparquetLayer();
+    const res = await addPersonalLayer(ephemeral);
+    expect(res.added).toBe(true);
+    expect(res.persisted).toBe(false);
+    expect(res.layers).toHaveLength(1);
+    // localStorage should be untouched
+    expect(loadPersonalLayers()).toHaveLength(0);
+  });
+
+  it('preserves ephemeral layers in currentList when adding a non-ephemeral', async () => {
+    const ephemeral = makeEphemeralGeoparquetLayer('dropped-a');
+    const eph2 = makeEphemeralGeoparquetLayer('dropped-b');
+
+    // Seed the in-memory list with two ephemeral layers
+    const afterFirst = await addPersonalLayer(ephemeral, []);
+    const afterSecond = await addPersonalLayer(eph2, afterFirst.layers);
+    expect(afterSecond.layers).toHaveLength(2);
+    expect(loadPersonalLayers()).toHaveLength(0); // still nothing persisted
+
+    // Now add a chemduck layer with the ephemeral list as currentList
+    const chemduck = await freezeCurrentState(baseParams);
+    const afterChemduck = await addPersonalLayer(
+      chemduck,
+      afterSecond.layers,
+    );
+    // The returned list should have all three
+    expect(afterChemduck.layers).toHaveLength(3);
+    // But only the chemduck one should be in localStorage
+    const persisted = loadPersonalLayers();
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]!.id).toBe(chemduck.id);
+  });
+
+  it('dedupes ephemeral layers by content hash', async () => {
+    const a = makeEphemeralGeoparquetLayer('same');
+    const first = await addPersonalLayer(a, []);
+    // Re-add the same ephemeral layer
+    const second = await addPersonalLayer(a, first.layers);
+    expect(second.added).toBe(false);
+    expect(second.layers).toHaveLength(1);
+  });
+});
+
+describe('migratePersonalLayers cleanup of ephemeral layers', () => {
+  it('strips legacy file:// geoparquet layers from storage', async () => {
+    const chemduck = await freezeCurrentState(baseParams);
+    const ephemeral = makeLegacyFileUrlLayer();
+    savePersonalLayers([chemduck, ephemeral]);
+
+    const migrated = await migratePersonalLayers();
+    expect(migrated).toHaveLength(1);
+    expect(migrated[0]!.id).toBe(chemduck.id);
+    // localStorage should have been rewritten without the ephemeral
+    expect(loadPersonalLayers()).toHaveLength(1);
+  });
+
+  it('strips session: geoparquet layers from storage', async () => {
+    const chemduck = await freezeCurrentState(baseParams);
+    const ephemeral = makeEphemeralGeoparquetLayer();
+    savePersonalLayers([chemduck, ephemeral]);
+
+    const migrated = await migratePersonalLayers();
+    expect(migrated).toHaveLength(1);
+    expect(migrated[0]!.id).toBe(chemduck.id);
+  });
+
+  it('preserves http(s) geoparquet layers', async () => {
+    const ds = GeoParquetDataSource.parse({
+      type: 'geoparquet',
+      url: 'https://example.com/wells.parquet',
+      tableName: 'wells',
+    });
+    const layer: LayerConfig = {
+      version: 1,
+      id: 'will-be-rehashed',
+      name: 'url-backed wells',
+      dataSource: ds,
+      visual: {
+        renderType: 'point',
+        colorBy: null,
+        pointSize: 8,
+        opacity: 1,
+        color: '#00ffff',
+      },
+      visible: true,
+      createdAt: '2026-04-13T00:00:00Z',
+      origin: 'personal',
+    };
+    savePersonalLayers([layer]);
+
+    const migrated = await migratePersonalLayers();
+    expect(migrated).toHaveLength(1);
+    expect(migrated[0]!.dataSource.type).toBe('geoparquet');
   });
 });
 

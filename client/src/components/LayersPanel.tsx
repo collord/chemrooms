@@ -136,7 +136,10 @@ export const LayersPanel: React.FC = () => {
     for (const file of Array.from(files)) {
       const layer = await importLayerFromFile(file);
       if (!layer) continue;
-      const res = await addPersonalLayer({...layer, origin: 'personal'});
+      const res = await addPersonalLayer(
+        {...layer, origin: 'personal'},
+        lastResult,
+      );
       lastResult = res.layers;
       if (!res.added) skipped += 1;
     }
@@ -176,7 +179,11 @@ export const LayersPanel: React.FC = () => {
         }
         try {
           const {layer} = await registerGeoparquetLayer(connector, file);
-          const res = await addPersonalLayer(layer);
+          // Pass lastResult so each iteration sees the previous
+          // iteration's ephemeral additions; otherwise dropping
+          // three files in one gesture would only land the last one
+          // in the slice.
+          const res = await addPersonalLayer(layer, lastResult);
           lastResult = res.layers;
           if (res.added) added += 1;
           else skipped += 1;
@@ -236,7 +243,10 @@ export const LayersPanel: React.FC = () => {
     const layer = bookmarkLayers.find((l) => l.id === id);
     if (!layer) return;
     const promoted = {...layer, origin: 'personal' as const};
-    const {layers: updatedPersonal} = await addPersonalLayer(promoted);
+    const {layers: updatedPersonal} = await addPersonalLayer(
+      promoted,
+      personalLayers,
+    );
     setPersonalLayers(updatedPersonal);
     setBookmarkLayers(bookmarkLayers.filter((l) => l.id !== id));
   };

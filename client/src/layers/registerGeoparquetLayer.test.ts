@@ -99,6 +99,27 @@ describe('registerGeoparquetLayer', () => {
     expect(result.layer.name).toBe('monitoring');
   });
 
+  it('tags File-sourced layers with a session: URL (ephemeral marker)', async () => {
+    const connector = makeMockConnector();
+    const file = new File([new Uint8Array([1, 2, 3])], 'monitoring.parquet', {
+      type: 'application/octet-stream',
+    });
+    const {layer} = await registerGeoparquetLayer(connector as never, file);
+    if (layer.dataSource.type !== 'geoparquet') return;
+    expect(layer.dataSource.url.startsWith('session:')).toBe(true);
+    expect(layer.dataSource.url).toContain('monitoring.parquet');
+  });
+
+  it('uses the real URL for URL-sourced layers (persistable)', async () => {
+    const connector = makeMockConnector();
+    const {layer} = await registerGeoparquetLayer(
+      connector as never,
+      'https://example.com/wells.parquet',
+    );
+    if (layer.dataSource.type !== 'geoparquet') return;
+    expect(layer.dataSource.url).toBe('https://example.com/wells.parquet');
+  });
+
   it('produces a layer config whose id equals its content hash', async () => {
     const connector = makeMockConnector();
     const result = await registerGeoparquetLayer(

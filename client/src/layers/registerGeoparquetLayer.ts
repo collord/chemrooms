@@ -152,13 +152,26 @@ export async function registerGeoparquetLayer(
   // Build the layer config. Run through parseLayerConfig so all the
   // schema defaults (geometryColumn='geometry', geometryType='point',
   // is3d=false, geometryEncoding='wkb', etc.) get filled in.
+  //
+  // For File sources we fabricate a `session:` URL. This marks the
+  // layer as ephemeral — the bytes aren't reachable from any URL the
+  // browser can re-fetch, so the layer can only exist for this
+  // session. layerStorage's isEphemeralLayer checks this prefix and
+  // refuses to persist such layers to localStorage, and the load-time
+  // migration filters them out if they somehow got there (e.g., from
+  // a prior version of this code that did persist them).
+  const sourceUrl =
+    source instanceof File
+      ? `session:${encodeURIComponent(source.name)}`
+      : source;
+
   const draft = parseLayerConfig({
     version: 1,
     id: '',
     name: displayName,
     dataSource: {
       type: 'geoparquet',
-      url: source instanceof File ? `file://${source.name}` : source,
+      url: sourceUrl,
       tableName,
       geometryColumn: options.geometryColumn,
       geometryType: options.geometryType,

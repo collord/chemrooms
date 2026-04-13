@@ -30,6 +30,9 @@ export const FreezeLayerButton: React.FC = () => {
   const setPersonalLayers = useChemroomsStore(
     (s) => s.chemrooms.setPersonalLayers,
   );
+  const personalLayers = useChemroomsStore(
+    (s) => s.chemrooms.personalLayers,
+  );
 
   const [status, setStatus] = useState<'idle' | 'frozen' | 'duplicate'>(
     'idle',
@@ -54,7 +57,7 @@ export const FreezeLayerButton: React.FC = () => {
       colorBy: colorByResults ?? null,
     });
 
-    const {layers, added} = await addPersonalLayer(layer);
+    const {layers, added} = await addPersonalLayer(layer, personalLayers);
     setPersonalLayers(layers);
 
     setStatus(added ? 'frozen' : 'duplicate');
@@ -66,6 +69,7 @@ export const FreezeLayerButton: React.FC = () => {
     dupAgg,
     ndMethod,
     colorByResults,
+    personalLayers,
     setPersonalLayers,
   ]);
 
