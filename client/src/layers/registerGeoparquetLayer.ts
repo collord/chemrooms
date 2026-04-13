@@ -88,15 +88,48 @@ function quoteIdent(name: string): string {
 }
 
 /**
- * Map a DuckDB spatial ST_GeometryType string onto our schema's
- * geometryType enum. Returns null for types we don't recognize
- * (e.g. GEOMETRYCOLLECTION, which the vector renderer can't handle).
+ * Map a DuckDB spatial ST_GeometryType return onto our schema's
+ * geometryType enum. DuckDB's exact return shape varies by version
+ * and column type — seen in the wild:
+ *   'POINT', 'POLYGON', 'LINESTRING', ...
+ *   'POINT Z', 'POLYGON Z'   (3D geometries)
+ *   'POINT_2D', 'POLYGON_2D' (typed-column variants)
+ *   'ST_Point', 'ST_Polygon' (PostGIS-style if they ever adopt it)
+ *
+ * So we normalize aggressively: uppercase, strip any `ST_` prefix,
+ * strip trailing coordinate-dimension markers (`Z`, `M`, `ZM`) and
+ * any `_2D` / `_3D` suffixes, then match against the enum. Returns
+ * null only if the normalized string really doesn't look like any
+ * geometry we handle.
  */
 function mapDuckDbGeometryType(
   raw: unknown,
 ): GeoParquetDataSource['geometryType'] | null {
   if (typeof raw !== 'string') return null;
-  switch (raw.toUpperCase()) {
+  let normalized = raw.toUpperCase().trim();
+  // Strip ST_ prefix
+  if (normalized.startsWith('ST_')) normalized = normalized.slice(3);
+  // Strip _2D / _3D / _4D suffixes (typed-column variants)
+  normalized = normalized.replace(/_[234]D$/, '');
+  // Strip space-separated Z / M / ZM coordinate markers
+  normalized = normalized.replace(/\s+(Z|M|ZM)$/, '');
+  // Strip no-space Z / M / ZM suffixes (POLYGONZ, POLYGONZM)
+  normalized = normalized.replace(/(ZM|Z|M)$/, (match, _g, offset) => {
+    // Only strip if what's left is still a recognized base name —
+    // avoids mangling the final M of MULTIPOLYGON or MULTIPOINT.
+    const base = normalized.slice(0, offset);
+    const recognized = [
+      'POINT',
+      'MULTIPOINT',
+      'LINESTRING',
+      'MULTILINESTRING',
+      'POLYGON',
+      'MULTIPOLYGON',
+    ];
+    return recognized.includes(base) ? '' : match;
+  });
+
+  switch (normalized) {
     case 'POINT':
       return 'point';
     case 'MULTIPOINT':
@@ -119,6 +152,26 @@ function mapDuckDbGeometryType(
  * Runs AFTER loadFile and AFTER spatial is loaded. Returns null on
  * any failure (empty table, query error, unrecognized type) so the
  * caller can fall back gracefully.
+ *
+ * Tries two probe paths in sequence for robustness:
+ *
+ *  1. **Native path**: `SELECT ST_GeometryType(geom) ...`. Works
+ *     when the column is already a GEOMETRY type (the normal case
+ *     after read_parquet auto-decodes a geoparquet).
+ *  2. **WKB wrap**: `SELECT ST_GeometryType(ST_GeomFromWKB(geom)) ...`.
+ *     Works when the column is a BLOB of WKB bytes (plain parquet
+ *     or geoparquet read without spatial's auto-decode).
+ *
+ * If the declared encoding says 'wkb' we try #2 first, otherwise
+ * #1. Either way, failure of the preferred path falls through to
+ * the other — so a layer with a stale `geometryEncoding` recorded
+ * in localStorage doesn't permanently block healing.
+ *
+ * Also verbose-logs the probe steps so we can diagnose mapping
+ * failures in the field (the mapping is case-insensitive but
+ * doesn't currently handle `POLYGON Z` suffixes or other
+ * DuckDB-specific return shapes). Logs are `[probe]`-prefixed to
+ * keep them distinct from normal init/rehydrate output.
  */
 async function detectGeometryType(
   connector: DuckDbConnector,
@@ -128,20 +181,48 @@ async function detectGeometryType(
 ): Promise<GeoParquetDataSource['geometryType'] | null> {
   const tableIdent = quoteIdent(tableName);
   const geomIdent = quoteIdent(geometryColumn);
-  const geomExpr =
-    encoding === 'wkb' ? `ST_GeomFromWKB(${geomIdent})` : geomIdent;
-  const sql = `SELECT ST_GeometryType(${geomExpr}) AS gt FROM ${tableIdent} WHERE ${geomIdent} IS NOT NULL LIMIT 1`;
-  try {
-    const result = await connector.query(sql);
-    const rows = result.toArray() as Array<{gt?: unknown}>;
-    return mapDuckDbGeometryType(rows[0]?.gt);
-  } catch (e) {
-    console.warn(
-      '[registerGeoparquetLayer] geometry type probe failed:',
-      e,
-    );
-    return null;
+
+  const nativeExpr = geomIdent;
+  const wkbExpr = `ST_GeomFromWKB(${geomIdent})`;
+  const order =
+    encoding === 'wkb'
+      ? [wkbExpr, nativeExpr]
+      : [nativeExpr, wkbExpr];
+
+  for (const expr of order) {
+    const sql = `SELECT ST_GeometryType(${expr}) AS gt FROM ${tableIdent} WHERE ${geomIdent} IS NOT NULL LIMIT 1`;
+    console.log(`[probe] ${tableName}: trying SQL: ${sql.trim()}`);
+    try {
+      const result = await connector.query(sql);
+      const rows = result.toArray() as Array<Record<string, unknown>>;
+      console.log(
+        `[probe] ${tableName}: rows=`,
+        rows,
+        `rows[0]?.gt=`,
+        rows[0]?.gt,
+        `typeof=`,
+        typeof rows[0]?.gt,
+      );
+      const raw = rows[0]?.gt;
+      const mapped = mapDuckDbGeometryType(raw);
+      console.log(
+        `[probe] ${tableName}: raw=${JSON.stringify(raw)} mapped=${mapped}`,
+      );
+      if (mapped !== null) {
+        return mapped;
+      }
+      // Mapping failed on a non-null return — might be a suffix
+      // like "POLYGON Z" we don't yet handle. Fall through to the
+      // next expression form rather than giving up.
+    } catch (e) {
+      console.warn(
+        `[probe] ${tableName}: SQL failed for expr "${expr}":`,
+        e,
+      );
+      // Try the other form.
+    }
   }
+  return null;
 }
 
 /**
@@ -390,11 +471,21 @@ export async function rehydrateGeoparquetLayers(
     // file actually contains, rebuild the layer with the correct
     // type. This silently fixes layers persisted before the
     // loader learned to probe.
+    console.log(
+      `[rehydrate] probing "${layer.name}":`,
+      `stored geometryType=${layer.dataSource.geometryType}`,
+      `geometryEncoding=${layer.dataSource.geometryEncoding}`,
+      `geometryColumn=${layer.dataSource.geometryColumn}`,
+      `tableName=${layer.dataSource.tableName}`,
+    );
     const detected = await detectGeometryType(
       connector,
       layer.dataSource.tableName,
       layer.dataSource.geometryColumn,
       layer.dataSource.geometryEncoding,
+    );
+    console.log(
+      `[rehydrate] probe result for "${layer.name}": ${detected ?? '<null>'}`,
     );
     if (detected && detected !== layer.dataSource.geometryType) {
       console.log(
