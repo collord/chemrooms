@@ -195,13 +195,22 @@ export const ChemroomsEntityLayers: React.FC = () => {
     rehydratedRef.current = true;
     rehydrateGeoparquetLayers(connector, personalLayers)
       .then((result) => {
+        const needsWriteback = result.dropped > 0 || result.healed > 0;
         if (result.dropped > 0) {
           console.warn(
             `[rehydrate] dropped ${result.dropped} layer(s) with missing blobs`,
           );
+        }
+        if (result.healed > 0) {
+          console.log(
+            `[rehydrate] auto-healed ${result.healed} layer(s) with stale geometryType`,
+          );
+        }
+        if (needsWriteback) {
           setPersonalLayers(result.layers);
-          // Rewrite localStorage without the broken entries so we
-          // don't try to rehydrate them again next session.
+          // Rewrite localStorage so the slice and disk agree —
+          // drops the broken entries and persists the corrected
+          // geometryType on healed ones.
           savePersonalLayers(
             result.layers.filter((l) => !isEphemeralLayer(l)),
           );

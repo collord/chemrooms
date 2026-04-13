@@ -494,4 +494,106 @@ describe('rehydrateGeoparquetLayers', () => {
       .filter((s: string) => s === 'INSTALL spatial');
     expect(installs).toHaveLength(1);
   });
+
+  describe('auto-heal of stale geometryType', () => {
+    it('corrects a layer whose stored geometryType disagrees with the file', async () => {
+      // Setup: register a file that was declared as 'point' but whose
+      // actual ST_GeometryType probe says 'POLYGON'. Simulate the
+      // broken state by forcing the initial registration to use the
+      // point default.
+      const connector1 = makeMockConnector();
+      // The initial registration's probe returns empty → falls back to point
+      const file = new File(
+        [new Uint8Array([10, 20, 30])],
+        'parcels.parquet',
+      );
+      const {layer} = await registerGeoparquetLayer(
+        connector1 as never,
+        file,
+      );
+      if (layer.dataSource.type !== 'geoparquet') return;
+      expect(layer.dataSource.geometryType).toBe('point');
+      const originalId = layer.id;
+
+      // Now simulate reload: the rehydrate probe returns POLYGON.
+      // The healed layer should have geometryType: 'polygon' and a
+      // new id (content hash changes because the recipe changed).
+      _resetSpatialReadyForTesting();
+      const connector2 = makeMockConnector();
+      connector2.query.mockResolvedValueOnce({
+        toArray: () => [{gt: 'POLYGON'}],
+      });
+
+      const result = await rehydrateGeoparquetLayers(connector2 as never, [
+        layer,
+      ]);
+
+      expect(result.healed).toBe(1);
+      expect(result.dropped).toBe(0);
+      expect(result.layers).toHaveLength(1);
+      const healed = result.layers[0]!;
+      if (healed.dataSource.type !== 'geoparquet') return;
+      expect(healed.dataSource.geometryType).toBe('polygon');
+      expect(healed.id).not.toBe(originalId);
+    });
+
+    it('leaves a layer alone when the probe agrees with the stored type', async () => {
+      const connector1 = makeMockConnector();
+      connector1.query.mockResolvedValueOnce({
+        toArray: () => [{gt: 'POLYGON'}],
+      });
+      const file = new File(
+        [new Uint8Array([1, 2, 3])],
+        'parcels.parquet',
+      );
+      const {layer} = await registerGeoparquetLayer(
+        connector1 as never,
+        file,
+      );
+      if (layer.dataSource.type !== 'geoparquet') return;
+      expect(layer.dataSource.geometryType).toBe('polygon');
+      const originalId = layer.id;
+
+      _resetSpatialReadyForTesting();
+      const connector2 = makeMockConnector();
+      connector2.query.mockResolvedValueOnce({
+        toArray: () => [{gt: 'POLYGON'}],
+      });
+
+      const result = await rehydrateGeoparquetLayers(connector2 as never, [
+        layer,
+      ]);
+
+      expect(result.healed).toBe(0);
+      expect(result.layers[0]!.id).toBe(originalId);
+    });
+
+    it('leaves a layer alone when the probe fails (does not corrupt on transient errors)', async () => {
+      const connector1 = makeMockConnector();
+      const file = new File(
+        [new Uint8Array([1, 2, 3])],
+        'broken.parquet',
+      );
+      const {layer} = await registerGeoparquetLayer(
+        connector1 as never,
+        file,
+      );
+
+      _resetSpatialReadyForTesting();
+      const connector2 = makeMockConnector();
+      // Probe errors during rehydration
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      connector2.query.mockRejectedValueOnce(new Error('probe error'));
+
+      const result = await rehydrateGeoparquetLayers(connector2 as never, [
+        layer,
+      ]);
+      warn.mockRestore();
+
+      expect(result.healed).toBe(0);
+      expect(result.dropped).toBe(0);
+      expect(result.layers).toHaveLength(1);
+      expect(result.layers[0]!.id).toBe(layer.id);
+    });
+  });
 });

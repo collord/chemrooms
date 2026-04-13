@@ -308,25 +308,36 @@ export async function registerGeoparquetLayer(
 /**
  * Rehydrate geoparquet layers that live in the local blob store.
  *
- * Runs on app boot after the connector is ready. Walks the personal
- * layer list, finds entries whose URL is `idb://<hash>`, loads the
- * bytes from the blob store, and re-registers them into DuckDB
- * under the same (deterministic) table name. Layers whose bytes
- * have been evicted from IDB — quota pressure, user cleared site
- * data, etc. — are dropped from the returned list so the slice
- * isn't left with dangling references.
+ * Runs on app boot after the connector is ready. For each layer
+ * whose URL is `idb://<hash>`:
  *
- * Returns the filtered layer list. Callers are responsible for
- * feeding it back into the slice and writing the cleanup to
- * localStorage if any layers were dropped.
+ *  1. Load bytes from the blob store.
+ *  2. Reconstruct a File and re-register into DuckDB under the
+ *     same (deterministic) table name.
+ *  3. **Auto-heal**: re-run the geometry type probe. If it returns
+ *     a different value than the layer's stored `geometryType`,
+ *     rebuild the layer config with the correct type and recompute
+ *     the id. This fixes layers persisted by an earlier loader
+ *     version that didn't probe the file (so a polygon got stored
+ *     as `geometryType: 'point'` and rendered with broken SQL).
+ *
+ * Returns the potentially-rebuilt layer list plus counts of how
+ * many were dropped (blob missing) and healed (geometryType
+ * corrected). Callers update the slice and rewrite localStorage
+ * when either count is non-zero.
+ *
+ * Layers whose bytes have been evicted from IDB (quota pressure,
+ * user cleared site data, etc.) are dropped from the returned
+ * list so the slice isn't left with dangling references.
  */
 export async function rehydrateGeoparquetLayers(
   connector: DuckDbConnector,
   layers: LayerConfig[],
-): Promise<{layers: LayerConfig[]; dropped: number}> {
+): Promise<{layers: LayerConfig[]; dropped: number; healed: number}> {
   let spatialLoaded = false;
   const kept: LayerConfig[] = [];
   let dropped = 0;
+  let healed = 0;
 
   for (const layer of layers) {
     if (layer.dataSource.type !== 'geoparquet') {
@@ -365,17 +376,48 @@ export async function rehydrateGeoparquetLayers(
         method: 'read_parquet',
         replace: true,
       });
-      kept.push(layer);
     } catch (e) {
       console.error(
         `[rehydrate] failed to re-register layer "${layer.name}":`,
         e,
       );
       dropped += 1;
+      continue;
+    }
+
+    // Auto-heal: re-probe the geometry type now that the table is
+    // live. If the stored geometryType disagrees with what the
+    // file actually contains, rebuild the layer with the correct
+    // type. This silently fixes layers persisted before the
+    // loader learned to probe.
+    const detected = await detectGeometryType(
+      connector,
+      layer.dataSource.tableName,
+      layer.dataSource.geometryColumn,
+      layer.dataSource.geometryEncoding,
+    );
+    if (detected && detected !== layer.dataSource.geometryType) {
+      console.log(
+        `[rehydrate] correcting "${layer.name}" geometryType: ` +
+          `${layer.dataSource.geometryType} → ${detected}`,
+      );
+      const corrected: LayerConfig = {
+        ...layer,
+        dataSource: {
+          ...layer.dataSource,
+          geometryType: detected,
+        },
+      };
+      // Recompute the content hash since geometryType participates.
+      const newId = await computeLayerHash(corrected);
+      kept.push({...corrected, id: newId});
+      healed += 1;
+    } else {
+      kept.push(layer);
     }
   }
 
-  return {layers: kept, dropped};
+  return {layers: kept, dropped, healed};
 }
 
 function basenameFromUrl(url: string): string {
