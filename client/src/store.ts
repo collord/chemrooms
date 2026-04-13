@@ -34,6 +34,7 @@ import {
 } from './slices/chemrooms-slice';
 import {SidebarPanel} from './components/SidebarPanel';
 import {TimeSeriesPanel} from './components/TimeSeriesPanel';
+import {registerSpatialProbeGlobal} from './dev/probeSpatial';
 
 // ---------------------------------------------------------------------------
 // Combined state type
@@ -82,6 +83,11 @@ export const DATA_BASE_URL =
 // ---------------------------------------------------------------------------
 
 const connector = createWasmDuckDbConnector();
+
+// Dev-only: expose a global `window.__chemroomsProbeSpatial()` for
+// diagnosing whether the spatial extension loads in the current
+// DuckDB-WASM bundle. No-op in production builds.
+registerSpatialProbeGlobal(() => connector);
 
 export const {roomStore, useRoomStore} = createRoomStore<RoomState>(
   (set, get, store) => ({
