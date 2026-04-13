@@ -55,6 +55,9 @@ export const LayersPanel: React.FC = () => {
   // ── Site context ────────────────────────────────────────────────────
   const viewer = useStoreWithCesium((s) => s.cesium.viewer);
   const connector = useStoreWithCesium((s) => s.db.connector);
+  const isDataAvailable = useStoreWithCesium(
+    (s) => s.room.isDataAvailable,
+  );
   const [topoVisible, setTopoVisible] = useState(true);
   const {tilesets, tilesetRefs, toggleTileset} = useTilesetManager();
   useClippingPlaneSync(tilesetRefs);
@@ -162,7 +165,10 @@ export const LayersPanel: React.FC = () => {
    */
   const handleFilesDropped = useCallback(
     async (files: FileList) => {
-      if (!connector) {
+      // The connector object exists before DuckDB-WASM is actually
+      // initialized — waiting on isDataAvailable ensures INSTALL
+      // spatial and loadFile won't hit "duckdb is not initialized".
+      if (!connector || !isDataAvailable) {
         setDropError('Database not ready yet — try again in a moment.');
         return;
       }
@@ -199,7 +205,7 @@ export const LayersPanel: React.FC = () => {
         setPersonalLayers(lastResult);
       }
     },
-    [connector, personalLayers, setPersonalLayers],
+    [connector, isDataAvailable, personalLayers, setPersonalLayers],
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {

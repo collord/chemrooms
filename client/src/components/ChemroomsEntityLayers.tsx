@@ -169,16 +169,23 @@ export const ChemroomsEntityLayers: React.FC = () => {
   }, [setPersonalLayers]);
 
   // ── Rehydrate geoparquet layers from the local blob store ─────────
-  // After migration populates personalLayers and the connector is
-  // ready, walk the list for idb:// layers and re-register their
-  // bytes into DuckDB. Layers whose bytes have been evicted get
-  // dropped from the slice and from localStorage. Runs at most
-  // once per session — rehydratedRef guards against re-entry when
+  // After migration populates personalLayers, the connector is
+  // ready, AND DuckDB-WASM is actually initialized (isDataAvailable
+  // flips true once the room store has loaded the base parquets),
+  // walk the list for idb:// layers and re-register their bytes
+  // into DuckDB. Layers whose bytes have been evicted get dropped
+  // from the slice and from localStorage. Runs at most once per
+  // session — rehydratedRef guards against re-entry when
   // personalLayers changes later (e.g., a fresh drop).
+  //
+  // The isDataAvailable gate is load-bearing: the connector object
+  // exists before DuckDB is initialized, so a check for just
+  // `connector != null` would fire too early and the INSTALL
+  // spatial call would fail with "duckdb is not initialized".
   const rehydratedRef = useRef(false);
   useEffect(() => {
     if (rehydratedRef.current) return;
-    if (!connector) return;
+    if (!connector || !isDataAvailable) return;
     // Only run once personalLayers has been populated by migration.
     // If there's nothing to hydrate, just flip the flag and move on.
     if (personalLayers.length === 0) return;
@@ -203,7 +210,7 @@ export const ChemroomsEntityLayers: React.FC = () => {
         }
       })
       .catch((e) => console.error('[rehydrate] failed:', e));
-  }, [connector, personalLayers, setPersonalLayers]);
+  }, [connector, isDataAvailable, personalLayers, setPersonalLayers]);
 
   // ── Phase 1: initial setup ─────────────────────────────────────────
   useEffect(() => {
