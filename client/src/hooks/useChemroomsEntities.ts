@@ -110,13 +110,28 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
 
       // Create entities. Each one gets a stable ID prefixed with layerId
       // so we can clean it up unambiguously.
+      //
+      // Altitude handling: a SQL NULL in the altitude column comes
+      // through as row.altitude === null. We use this as the signal
+      // that the query didn't provide an ellipsoidal height, and
+      // fall back to terrain-clamping the entity (heightReference =
+      // CLAMP_TO_GROUND with position height 0). This is how a
+      // drag-dropped 2D geoparquet ends up riding the terrain
+      // surface without the loader needing to pre-sample elevations.
+      // Rows that DO provide a numeric altitude (chemduck layers,
+      // 3D geoparquet with ST_Z) keep the absolute-position
+      // (heightReference = NONE) behavior so their coordinates
+      // aren't silently overridden.
       for (const row of rows) {
         if (cancelled) break;
         const lon = Number(row.longitude);
         const lat = Number(row.latitude);
-        const altRaw = Number(row.altitude);
         if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
-        const alt = Number.isFinite(altRaw) ? altRaw : 0;
+
+        const altRaw = row.altitude;
+        const hasExplicitAlt =
+          altRaw != null && Number.isFinite(Number(altRaw));
+        const alt = hasExplicitAlt ? Number(altRaw) : 0;
 
         const value = colorByCol ? row[colorByCol] : undefined;
         const color = colorFn(value);
@@ -133,7 +148,9 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
               color,
               outlineColor: Color.WHITE,
               outlineWidth: 1,
-              heightReference: HeightReference.NONE,
+              heightReference: hasExplicitAlt
+                ? HeightReference.NONE
+                : HeightReference.CLAMP_TO_GROUND,
             },
           });
           created.push({id});
