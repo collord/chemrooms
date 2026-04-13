@@ -39,10 +39,16 @@ function makeMockConnector() {
       catch: () => Promise.resolve(),
       finally: () => Promise.resolve(),
     }),
+    // Default to an empty-table probe response so the loader's
+    // geometry type detection falls through to 'point' (matching
+    // the pre-detection behavior). Tests that want to exercise
+    // detection override this per-call with mockResolvedValueOnce.
+    query: vi.fn().mockResolvedValue({
+      toArray: () => [],
+    }),
     // Unused but required by the type
     initialize: vi.fn(),
     destroy: vi.fn(),
-    query: vi.fn(),
     queryJson: vi.fn(),
     loadArrow: vi.fn(),
     loadObjects: vi.fn(),
@@ -249,6 +255,124 @@ describe('registerGeoparquetLayer', () => {
     if (layer.dataSource.type !== 'geoparquet') return;
     expect(layer.dataSource.geometryType).toBe('polygon');
     warn.mockRestore();
+  });
+
+  describe('geometry type auto-detection', () => {
+    it('detects POLYGON from the file and sets geometryType accordingly', async () => {
+      const connector = makeMockConnector();
+      // Probe query returns POLYGON
+      connector.query.mockResolvedValueOnce({
+        toArray: () => [{gt: 'POLYGON'}],
+      });
+      const {layer} = await registerGeoparquetLayer(
+        connector as never,
+        'https://example.com/parcels.parquet',
+      );
+      if (layer.dataSource.type !== 'geoparquet') return;
+      expect(layer.dataSource.geometryType).toBe('polygon');
+    });
+
+    it('detects LINESTRING', async () => {
+      const connector = makeMockConnector();
+      connector.query.mockResolvedValueOnce({
+        toArray: () => [{gt: 'LINESTRING'}],
+      });
+      const {layer} = await registerGeoparquetLayer(
+        connector as never,
+        'https://example.com/roads.parquet',
+      );
+      if (layer.dataSource.type !== 'geoparquet') return;
+      expect(layer.dataSource.geometryType).toBe('linestring');
+    });
+
+    it('detects MULTIPOLYGON', async () => {
+      const connector = makeMockConnector();
+      connector.query.mockResolvedValueOnce({
+        toArray: () => [{gt: 'MULTIPOLYGON'}],
+      });
+      const {layer} = await registerGeoparquetLayer(
+        connector as never,
+        'https://example.com/counties.parquet',
+      );
+      if (layer.dataSource.type !== 'geoparquet') return;
+      expect(layer.dataSource.geometryType).toBe('multipolygon');
+    });
+
+    it('is case-insensitive on the DuckDB return value', async () => {
+      const connector = makeMockConnector();
+      connector.query.mockResolvedValueOnce({
+        toArray: () => [{gt: 'polygon'}],
+      });
+      const {layer} = await registerGeoparquetLayer(
+        connector as never,
+        'https://example.com/parcels.parquet',
+      );
+      if (layer.dataSource.type !== 'geoparquet') return;
+      expect(layer.dataSource.geometryType).toBe('polygon');
+    });
+
+    it('falls back to point when the probe returns an empty table', async () => {
+      const connector = makeMockConnector();
+      // Default mock already returns empty — no need to override
+      const {layer} = await registerGeoparquetLayer(
+        connector as never,
+        'https://example.com/empty.parquet',
+      );
+      if (layer.dataSource.type !== 'geoparquet') return;
+      expect(layer.dataSource.geometryType).toBe('point');
+    });
+
+    it('falls back to point when the probe query errors', async () => {
+      const connector = makeMockConnector();
+      connector.query.mockRejectedValueOnce(new Error('probe failed'));
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const {layer} = await registerGeoparquetLayer(
+        connector as never,
+        'https://example.com/broken.parquet',
+      );
+      warn.mockRestore();
+      if (layer.dataSource.type !== 'geoparquet') return;
+      expect(layer.dataSource.geometryType).toBe('point');
+    });
+
+    it('falls back to point for unrecognized DuckDB geometry types', async () => {
+      const connector = makeMockConnector();
+      connector.query.mockResolvedValueOnce({
+        toArray: () => [{gt: 'GEOMETRYCOLLECTION'}],
+      });
+      const {layer} = await registerGeoparquetLayer(
+        connector as never,
+        'https://example.com/mixed.parquet',
+      );
+      if (layer.dataSource.type !== 'geoparquet') return;
+      expect(layer.dataSource.geometryType).toBe('point');
+    });
+
+    it('respects explicit options.geometryType over detection', async () => {
+      const connector = makeMockConnector();
+      // Probe would say POLYGON, but the user explicitly asked for linestring
+      connector.query.mockResolvedValueOnce({
+        toArray: () => [{gt: 'POLYGON'}],
+      });
+      const {layer} = await registerGeoparquetLayer(
+        connector as never,
+        'https://example.com/ambiguous.parquet',
+        {geometryType: 'linestring'},
+      );
+      if (layer.dataSource.type !== 'geoparquet') return;
+      expect(layer.dataSource.geometryType).toBe('linestring');
+    });
+
+    it('skips the probe call entirely when options.geometryType is set', async () => {
+      const connector = makeMockConnector();
+      await registerGeoparquetLayer(
+        connector as never,
+        'https://example.com/explicit.parquet',
+        {geometryType: 'polygon'},
+      );
+      // The loader should not have called query for a probe
+      expect(connector.query).not.toHaveBeenCalled();
+    });
   });
 
   it('rethrows if loadFile fails', async () => {

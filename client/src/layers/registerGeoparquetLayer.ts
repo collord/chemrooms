@@ -77,6 +77,74 @@ function tableNameFromHash(hash: string): string {
 }
 
 /**
+ * Quote an identifier for safe inclusion in SQL. Mirrors the helper
+ * in buildLayerSql so we don't create an import cycle. DuckDB uses
+ * double quotes; we strip anything that isn't a word character as
+ * defense-in-depth.
+ */
+function quoteIdent(name: string): string {
+  const cleaned = name.replace(/[^a-zA-Z0-9_]/g, '');
+  return `"${cleaned}"`;
+}
+
+/**
+ * Map a DuckDB spatial ST_GeometryType string onto our schema's
+ * geometryType enum. Returns null for types we don't recognize
+ * (e.g. GEOMETRYCOLLECTION, which the vector renderer can't handle).
+ */
+function mapDuckDbGeometryType(
+  raw: unknown,
+): GeoParquetDataSource['geometryType'] | null {
+  if (typeof raw !== 'string') return null;
+  switch (raw.toUpperCase()) {
+    case 'POINT':
+      return 'point';
+    case 'MULTIPOINT':
+      return 'multipoint';
+    case 'LINESTRING':
+      return 'linestring';
+    case 'MULTILINESTRING':
+      return 'multilinestring';
+    case 'POLYGON':
+      return 'polygon';
+    case 'MULTIPOLYGON':
+      return 'multipolygon';
+    default:
+      return null;
+  }
+}
+
+/**
+ * Probe the registered table to learn its actual geometry type.
+ * Runs AFTER loadFile and AFTER spatial is loaded. Returns null on
+ * any failure (empty table, query error, unrecognized type) so the
+ * caller can fall back gracefully.
+ */
+async function detectGeometryType(
+  connector: DuckDbConnector,
+  tableName: string,
+  geometryColumn: string,
+  encoding: GeoParquetDataSource['geometryEncoding'],
+): Promise<GeoParquetDataSource['geometryType'] | null> {
+  const tableIdent = quoteIdent(tableName);
+  const geomIdent = quoteIdent(geometryColumn);
+  const geomExpr =
+    encoding === 'wkb' ? `ST_GeomFromWKB(${geomIdent})` : geomIdent;
+  const sql = `SELECT ST_GeometryType(${geomExpr}) AS gt FROM ${tableIdent} WHERE ${geomIdent} IS NOT NULL LIMIT 1`;
+  try {
+    const result = await connector.query(sql);
+    const rows = result.toArray() as Array<{gt?: unknown}>;
+    return mapDuckDbGeometryType(rows[0]?.gt);
+  } catch (e) {
+    console.warn(
+      '[registerGeoparquetLayer] geometry type probe failed:',
+      e,
+    );
+    return null;
+  }
+}
+
+/**
  * One-time spatial extension load. The promise is cached so
  * concurrent calls share the same INSTALL/LOAD invocation and
  * subsequent calls are no-ops.
@@ -183,6 +251,25 @@ export async function registerGeoparquetLayer(
     });
   }
 
+  // Probe the actual geometry type of the registered table. This is
+  // the load-bearing fix for "dragged in a polygon file but the
+  // layer renders as points and the query fails" — the loader now
+  // actually inspects the data instead of blindly defaulting.
+  // Explicit options.geometryType still wins, then the probe result,
+  // then 'point' as a last resort.
+  const effectiveEncoding = options.geometryEncoding ?? 'native';
+  const effectiveGeometryColumn = options.geometryColumn ?? 'geometry';
+  const detectedGeometryType = options.geometryType
+    ? null
+    : await detectGeometryType(
+        connector,
+        tableName,
+        effectiveGeometryColumn,
+        effectiveEncoding,
+      );
+  const resolvedGeometryType =
+    options.geometryType ?? detectedGeometryType ?? 'point';
+
   // Build the layer config. Run through parseLayerConfig so all the
   // schema defaults get filled in. Default encoding is 'native'
   // because loadFile(read_parquet) + a loaded spatial extension
@@ -197,9 +284,9 @@ export async function registerGeoparquetLayer(
       url: sourceUrl,
       tableName,
       geometryColumn: options.geometryColumn,
-      geometryType: options.geometryType,
+      geometryType: resolvedGeometryType,
       is3d: options.is3d,
-      geometryEncoding: options.geometryEncoding ?? 'native',
+      geometryEncoding: effectiveEncoding,
     },
     visible: true,
     createdAt: new Date().toISOString(),
