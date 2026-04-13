@@ -6,69 +6,74 @@
  * the spatial extension is loaded, and produces a freshly-frozen
  * LayerConfig pointing at the new table.
  *
- * The big idea: the user drops a file, this function does the work
- * to get it queryable and visible, and the rest of the layer
- * pipeline (buildLayerSql → useChemroomsEntities) handles rendering
- * unchanged.
+ * ## Two input paths
+ *
+ * **File input** (drag-and-drop): bytes are read, SHA-256-hashed,
+ * stored in the local content-addressed blob store
+ * ([blobStore.ts](./blobStore.ts)) keyed by that hash, registered
+ * into DuckDB under a table name deterministically derived from
+ * the hash, and returned as a persistable layer config whose URL is
+ * `idb://<hash>`. Dropping the same file twice produces the same
+ * hash → same table name → same layer id → deduped across sessions.
+ * Reloading re-materializes the layer via rehydrateGeoparquetLayers
+ * (reads bytes back from IDB, re-registers).
+ *
+ * **URL input** (layer config with a URL): bytes come from the URL.
+ * The table name is derived from the URL string hash so dedupe
+ * still works, but no IDB write — the URL is the persistent pointer.
  *
  * ## What it does NOT do (yet)
  *
- * - **Verify expectedHash.** When the layer config has a pin set,
- *   we should SHA-256 the bytes before registration and reject on
- *   mismatch. Deferred because (a) the freshly-dropped path doesn't
- *   have a pin yet, and (b) hashing is async and adds latency we
- *   want to budget for deliberately.
+ * - **Verify expectedHash for URL inputs.** When the layer config
+ *   has a pin set on a URL source, we should SHA-256 the fetched
+ *   bytes and reject on mismatch. Deferred.
  *
  * - **Read the parquet `geo` metadata.** A real geoparquet file
  *   carries the geometry column name, geometry type, CRS, and bbox
  *   in a JSON metadata key. Reading that and using it to default
- *   the layer config fields would be a big UX win — the user
- *   wouldn't need to specify `geometryColumn` at all for any
- *   spec-compliant file. Deferred because parsing parquet metadata
- *   in-browser is its own engineering chunk; for now we trust the
- *   geoparquet convention (column = `geometry`, type = point) and
- *   the user can override via the layer config.
+ *   the layer config fields would be a big UX win for files with
+ *   non-convention column names. Deferred because parsing parquet
+ *   metadata in-browser is its own engineering chunk.
  *
  * - **Reproject non-WGS84 sources.** If `sourceCrs` is set and
  *   isn't EPSG:4326, we should run `ST_Transform` at registration
- *   time to materialize a 4326 view. Deferred because it requires
- *   PROJ data in DuckDB-WASM, which I haven't verified is bundled
- *   in the chemrooms environment.
+ *   time. Deferred because it requires PROJ data in DuckDB-WASM.
  *
- * - **Handle non-point geometries.** Until the vector renderer
- *   exists, registering a polygon geoparquet succeeds but the
+ * - **Handle non-point geometries.** Registration succeeds but the
  *   layer renders nothing (buildLayerSql returns null for non-point
- *   types). The function logs a warning so the user knows.
- *
- * Each of these is a labeled TODO that the next session can pick
- * up incrementally without rewriting this loader.
+ *   types) until the vector renderer exists.
  */
 
 import type {DuckDbConnector} from '@sqlrooms/duckdb';
 import {
-  freezeCurrentState,
   GeoParquetDataSource,
   parseLayerConfig,
   type LayerConfig,
 } from './layerSchema';
 import {computeLayerHash} from './layerHash';
+import {
+  getBlob,
+  makeIdbUrl,
+  parseIdbUrl,
+  putBlob,
+  sha256Hex,
+} from './blobStore';
 
 /**
- * Sanitize a user-provided string into a safe DuckDB table name.
- * Only word characters and digits survive; anything else is
- * replaced with `_`. We prefix with `t_` so a leading digit (which
- * isn't a valid identifier start in some SQL dialects) is always
- * valid, and append a short hash so two files with the same name
- * (`wells.parquet` from different folders) don't collide.
+ * Deterministic DuckDB table name derived from a content hash.
+ *
+ * Using the hash as the table name (rather than a random suffix)
+ * means the same bytes always produce the same table name — so on
+ * reload, rehydrateGeoparquetLayers can re-register the bytes under
+ * the same name and the saved layer config's `tableName` stays
+ * valid. Also enables content-addressed dedupe: two drops of the
+ * same file collapse to one table and one layer.
  */
-function makeTableName(rawName: string, suffix: string): string {
-  const cleaned = rawName.replace(/[^a-zA-Z0-9_]/g, '_').replace(/^_+/, '');
-  return `t_${cleaned || 'layer'}_${suffix}`;
-}
-
-/** Short random suffix for table-name disambiguation. Not a hash. */
-function shortRandom(): string {
-  return Math.random().toString(36).slice(2, 8);
+function tableNameFromHash(hash: string): string {
+  // First 16 hex chars is plenty of collision resistance for the
+  // table-name namespace (you'd need 2^32 distinct tables before
+  // collisions become likely).
+  return `t_geoparquet_${hash.slice(0, 16)}`;
 }
 
 /**
@@ -129,6 +134,11 @@ export interface RegisterGeoparquetResult {
  * produce a LayerConfig for it. Caller is responsible for adding
  * the result to the personal-layers slice (so this function stays
  * decoupled from React state).
+ *
+ * For File inputs, bytes are also persisted to the local content-
+ * addressed blob store (IDB), and the returned layer config's URL
+ * is `idb://<sha256>`. That makes the layer restorable on reload —
+ * see rehydrateGeoparquetLayers.
  */
 export async function registerGeoparquetLayer(
   connector: DuckDbConnector,
@@ -141,36 +151,43 @@ export async function registerGeoparquetLayer(
     options.displayName ??
     (source instanceof File ? source.name : basenameFromUrl(source));
   const displayName = stripExtension(rawName);
-  const tableName = makeTableName(displayName, shortRandom());
 
-  // loadFile handles both File and URL inputs and dispatches based
-  // on the method option. For geoparquet we use plain read_parquet
-  // because it's the cheapest; the spatial extension's WKB decoding
-  // happens at query time via ST_GeomFromWKB (see buildLayerSql).
-  await connector.loadFile(source, tableName, {method: 'read_parquet'});
+  let tableName: string;
+  let sourceUrl: string;
+
+  if (source instanceof File) {
+    // Hash the bytes, store in IDB, derive table name from the hash.
+    // Dropping the same file twice (same bytes) → same hash → same
+    // table name → dedupes at the layer-id level too.
+    const buffer = new Uint8Array(await source.arrayBuffer());
+    const hash = await putBlob(buffer);
+    tableName = tableNameFromHash(hash);
+    sourceUrl = makeIdbUrl(hash);
+    // Register into DuckDB from the original File (avoids re-wrapping
+    // the bytes). Safe to call loadFile even if the table already
+    // exists? We pass replace to be explicit.
+    await connector.loadFile(source, tableName, {
+      method: 'read_parquet',
+      replace: true,
+    });
+  } else {
+    // URL input: hash the URL string so repeated registrations of
+    // the same URL share a table name (dedupe), but don't write to
+    // IDB — the URL is already the persistent pointer.
+    const urlHash = await sha256Hex(new TextEncoder().encode(source));
+    tableName = tableNameFromHash(urlHash);
+    sourceUrl = source;
+    await connector.loadFile(source, tableName, {
+      method: 'read_parquet',
+      replace: true,
+    });
+  }
 
   // Build the layer config. Run through parseLayerConfig so all the
-  // schema defaults (geometryColumn='geometry', geometryType='point',
-  // is3d=false, geometryEncoding='wkb', etc.) get filled in.
-  //
-  // For File sources we fabricate a `session:` URL. This marks the
-  // layer as ephemeral — the bytes aren't reachable from any URL the
-  // browser can re-fetch, so the layer can only exist for this
-  // session. layerStorage's isEphemeralLayer checks this prefix and
-  // refuses to persist such layers to localStorage, and the load-time
-  // migration filters them out if they somehow got there (e.g., from
-  // a prior version of this code that did persist them).
-  const sourceUrl =
-    source instanceof File
-      ? `session:${encodeURIComponent(source.name)}`
-      : source;
-
-  // Default encoding is 'native' because loadFile(read_parquet) + a
-  // loaded spatial extension auto-decodes a geoparquet's WKB geometry
-  // column into a native GEOMETRY type. The dispatcher's ST_GeomFromWKB
-  // wrap is only needed for the (hypothetical) case where someone has
-  // a plain parquet with a BLOB column they want to interpret as WKB
-  // — not the path this loader takes.
+  // schema defaults get filled in. Default encoding is 'native'
+  // because loadFile(read_parquet) + a loaded spatial extension
+  // auto-decodes a geoparquet's WKB geometry column into a native
+  // GEOMETRY type.
   const draft = parseLayerConfig({
     version: 1,
     id: '',
@@ -212,11 +229,78 @@ export async function registerGeoparquetLayer(
   return {tableName, layer};
 }
 
-// freezeCurrentState is imported above only so the file shows up in
-// the schema's dependency graph; the loader builds layers via
-// parseLayerConfig directly because it needs full control over the
-// dataSource shape (freezeCurrentState only knows about chemduck).
-void freezeCurrentState;
+/**
+ * Rehydrate geoparquet layers that live in the local blob store.
+ *
+ * Runs on app boot after the connector is ready. Walks the personal
+ * layer list, finds entries whose URL is `idb://<hash>`, loads the
+ * bytes from the blob store, and re-registers them into DuckDB
+ * under the same (deterministic) table name. Layers whose bytes
+ * have been evicted from IDB — quota pressure, user cleared site
+ * data, etc. — are dropped from the returned list so the slice
+ * isn't left with dangling references.
+ *
+ * Returns the filtered layer list. Callers are responsible for
+ * feeding it back into the slice and writing the cleanup to
+ * localStorage if any layers were dropped.
+ */
+export async function rehydrateGeoparquetLayers(
+  connector: DuckDbConnector,
+  layers: LayerConfig[],
+): Promise<{layers: LayerConfig[]; dropped: number}> {
+  let spatialLoaded = false;
+  const kept: LayerConfig[] = [];
+  let dropped = 0;
+
+  for (const layer of layers) {
+    if (layer.dataSource.type !== 'geoparquet') {
+      kept.push(layer);
+      continue;
+    }
+    const url = layer.dataSource.url;
+    const hash = parseIdbUrl(url);
+    if (hash === null) {
+      // Not an idb:// URL — a URL-backed layer, leave it alone.
+      // The caller (or the dispatcher hitting loadFile lazily)
+      // handles URL-backed registration.
+      kept.push(layer);
+      continue;
+    }
+
+    const bytes = await getBlob(hash);
+    if (!bytes) {
+      console.warn(
+        `[rehydrate] blob ${hash.slice(0, 12)}... missing for layer "${layer.name}" — dropping`,
+      );
+      dropped += 1;
+      continue;
+    }
+
+    if (!spatialLoaded) {
+      await ensureSpatialLoaded(connector);
+      spatialLoaded = true;
+    }
+
+    const file = new File([bytes as BlobPart], `${layer.name}.parquet`, {
+      type: 'application/octet-stream',
+    });
+    try {
+      await connector.loadFile(file, layer.dataSource.tableName, {
+        method: 'read_parquet',
+        replace: true,
+      });
+      kept.push(layer);
+    } catch (e) {
+      console.error(
+        `[rehydrate] failed to re-register layer "${layer.name}":`,
+        e,
+      );
+      dropped += 1;
+    }
+  }
+
+  return {layers: kept, dropped};
+}
 
 function basenameFromUrl(url: string): string {
   try {

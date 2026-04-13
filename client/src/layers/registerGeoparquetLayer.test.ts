@@ -8,12 +8,22 @@
  * has to be smoke-tested in the browser.
  */
 
-import {describe, it, expect, vi, beforeEach} from 'vitest';
+import {describe, it, expect, vi, beforeEach, afterAll} from 'vitest';
 import {
   registerGeoparquetLayer,
+  rehydrateGeoparquetLayers,
   _resetSpatialReadyForTesting,
 } from './registerGeoparquetLayer';
 import {computeLayerHash} from './layerHash';
+import {
+  _resetBlobBackendForTesting,
+  _setBlobBackendForTesting,
+  deleteBlob,
+  InMemoryBlobBackend,
+  listBlobHashes,
+  parseIdbUrl,
+} from './blobStore';
+import {freezeCurrentState} from './layerSchema';
 
 function makeMockConnector() {
   return {
@@ -41,6 +51,14 @@ function makeMockConnector() {
 
 beforeEach(() => {
   _resetSpatialReadyForTesting();
+  // Swap in the in-memory blob backend so the loader's File path
+  // doesn't try to hit real IndexedDB (which happy-dom doesn't
+  // provide). Production code uses IdbBlobBackend; tests use this.
+  _setBlobBackendForTesting(new InMemoryBlobBackend());
+});
+
+afterAll(() => {
+  _resetBlobBackendForTesting();
 });
 
 describe('registerGeoparquetLayer', () => {
@@ -71,7 +89,7 @@ describe('registerGeoparquetLayer', () => {
     expect(installs).toHaveLength(1);
   });
 
-  it('calls loadFile with the URL and a sanitized tableName', async () => {
+  it('calls loadFile with the URL and a hash-derived tableName', async () => {
     const connector = makeMockConnector();
     const result = await registerGeoparquetLayer(
       connector as never,
@@ -83,31 +101,56 @@ describe('registerGeoparquetLayer', () => {
       'https://example.com/path/to/regulator wells 2024.parquet',
     );
     expect(tableName).toBe(result.tableName);
-    expect(tableName).toMatch(/^t_regulator_wells_2024_[a-z0-9]+$/);
-    expect(opts).toEqual({method: 'read_parquet'});
+    // Table name derived from the URL hash, not a random suffix, so
+    // it's stable across sessions.
+    expect(tableName).toMatch(/^t_geoparquet_[0-9a-f]{16}$/);
+    expect(opts).toEqual({method: 'read_parquet', replace: true});
   });
 
-  it('accepts a File and uses its name', async () => {
+  it('accepts a File, hashes its bytes, and stores them in the blob store', async () => {
     const connector = makeMockConnector();
     const file = new File([new Uint8Array([1, 2, 3])], 'monitoring.parquet', {
       type: 'application/octet-stream',
     });
     const result = await registerGeoparquetLayer(connector as never, file);
+
+    // The File is still what gets passed to loadFile (cheapest path)
     const [source, tableName] = connector.loadFile.mock.calls[0]!;
     expect(source).toBe(file);
-    expect(tableName).toMatch(/^t_monitoring_[a-z0-9]+$/);
+    // Table name is hash-derived, not filename-derived
+    expect(tableName).toMatch(/^t_geoparquet_[0-9a-f]{16}$/);
     expect(result.layer.name).toBe('monitoring');
+
+    // The bytes got stashed in the blob store
+    const hashes = await listBlobHashes();
+    expect(hashes).toHaveLength(1);
+    expect(hashes[0]).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it('tags File-sourced layers with a session: URL (ephemeral marker)', async () => {
+  it('tags File-sourced layers with an idb:// URL (persistable)', async () => {
     const connector = makeMockConnector();
     const file = new File([new Uint8Array([1, 2, 3])], 'monitoring.parquet', {
       type: 'application/octet-stream',
     });
     const {layer} = await registerGeoparquetLayer(connector as never, file);
     if (layer.dataSource.type !== 'geoparquet') return;
-    expect(layer.dataSource.url.startsWith('session:')).toBe(true);
-    expect(layer.dataSource.url).toContain('monitoring.parquet');
+    expect(layer.dataSource.url.startsWith('idb://')).toBe(true);
+    // The URL should encode the SHA-256 of the file bytes
+    const hash = parseIdbUrl(layer.dataSource.url);
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('dedupes by content hash: dropping the same bytes twice yields one blob and one layer id', async () => {
+    const connector = makeMockConnector();
+    const file1 = new File([new Uint8Array([1, 2, 3])], 'a.parquet');
+    const file2 = new File([new Uint8Array([1, 2, 3])], 'b.parquet');
+    const r1 = await registerGeoparquetLayer(connector as never, file1);
+    const r2 = await registerGeoparquetLayer(connector as never, file2);
+    // Same bytes → same table name → same layer id
+    expect(r1.tableName).toBe(r2.tableName);
+    expect(r1.layer.id).toBe(r2.layer.id);
+    // Only one blob in the store
+    expect((await listBlobHashes()).length).toBe(1);
   });
 
   it('uses the real URL for URL-sourced layers (persistable)', async () => {
@@ -118,6 +161,15 @@ describe('registerGeoparquetLayer', () => {
     );
     if (layer.dataSource.type !== 'geoparquet') return;
     expect(layer.dataSource.url).toBe('https://example.com/wells.parquet');
+  });
+
+  it('does not touch the blob store for URL-sourced layers', async () => {
+    const connector = makeMockConnector();
+    await registerGeoparquetLayer(
+      connector as never,
+      'https://example.com/wells.parquet',
+    );
+    expect(await listBlobHashes()).toHaveLength(0);
   });
 
   it('produces a layer config whose id equals its content hash', async () => {
@@ -208,5 +260,114 @@ describe('registerGeoparquetLayer', () => {
         'https://example.com/broken.parquet',
       ),
     ).rejects.toThrow('parquet read failed');
+  });
+});
+
+describe('rehydrateGeoparquetLayers', () => {
+  it('re-registers idb:// layers by loading bytes from the blob store', async () => {
+    // Setup: drop a file this session
+    const connector1 = makeMockConnector();
+    const file = new File([new Uint8Array([10, 20, 30, 40])], 'wells.parquet');
+    const {layer} = await registerGeoparquetLayer(connector1 as never, file);
+
+    // Now simulate a reload: fresh connector, the layer config lives
+    // in localStorage and the bytes live in the blob store
+    const connector2 = makeMockConnector();
+    const result = await rehydrateGeoparquetLayers(connector2 as never, [
+      layer,
+    ]);
+
+    expect(result.dropped).toBe(0);
+    expect(result.layers).toHaveLength(1);
+    expect(result.layers[0]!.id).toBe(layer.id);
+
+    // The new connector should have had loadFile called exactly once
+    // with a reconstructed File and the same table name
+    expect(connector2.loadFile).toHaveBeenCalledTimes(1);
+    const [source, tableName] = connector2.loadFile.mock.calls[0]!;
+    expect(source).toBeInstanceOf(File);
+    if (layer.dataSource.type !== 'geoparquet') return;
+    expect(tableName).toBe(layer.dataSource.tableName);
+  });
+
+  it('drops layers whose blob is missing from the store', async () => {
+    const connector1 = makeMockConnector();
+    const file = new File([new Uint8Array([1, 2, 3])], 'missing.parquet');
+    const {layer} = await registerGeoparquetLayer(connector1 as never, file);
+
+    // Simulate the user clearing site data between sessions: the
+    // layer config is still in localStorage but the blob is gone.
+    if (layer.dataSource.type !== 'geoparquet') return;
+    const hash = parseIdbUrl(layer.dataSource.url)!;
+    await deleteBlob(hash);
+
+    const connector2 = makeMockConnector();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const result = await rehydrateGeoparquetLayers(connector2 as never, [
+      layer,
+    ]);
+    warn.mockRestore();
+
+    expect(result.dropped).toBe(1);
+    expect(result.layers).toHaveLength(0);
+    expect(connector2.loadFile).not.toHaveBeenCalled();
+  });
+
+  it('passes through non-geoparquet layers unchanged', async () => {
+    const connector = makeMockConnector();
+    const chemduck = await freezeCurrentState({
+      name: 'Benzene',
+      analyte: 'Benzene',
+      matrix: 'groundwater',
+      eventAgg: 'most_recent',
+      dupAgg: 'avg',
+      ndMethod: 'half_dl',
+      colorBy: 'result',
+    });
+    const result = await rehydrateGeoparquetLayers(connector as never, [
+      chemduck,
+    ]);
+    expect(result.dropped).toBe(0);
+    expect(result.layers).toHaveLength(1);
+    expect(result.layers[0]!.id).toBe(chemduck.id);
+    expect(connector.loadFile).not.toHaveBeenCalled();
+  });
+
+  it('passes through URL-backed geoparquet layers without rehydrating', async () => {
+    // URL-backed layers are their own persistence story (the URL is
+    // re-fetchable). The rehydrator should leave them alone.
+    const connector1 = makeMockConnector();
+    const {layer} = await registerGeoparquetLayer(
+      connector1 as never,
+      'https://example.com/wells.parquet',
+    );
+
+    const connector2 = makeMockConnector();
+    const result = await rehydrateGeoparquetLayers(connector2 as never, [
+      layer,
+    ]);
+    expect(result.layers).toHaveLength(1);
+    expect(connector2.loadFile).not.toHaveBeenCalled();
+  });
+
+  it('loads spatial only once across the rehydration batch', async () => {
+    const connector1 = makeMockConnector();
+    const a = await registerGeoparquetLayer(
+      connector1 as never,
+      new File([new Uint8Array([1])], 'a.parquet'),
+    );
+    const b = await registerGeoparquetLayer(
+      connector1 as never,
+      new File([new Uint8Array([2])], 'b.parquet'),
+    );
+
+    _resetSpatialReadyForTesting();
+    const connector2 = makeMockConnector();
+    await rehydrateGeoparquetLayers(connector2 as never, [a.layer, b.layer]);
+
+    const installs = connector2.execute.mock.calls
+      .map((c) => c[0])
+      .filter((s: string) => s === 'INSTALL spatial');
+    expect(installs).toHaveLength(1);
   });
 });

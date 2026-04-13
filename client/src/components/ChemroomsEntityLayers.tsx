@@ -42,7 +42,12 @@ import {buildSamplesLayerSql} from '../setup/buildSamplesLayerSql';
 import {buildLayerSql} from '../layers/buildLayerSql';
 import {ChemroomsEntityLayer} from './ChemroomsEntityLayer';
 import {DATA_BASE_URL} from '../store';
-import {migratePersonalLayers} from '../layers/layerStorage';
+import {
+  isEphemeralLayer,
+  migratePersonalLayers,
+  savePersonalLayers,
+} from '../layers/layerStorage';
+import {rehydrateGeoparquetLayers} from '../layers/registerGeoparquetLayer';
 import type {LayerConfig} from '../layers/layerSchema';
 
 const VIS_SPEC_TABLES = [
@@ -162,6 +167,43 @@ export const ChemroomsEntityLayers: React.FC = () => {
       cancelled = true;
     };
   }, [setPersonalLayers]);
+
+  // ── Rehydrate geoparquet layers from the local blob store ─────────
+  // After migration populates personalLayers and the connector is
+  // ready, walk the list for idb:// layers and re-register their
+  // bytes into DuckDB. Layers whose bytes have been evicted get
+  // dropped from the slice and from localStorage. Runs at most
+  // once per session — rehydratedRef guards against re-entry when
+  // personalLayers changes later (e.g., a fresh drop).
+  const rehydratedRef = useRef(false);
+  useEffect(() => {
+    if (rehydratedRef.current) return;
+    if (!connector) return;
+    // Only run once personalLayers has been populated by migration.
+    // If there's nothing to hydrate, just flip the flag and move on.
+    if (personalLayers.length === 0) return;
+
+    rehydratedRef.current = true;
+    rehydrateGeoparquetLayers(connector, personalLayers)
+      .then((result) => {
+        if (result.dropped > 0) {
+          console.warn(
+            `[rehydrate] dropped ${result.dropped} layer(s) with missing blobs`,
+          );
+          setPersonalLayers(result.layers);
+          // Rewrite localStorage without the broken entries so we
+          // don't try to rehydrate them again next session.
+          savePersonalLayers(
+            result.layers.filter((l) => !isEphemeralLayer(l)),
+          );
+        } else {
+          console.log(
+            `[rehydrate] ${result.layers.length} personal layer(s) rehydrated`,
+          );
+        }
+      })
+      .catch((e) => console.error('[rehydrate] failed:', e));
+  }, [connector, personalLayers, setPersonalLayers]);
 
   // ── Phase 1: initial setup ─────────────────────────────────────────
   useEffect(() => {

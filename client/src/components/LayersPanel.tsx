@@ -11,7 +11,8 @@
  *      - Locations (cyan overview when no analyte)
  *      - Samples (cyan overview or per-result colored when analyte set)
  *
- *   3. Frozen layers — saved snapshots from the Freeze Layer button.
+ *   3. Workspace — saved snapshots from the Freeze Layer button,
+ *      plus any drag-dropped geoparquet files in this session.
  *      Each row has visibility checkbox + delete button.
  *
  * Replaces the old hamburger LayersMenu — there's now exactly one
@@ -93,7 +94,7 @@ export const LayersPanel: React.FC = () => {
     (s) => s.chemrooms.config.coloringAnalyte,
   );
 
-  // ── Frozen layers ───────────────────────────────────────────────────
+  // ── Workspace ───────────────────────────────────────────────────────
   const personalLayers = useChemroomsStore(
     (s) => s.chemrooms.personalLayers,
   );
@@ -348,9 +349,9 @@ export const LayersPanel: React.FC = () => {
             onChange={() => setSamplesVisible(!samplesVisible)}
           />
 
-          {/* ── Frozen layers ──────────────────────────────────────── */}
+          {/* ── Workspace ──────────────────────────────────────────── */}
           <SectionLabel>
-            Frozen layers
+            Workspace
             {personalLayers.length > 0 && (
               <span className="ml-1 text-[10px] tabular-nums opacity-60">
                 ({personalLayers.length})
