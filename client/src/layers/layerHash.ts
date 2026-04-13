@@ -44,14 +44,26 @@ function canonicalize(layer: LayerConfig): string {
 }
 
 function canonicalizeDataSource(ds: LayerConfig['dataSource']): unknown {
-  // Discriminated union — branch on type then list fields in known order
+  // Discriminated union — branch on type then list fields in known order.
+  // expectedHash (the pin/float marker) is included for URL-based variants
+  // so a pinned and an unpinned reference to the same URL produce
+  // different layer ids.
   switch (ds.type) {
     case 'chemduck':
       return {type: 'chemduck'};
     case 'geoparquet':
-      return {type: 'geoparquet', url: ds.url, tableName: ds.tableName};
+      return {
+        type: 'geoparquet',
+        url: ds.url,
+        tableName: ds.tableName,
+        expectedHash: ds.expectedHash ?? null,
+      };
     case 'geojson':
-      return {type: 'geojson', url: ds.url};
+      return {
+        type: 'geojson',
+        url: ds.url,
+        expectedHash: ds.expectedHash ?? null,
+      };
     case 'geojson-inline':
       // Inline data is already JSON; we use it directly
       return {type: 'geojson-inline', data: ds.data};
@@ -65,6 +77,7 @@ function canonicalizeDataSource(ds: LayerConfig['dataSource']): unknown {
           east: ds.extent.east,
           north: ds.extent.north,
         },
+        expectedHash: ds.expectedHash ?? null,
       };
   }
 }

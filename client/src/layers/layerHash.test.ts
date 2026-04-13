@@ -193,6 +193,125 @@ describe('computeLayerHash', () => {
       expect(a).not.toBe(b);
     });
   });
+
+  describe('pin vs float distinction on URL data sources', () => {
+    const baseUrl = 'https://example.com/wells.parquet';
+    const pinHash =
+      'sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+    const otherPinHash =
+      'sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210';
+
+    it('floating and pinned refs to the same URL produce different hashes', async () => {
+      const floating = await computeLayerHash(
+        makeLayer({
+          dataSource: {
+            type: 'geoparquet',
+            url: baseUrl,
+            tableName: 'wells',
+          },
+        }),
+      );
+      const pinned = await computeLayerHash(
+        makeLayer({
+          dataSource: {
+            type: 'geoparquet',
+            url: baseUrl,
+            tableName: 'wells',
+            expectedHash: pinHash,
+          },
+        }),
+      );
+      expect(floating).not.toBe(pinned);
+    });
+
+    it('two pins to different bytes produce different hashes', async () => {
+      const a = await computeLayerHash(
+        makeLayer({
+          dataSource: {
+            type: 'geoparquet',
+            url: baseUrl,
+            tableName: 'wells',
+            expectedHash: pinHash,
+          },
+        }),
+      );
+      const b = await computeLayerHash(
+        makeLayer({
+          dataSource: {
+            type: 'geoparquet',
+            url: baseUrl,
+            tableName: 'wells',
+            expectedHash: otherPinHash,
+          },
+        }),
+      );
+      expect(a).not.toBe(b);
+    });
+
+    it('two pins to the same bytes produce the same hash', async () => {
+      const a = await computeLayerHash(
+        makeLayer({
+          dataSource: {
+            type: 'geoparquet',
+            url: baseUrl,
+            tableName: 'wells',
+            expectedHash: pinHash,
+          },
+        }),
+      );
+      const b = await computeLayerHash(
+        makeLayer({
+          dataSource: {
+            type: 'geoparquet',
+            url: baseUrl,
+            tableName: 'wells',
+            expectedHash: pinHash,
+          },
+        }),
+      );
+      expect(a).toBe(b);
+    });
+
+    it('two floating refs to the same URL produce the same hash', async () => {
+      const a = await computeLayerHash(
+        makeLayer({
+          dataSource: {
+            type: 'geoparquet',
+            url: baseUrl,
+            tableName: 'wells',
+          },
+        }),
+      );
+      const b = await computeLayerHash(
+        makeLayer({
+          dataSource: {
+            type: 'geoparquet',
+            url: baseUrl,
+            tableName: 'wells',
+          },
+        }),
+      );
+      expect(a).toBe(b);
+    });
+
+    it('applies pin/float to geojson sources too', async () => {
+      const floating = await computeLayerHash(
+        makeLayer({
+          dataSource: {type: 'geojson', url: baseUrl},
+        }),
+      );
+      const pinned = await computeLayerHash(
+        makeLayer({
+          dataSource: {
+            type: 'geojson',
+            url: baseUrl,
+            expectedHash: pinHash,
+          },
+        }),
+      );
+      expect(floating).not.toBe(pinned);
+    });
+  });
 });
 
 describe('isHashedId', () => {

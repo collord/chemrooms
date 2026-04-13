@@ -55,6 +55,43 @@ import {computeLayerHash} from './layerHash';
 // Data source types
 // ---------------------------------------------------------------------------
 
+/**
+ * The `dataSource` field is a typed reference: a discriminated union
+ * keyed on `type`, where each variant identifies a different way of
+ * resolving the layer's data. Future variants will include `blob`
+ * (content-addressed bucket lookup), `alias` (named pointer at a blob),
+ * and `preset` (institutional opinion library) — see the data
+ * architecture proposal for the full vision. For now chemrooms only
+ * uses `chemduck` (the in-process DuckDB schema, a "system" reference)
+ * and the URL-based variants below.
+ *
+ * ## Pin vs float
+ *
+ * URL-based references are by-name, not by-content: the bytes at
+ * `url` can change between visits without the reference itself
+ * changing. By default this means a URL ref is **floating** — it
+ * always resolves to whatever's at the URL right now, and the layer's
+ * content hash captures only the URL string.
+ *
+ * To **pin** a URL ref to specific bytes, set `expectedHash` to the
+ * SHA-256 of the file. The loader can then verify the bytes match,
+ * and pinned refs participate in the layer's content hash, so a
+ * pinned and an unpinned reference to the same URL produce different
+ * layer ids. Pinning is what makes a deliverable reproducible: a
+ * regulator submission from a year ago renders the same data today
+ * because the bytes were pinned at publication time.
+ *
+ * ## Hash format
+ *
+ * Hashes inside `expectedHash` and future blob/alias references use
+ * the algorithm-prefixed form `sha256:<hex>` so the schema can
+ * accommodate other hash functions later without ambiguity. The
+ * layer's own `id` is currently a bare 16-character hex truncation
+ * of the SHA-256 — that legacy is preserved to avoid a second
+ * migration of localStorage entries; the algorithm-prefix migration
+ * for layer ids is intentionally deferred.
+ */
+
 /** Bounding box in WGS84 degrees. */
 export const Extent = z.object({
   west: z.number(),
@@ -63,6 +100,15 @@ export const Extent = z.object({
   north: z.number(),
 });
 export type Extent = z.infer<typeof Extent>;
+
+/**
+ * Algorithm-prefixed content hash, e.g. `sha256:3b7e3c6c5e...`. Used
+ * to pin URL-based references to specific bytes for reproducibility.
+ */
+export const ContentHash = z
+  .string()
+  .regex(/^sha256:[0-9a-f]{64}$/, 'expected sha256:<64-hex>');
+export type ContentHash = z.infer<typeof ContentHash>;
 
 export const ChemduckDataSource = z.object({
   type: z.literal('chemduck'),
@@ -74,12 +120,16 @@ export const GeoParquetDataSource = z.object({
   url: z.string(),
   /** Table name to register in DuckDB-WASM after loading. */
   tableName: z.string(),
+  /** Optional pin: if set, loader verifies the bytes match. */
+  expectedHash: ContentHash.optional(),
 });
 
 export const GeoJsonDataSource = z.object({
   type: z.literal('geojson'),
   /** URL to the .geojson file. */
   url: z.string(),
+  /** Optional pin: if set, loader verifies the bytes match. */
+  expectedHash: ContentHash.optional(),
 });
 
 export const GeoJsonInlineDataSource = z.object({
@@ -94,6 +144,8 @@ export const ImageryDataSource = z.object({
   url: z.string(),
   /** Geographic extent the image covers. */
   extent: Extent,
+  /** Optional pin: if set, loader verifies the bytes match. */
+  expectedHash: ContentHash.optional(),
 });
 
 export const DataSource = z.discriminatedUnion('type', [

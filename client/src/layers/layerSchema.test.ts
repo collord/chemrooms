@@ -8,6 +8,7 @@
 
 import {describe, it, expect} from 'vitest';
 import {
+  ContentHash,
   freezeCurrentState,
   parseLayerConfig,
   serializeLayerForUrl,
@@ -117,6 +118,89 @@ describe('parseLayerConfig', () => {
     expect(result).not.toBeNull();
     expect(result?.dataSource.type).toBe('chemduck');
     expect(result?.visible).toBe(true);
+  });
+});
+
+describe('ContentHash schema', () => {
+  const validHex64 =
+    '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+
+  it('accepts a properly formatted sha256 prefix', () => {
+    expect(ContentHash.safeParse(`sha256:${validHex64}`).success).toBe(true);
+  });
+
+  it('rejects bare hex without algorithm prefix', () => {
+    expect(ContentHash.safeParse(validHex64).success).toBe(false);
+  });
+
+  it('rejects the wrong algorithm prefix', () => {
+    expect(ContentHash.safeParse(`md5:${validHex64}`).success).toBe(false);
+  });
+
+  it('rejects the wrong hex length', () => {
+    expect(ContentHash.safeParse('sha256:abc').success).toBe(false);
+    expect(ContentHash.safeParse(`sha256:${validHex64}ff`).success).toBe(false);
+  });
+
+  it('rejects uppercase hex', () => {
+    expect(ContentHash.safeParse(`sha256:${validHex64.toUpperCase()}`).success).toBe(false);
+  });
+});
+
+describe('parseLayerConfig with pinned URL data sources', () => {
+  const pinHash =
+    'sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+
+  it('accepts a geoparquet source with expectedHash', () => {
+    const result = parseLayerConfig({
+      version: 1,
+      id: 'abc',
+      name: 'pinned wells',
+      dataSource: {
+        type: 'geoparquet',
+        url: 'https://example.com/wells.parquet',
+        tableName: 'wells',
+        expectedHash: pinHash,
+      },
+    });
+    expect(result).not.toBeNull();
+    expect(
+      result?.dataSource.type === 'geoparquet' &&
+        result.dataSource.expectedHash,
+    ).toBe(pinHash);
+  });
+
+  it('rejects a geoparquet source with a malformed expectedHash', () => {
+    const result = parseLayerConfig({
+      version: 1,
+      id: 'abc',
+      name: 'bad pin',
+      dataSource: {
+        type: 'geoparquet',
+        url: 'https://example.com/wells.parquet',
+        tableName: 'wells',
+        expectedHash: 'not-a-real-hash',
+      },
+    });
+    expect(result).toBeNull();
+  });
+
+  it('accepts a geoparquet source without expectedHash (floating)', () => {
+    const result = parseLayerConfig({
+      version: 1,
+      id: 'abc',
+      name: 'floating wells',
+      dataSource: {
+        type: 'geoparquet',
+        url: 'https://example.com/wells.parquet',
+        tableName: 'wells',
+      },
+    });
+    expect(result).not.toBeNull();
+    expect(
+      result?.dataSource.type === 'geoparquet' &&
+        result.dataSource.expectedHash,
+    ).toBeUndefined();
   });
 });
 
