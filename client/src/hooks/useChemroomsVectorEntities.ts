@@ -130,27 +130,75 @@ export function useChemroomsVectorEntities(
             } else if (piece.kind === 'polygon') {
               const outer = positionsFromFlat(piece.outer, args.drapeMode);
               if (!outer || outer.length < 3) continue;
-              const holes = piece.holes
+              const holePositions = piece.holes
                 .map((h) => positionsFromFlat(h, args.drapeMode))
                 .filter(
                   (h): h is Cartesian3[] => h !== null && h.length >= 3,
-                )
-                .map((h) => new PolygonHierarchy(h));
-              viewer.entities.add({
-                id,
-                name: label,
-                polygon: {
-                  hierarchy: new PolygonHierarchy(outer, holes),
-                  material: FALLBACK_COLOR,
-                  outline: true,
-                  outlineColor: FALLBACK_OUTLINE,
-                  heightReference:
-                    args.drapeMode === 'drape'
-                      ? HeightReference.CLAMP_TO_GROUND
-                      : HeightReference.NONE,
-                },
-              });
-              created.push(id);
+                );
+
+              if (args.drapeMode === 'drape') {
+                // Drape mode uses Cesium's GroundPrimitive / classification
+                // primitive path, which auto-clamps a polygon to terrain
+                // when no `height` is set. Setting `heightReference` is
+                // pointless (ignored without height, warns on every
+                // entity), and `outline: true` is silently dropped
+                // because the classification primitive can't render
+                // outlines. So: fill entity with no outline, plus one
+                // extra polyline entity per ring (outer + each hole),
+                // polylines with clampToGround: true — which DOES
+                // support terrain following. That gives us visible
+                // outlines on draped polygons, which entity polygons
+                // natively can't provide.
+                viewer.entities.add({
+                  id,
+                  name: label,
+                  polygon: {
+                    hierarchy: new PolygonHierarchy(
+                      outer,
+                      holePositions.map((h) => new PolygonHierarchy(h)),
+                    ),
+                    material: FALLBACK_COLOR,
+                  },
+                });
+                created.push(id);
+
+                // Outline rings — outer + holes, all ground-clamped.
+                // GeoJSON rings are closed by spec so we don't need to
+                // re-append the first point.
+                const rings = [outer, ...holePositions];
+                for (let r = 0; r < rings.length; r++) {
+                  const outlineId = `${id}:outline:${r}`;
+                  viewer.entities.add({
+                    id: outlineId,
+                    polyline: {
+                      positions: rings[r]!,
+                      width: 2,
+                      material: FALLBACK_OUTLINE,
+                      clampToGround: true,
+                    },
+                  });
+                  created.push(outlineId);
+                }
+              } else {
+                // Absolute mode: entity polygon renders at real Z with
+                // no terrain interaction. Outlines work natively on
+                // un-clamped polygons because Cesium uses the
+                // GeometryInstance path there.
+                viewer.entities.add({
+                  id,
+                  name: label,
+                  polygon: {
+                    hierarchy: new PolygonHierarchy(
+                      outer,
+                      holePositions.map((h) => new PolygonHierarchy(h)),
+                    ),
+                    material: FALLBACK_COLOR,
+                    outline: true,
+                    outlineColor: FALLBACK_OUTLINE,
+                  },
+                });
+                created.push(id);
+              }
             } else if (piece.kind === 'point') {
               // Edge case: a Point geometry that happened to come
               // through the vector renderer (geometryType !== 'point'

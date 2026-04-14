@@ -192,17 +192,10 @@ async function detectGeometryType(
 
   for (const expr of order) {
     const sql = `SELECT ST_AsText(${expr}) AS wkt FROM ${tableIdent} WHERE ${geomIdent} IS NOT NULL LIMIT 1`;
-    console.log(`[probe] ${tableName}: trying SQL: ${sql.trim()}`);
     try {
       const result = await connector.query(sql);
       const rows = result.toArray() as Array<Record<string, unknown>>;
       const wkt = rows[0]?.wkt;
-      console.log(
-        `[probe] ${tableName}: wkt=`,
-        wkt,
-        `typeof=`,
-        typeof wkt,
-      );
       if (typeof wkt !== 'string') continue;
       // WKT always starts with the type name (POINT, POLYGON, etc.)
       // as the first word. Z/M/ZM / coordinate suffixes come AFTER
@@ -211,11 +204,12 @@ async function detectGeometryType(
       const match = wkt.match(/^\s*([A-Za-z_]+)/);
       if (!match) continue;
       const typeName = match[1]!.toUpperCase();
-      console.log(`[probe] ${tableName}: extracted typeName=${typeName}`);
       const mapped = mapDuckDbGeometryType(typeName);
-      console.log(`[probe] ${tableName}: mapped=${mapped}`);
       if (mapped !== null) return mapped;
     } catch (e) {
+      // Probe failure on one form is expected (the stale-encoding
+      // case). Warn so the fallback attempt is traceable, but don't
+      // give up — the next expr form might work.
       console.warn(
         `[probe] ${tableName}: SQL failed for expr "${expr}":`,
         e,
@@ -471,21 +465,11 @@ export async function rehydrateGeoparquetLayers(
     // file actually contains, rebuild the layer with the correct
     // type. This silently fixes layers persisted before the
     // loader learned to probe.
-    console.log(
-      `[rehydrate] probing "${layer.name}":`,
-      `stored geometryType=${layer.dataSource.geometryType}`,
-      `geometryEncoding=${layer.dataSource.geometryEncoding}`,
-      `geometryColumn=${layer.dataSource.geometryColumn}`,
-      `tableName=${layer.dataSource.tableName}`,
-    );
     const detected = await detectGeometryType(
       connector,
       layer.dataSource.tableName,
       layer.dataSource.geometryColumn,
       layer.dataSource.geometryEncoding,
-    );
-    console.log(
-      `[rehydrate] probe result for "${layer.name}": ${detected ?? '<null>'}`,
     );
     if (detected && detected !== layer.dataSource.geometryType) {
       console.log(
