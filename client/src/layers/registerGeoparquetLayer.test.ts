@@ -258,11 +258,11 @@ describe('registerGeoparquetLayer', () => {
   });
 
   describe('geometry type auto-detection', () => {
-    it('detects POLYGON from the file and sets geometryType accordingly', async () => {
+    it('detects POLYGON from the WKT and sets geometryType accordingly', async () => {
       const connector = makeMockConnector();
-      // Probe query returns POLYGON
+      // Probe query returns a POLYGON WKT string
       connector.query.mockResolvedValueOnce({
-        toArray: () => [{gt: 'POLYGON'}],
+        toArray: () => [{wkt: 'POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))'}],
       });
       const {layer} = await registerGeoparquetLayer(
         connector as never,
@@ -272,10 +272,10 @@ describe('registerGeoparquetLayer', () => {
       expect(layer.dataSource.geometryType).toBe('polygon');
     });
 
-    it('detects LINESTRING', async () => {
+    it('detects LINESTRING from WKT', async () => {
       const connector = makeMockConnector();
       connector.query.mockResolvedValueOnce({
-        toArray: () => [{gt: 'LINESTRING'}],
+        toArray: () => [{wkt: 'LINESTRING (0 0, 1 1, 2 2)'}],
       });
       const {layer} = await registerGeoparquetLayer(
         connector as never,
@@ -285,10 +285,12 @@ describe('registerGeoparquetLayer', () => {
       expect(layer.dataSource.geometryType).toBe('linestring');
     });
 
-    it('detects MULTIPOLYGON', async () => {
+    it('detects MULTIPOLYGON from WKT', async () => {
       const connector = makeMockConnector();
       connector.query.mockResolvedValueOnce({
-        toArray: () => [{gt: 'MULTIPOLYGON'}],
+        toArray: () => [
+          {wkt: 'MULTIPOLYGON (((0 0, 1 0, 1 1, 0 1, 0 0)))'},
+        ],
       });
       const {layer} = await registerGeoparquetLayer(
         connector as never,
@@ -298,14 +300,17 @@ describe('registerGeoparquetLayer', () => {
       expect(layer.dataSource.geometryType).toBe('multipolygon');
     });
 
-    it('is case-insensitive on the DuckDB return value', async () => {
+    it('handles the Z-suffixed WKT forms (POINT Z, POLYGON Z, etc.)', async () => {
       const connector = makeMockConnector();
+      // 3D polygon — WKT representation includes " Z" AFTER the type
       connector.query.mockResolvedValueOnce({
-        toArray: () => [{gt: 'polygon'}],
+        toArray: () => [
+          {wkt: 'POLYGON Z ((0 0 10, 1 0 10, 1 1 10, 0 1 10, 0 0 10))'},
+        ],
       });
       const {layer} = await registerGeoparquetLayer(
         connector as never,
-        'https://example.com/parcels.parquet',
+        'https://example.com/3d-parcels.parquet',
       );
       if (layer.dataSource.type !== 'geoparquet') return;
       expect(layer.dataSource.geometryType).toBe('polygon');
@@ -335,10 +340,12 @@ describe('registerGeoparquetLayer', () => {
       expect(layer.dataSource.geometryType).toBe('point');
     });
 
-    it('falls back to point for unrecognized DuckDB geometry types', async () => {
+    it('falls back to point for unrecognized geometry WKT (e.g. GEOMETRYCOLLECTION)', async () => {
       const connector = makeMockConnector();
       connector.query.mockResolvedValueOnce({
-        toArray: () => [{gt: 'GEOMETRYCOLLECTION'}],
+        toArray: () => [
+          {wkt: 'GEOMETRYCOLLECTION (POINT (1 2), LINESTRING (3 4, 5 6))'},
+        ],
       });
       const {layer} = await registerGeoparquetLayer(
         connector as never,
@@ -348,11 +355,25 @@ describe('registerGeoparquetLayer', () => {
       expect(layer.dataSource.geometryType).toBe('point');
     });
 
+    it('falls back to point when ST_AsText returns a null/non-string wkt', async () => {
+      const connector = makeMockConnector();
+      // Simulates the Arrow serialization quirk we hit in the wild
+      connector.query.mockResolvedValueOnce({
+        toArray: () => [{wkt: null}],
+      });
+      const {layer} = await registerGeoparquetLayer(
+        connector as never,
+        'https://example.com/weird.parquet',
+      );
+      if (layer.dataSource.type !== 'geoparquet') return;
+      expect(layer.dataSource.geometryType).toBe('point');
+    });
+
     it('respects explicit options.geometryType over detection', async () => {
       const connector = makeMockConnector();
       // Probe would say POLYGON, but the user explicitly asked for linestring
       connector.query.mockResolvedValueOnce({
-        toArray: () => [{gt: 'POLYGON'}],
+        toArray: () => [{wkt: 'POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))'}],
       });
       const {layer} = await registerGeoparquetLayer(
         connector as never,
@@ -498,11 +519,10 @@ describe('rehydrateGeoparquetLayers', () => {
   describe('auto-heal of stale geometryType', () => {
     it('corrects a layer whose stored geometryType disagrees with the file', async () => {
       // Setup: register a file that was declared as 'point' but whose
-      // actual ST_GeometryType probe says 'POLYGON'. Simulate the
+      // actual ST_AsText probe says POLYGON. Simulate the
       // broken state by forcing the initial registration to use the
-      // point default.
+      // point default (empty probe → point fallback).
       const connector1 = makeMockConnector();
-      // The initial registration's probe returns empty → falls back to point
       const file = new File(
         [new Uint8Array([10, 20, 30])],
         'parcels.parquet',
@@ -515,13 +535,13 @@ describe('rehydrateGeoparquetLayers', () => {
       expect(layer.dataSource.geometryType).toBe('point');
       const originalId = layer.id;
 
-      // Now simulate reload: the rehydrate probe returns POLYGON.
+      // Now simulate reload: the rehydrate probe returns POLYGON WKT.
       // The healed layer should have geometryType: 'polygon' and a
       // new id (content hash changes because the recipe changed).
       _resetSpatialReadyForTesting();
       const connector2 = makeMockConnector();
       connector2.query.mockResolvedValueOnce({
-        toArray: () => [{gt: 'POLYGON'}],
+        toArray: () => [{wkt: 'POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))'}],
       });
 
       const result = await rehydrateGeoparquetLayers(connector2 as never, [
@@ -540,7 +560,7 @@ describe('rehydrateGeoparquetLayers', () => {
     it('leaves a layer alone when the probe agrees with the stored type', async () => {
       const connector1 = makeMockConnector();
       connector1.query.mockResolvedValueOnce({
-        toArray: () => [{gt: 'POLYGON'}],
+        toArray: () => [{wkt: 'POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))'}],
       });
       const file = new File(
         [new Uint8Array([1, 2, 3])],
@@ -557,7 +577,7 @@ describe('rehydrateGeoparquetLayers', () => {
       _resetSpatialReadyForTesting();
       const connector2 = makeMockConnector();
       connector2.query.mockResolvedValueOnce({
-        toArray: () => [{gt: 'POLYGON'}],
+        toArray: () => [{wkt: 'POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))'}],
       });
 
       const result = await rehydrateGeoparquetLayers(connector2 as never, [

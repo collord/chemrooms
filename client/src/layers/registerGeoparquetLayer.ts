@@ -153,25 +153,28 @@ function mapDuckDbGeometryType(
  * any failure (empty table, query error, unrecognized type) so the
  * caller can fall back gracefully.
  *
- * Tries two probe paths in sequence for robustness:
+ * ## Why ST_AsText, not ST_GeometryType
  *
- *  1. **Native path**: `SELECT ST_GeometryType(geom) ...`. Works
- *     when the column is already a GEOMETRY type (the normal case
- *     after read_parquet auto-decodes a geoparquet).
- *  2. **WKB wrap**: `SELECT ST_GeometryType(ST_GeomFromWKB(geom)) ...`.
- *     Works when the column is a BLOB of WKB bytes (plain parquet
- *     or geoparquet read without spatial's auto-decode).
+ * DuckDB spatial's `ST_GeometryType` returns a custom `GEOMETRY_TYPE`
+ * ENUM, not a VARCHAR. DuckDB-WASM's Arrow serialization doesn't
+ * know how to represent that ENUM on the JS side and silently
+ * returns null — the query succeeds, the row has a `gt` column,
+ * the value just can't round-trip. Diagnosed from the wild by
+ * verbose logging in an earlier commit.
  *
- * If the declared encoding says 'wkb' we try #2 first, otherwise
- * #1. Either way, failure of the preferred path falls through to
- * the other — so a layer with a stale `geometryEncoding` recorded
- * in localStorage doesn't permanently block healing.
+ * `ST_AsText` always returns VARCHAR (WKT), and a WKT string starts
+ * with the type name — `POINT (1 2)`, `POLYGON ((...))`, etc. We
+ * extract the leading word, which dodges the serialization problem
+ * entirely AND handles Z/M/ZM suffixes (which appear AFTER the
+ * first word in WKT) for free.
  *
- * Also verbose-logs the probe steps so we can diagnose mapping
- * failures in the field (the mapping is case-insensitive but
- * doesn't currently handle `POLYGON Z` suffixes or other
- * DuckDB-specific return shapes). Logs are `[probe]`-prefixed to
- * keep them distinct from normal init/rehydrate output.
+ * ## Two-form fallback
+ *
+ * Tries both a native call (column is already GEOMETRY) and a WKB
+ * wrap (column is BLOB of WKB bytes). The declared `encoding`
+ * decides which to try first; either one failing falls through to
+ * the other, so a layer with stale encoding in localStorage can
+ * still be healed.
  */
 async function detectGeometryType(
   connector: DuckDbConnector,
@@ -185,41 +188,38 @@ async function detectGeometryType(
   const nativeExpr = geomIdent;
   const wkbExpr = `ST_GeomFromWKB(${geomIdent})`;
   const order =
-    encoding === 'wkb'
-      ? [wkbExpr, nativeExpr]
-      : [nativeExpr, wkbExpr];
+    encoding === 'wkb' ? [wkbExpr, nativeExpr] : [nativeExpr, wkbExpr];
 
   for (const expr of order) {
-    const sql = `SELECT ST_GeometryType(${expr}) AS gt FROM ${tableIdent} WHERE ${geomIdent} IS NOT NULL LIMIT 1`;
+    const sql = `SELECT ST_AsText(${expr}) AS wkt FROM ${tableIdent} WHERE ${geomIdent} IS NOT NULL LIMIT 1`;
     console.log(`[probe] ${tableName}: trying SQL: ${sql.trim()}`);
     try {
       const result = await connector.query(sql);
       const rows = result.toArray() as Array<Record<string, unknown>>;
+      const wkt = rows[0]?.wkt;
       console.log(
-        `[probe] ${tableName}: rows=`,
-        rows,
-        `rows[0]?.gt=`,
-        rows[0]?.gt,
+        `[probe] ${tableName}: wkt=`,
+        wkt,
         `typeof=`,
-        typeof rows[0]?.gt,
+        typeof wkt,
       );
-      const raw = rows[0]?.gt;
-      const mapped = mapDuckDbGeometryType(raw);
-      console.log(
-        `[probe] ${tableName}: raw=${JSON.stringify(raw)} mapped=${mapped}`,
-      );
-      if (mapped !== null) {
-        return mapped;
-      }
-      // Mapping failed on a non-null return — might be a suffix
-      // like "POLYGON Z" we don't yet handle. Fall through to the
-      // next expression form rather than giving up.
+      if (typeof wkt !== 'string') continue;
+      // WKT always starts with the type name (POINT, POLYGON, etc.)
+      // as the first word. Z/M/ZM / coordinate suffixes come AFTER
+      // a space, so matching only leading letters captures the
+      // bare type name.
+      const match = wkt.match(/^\s*([A-Za-z_]+)/);
+      if (!match) continue;
+      const typeName = match[1]!.toUpperCase();
+      console.log(`[probe] ${tableName}: extracted typeName=${typeName}`);
+      const mapped = mapDuckDbGeometryType(typeName);
+      console.log(`[probe] ${tableName}: mapped=${mapped}`);
+      if (mapped !== null) return mapped;
     } catch (e) {
       console.warn(
         `[probe] ${tableName}: SQL failed for expr "${expr}":`,
         e,
       );
-      // Try the other form.
     }
   }
   return null;
