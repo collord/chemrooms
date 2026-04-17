@@ -45,6 +45,19 @@ export type EntityMetadata =
        * These are what the Inspector renders as the attribute table.
        */
       properties: Record<string, unknown>;
+      /**
+       * If this entity is one we should restyle on selection change
+       * (i.e., a polyline — either a standalone LineString entity
+       * or a polygon outline ring), the default outline color and
+       * width to revert to when this feature is not selected. Not
+       * present for polygon fill entities (they don't participate
+       * in selection highlighting — GIS convention highlights the
+       * boundary, not the interior).
+       */
+      outlineStyle?: {
+        normalColor: import('cesium').Color;
+        normalWidth: number;
+      };
     };
 
 const entityMetadata = new WeakMap<Entity, EntityMetadata>();

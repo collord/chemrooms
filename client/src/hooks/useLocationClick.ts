@@ -22,15 +22,94 @@
 import {useEffect, useRef} from 'react';
 import {
   Cartesian2,
+  Color,
+  ColorMaterialProperty,
+  ConstantProperty,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
   defined,
+  type Viewer,
 } from 'cesium';
 import {useSql} from '@sqlrooms/duckdb';
-import {useChemroomsStore} from '../slices/chemrooms-slice';
+import {
+  useChemroomsStore,
+  type SelectedEntity,
+} from '../slices/chemrooms-slice';
 import {getEntityMetadata} from '../layers/entityMetadata';
 
+/**
+ * Selection highlight color — applied imperatively to the outline
+ * of the currently-selected vector feature. Yellow has good
+ * contrast against cyan and against most terrain.
+ */
+const SELECTED_OUTLINE = Color.YELLOW;
+/** Multiplier on the feature's normal outline width when selected. */
+const SELECTED_WIDTH_BOOST = 2;
+
+/**
+ * Walk the viewer's entities and apply the correct outline style
+ * (normal or selected) based on the current selection. Called
+ * whenever the chemrooms SelectedEntity changes.
+ *
+ * We iterate viewer.entities.values rather than tracking entities
+ * per feature because the N here is small in practice (usually
+ * < 1000) and we avoid bookkeeping a parallel registry that would
+ * need syncing with the hooks that create/destroy entities.
+ *
+ * Only entities with outlineStyle in their metadata are touched —
+ * that's polyline entities for vector features (standalone
+ * LineStrings + polygon-outline rings). Fill polygons and point
+ * entities have no outlineStyle and are skipped.
+ */
+function applyVectorSelectionStyle(
+  viewer: Viewer,
+  sel: SelectedEntity | null,
+): void {
+  const selLayer = sel?.kind === 'vector-feature' ? sel.layerId : null;
+  const selFeature = sel?.kind === 'vector-feature' ? sel.featureId : null;
+  for (const entity of viewer.entities.values) {
+    const meta = getEntityMetadata(entity);
+    if (!meta || meta.kind !== 'vector-feature') continue;
+    if (!meta.outlineStyle || !entity.polyline) continue;
+    const isSelected =
+      meta.layerId === selLayer && meta.featureId === selFeature;
+    const color = isSelected ? SELECTED_OUTLINE : meta.outlineStyle.normalColor;
+    const width = isSelected
+      ? meta.outlineStyle.normalWidth * SELECTED_WIDTH_BOOST
+      : meta.outlineStyle.normalWidth;
+    // Re-assigning these PolylineGraphics properties raises the
+    // polyline's definitionChanged event, which the visualizer
+    // listens to and uses to rebuild the primitive — including
+    // the GroundPolylinePrimitive path for terrain-clamped
+    // polylines, which is the path CallbackProperty alone
+    // doesn't properly drive.
+    entity.polyline.material = new ColorMaterialProperty(color);
+    entity.polyline.width = new ConstantProperty(width);
+  }
+}
+
+/**
+ * React hook: subscribe to selection changes and apply the outline
+ * highlight to vector features. Mounted alongside useLocationClick
+ * since both operate on the viewer and a single mount point keeps
+ * the subscription count at one.
+ */
+function useVectorSelectionHighlight() {
+  const viewer = useChemroomsStore((s) => s.cesium.viewer);
+  const selectedEntity = useChemroomsStore(
+    (s) => s.chemrooms.config.selectedEntity,
+  );
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    applyVectorSelectionStyle(viewer, selectedEntity);
+  }, [viewer, selectedEntity]);
+}
+
 export function useLocationClick() {
+  // Mount the vector-selection highlight effect alongside the
+  // click handler — they share a single lifecycle on the viewer.
+  useVectorSelectionHighlight();
+
   const viewer = useChemroomsStore((s) => s.cesium.viewer);
   const setSelectedEntityInSlice = useChemroomsStore(
     (s) => s.chemrooms.setSelectedEntity,
