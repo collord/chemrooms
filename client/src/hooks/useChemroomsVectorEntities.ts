@@ -36,8 +36,10 @@
 
 import {useEffect} from 'react';
 import {
+  CallbackProperty,
   Cartesian3,
   Color,
+  ColorMaterialProperty,
   HeightReference,
   PolygonHierarchy,
 } from 'cesium';
@@ -47,6 +49,7 @@ import {
   setEntityMetadata,
   stripPositioningColumns,
 } from '../layers/entityMetadata';
+import {roomStore} from '../store';
 
 export interface UseChemroomsVectorEntitiesArgs {
   /** Stable string used to namespace entity IDs and clean them up. */
@@ -61,6 +64,59 @@ export interface UseChemroomsVectorEntitiesArgs {
 
 const FALLBACK_COLOR = Color.CYAN.withAlpha(0.6);
 const FALLBACK_OUTLINE = Color.CYAN;
+/**
+ * Selection highlight — vibrant contrasting color, used for the
+ * outline of the currently-selected feature. Standard GIS UI.
+ * Yellow has good contrast against cyan and against most terrain.
+ */
+const SELECTED_OUTLINE = Color.YELLOW;
+const NORMAL_OUTLINE_WIDTH = 2;
+const SELECTED_OUTLINE_WIDTH = 4;
+/**
+ * For the rare standalone-polyline case (LineString features), the
+ * normal width is wider than a polygon outline — these lines ARE the
+ * feature, not a border around it. Selected state bumps further.
+ */
+const NORMAL_LINE_WIDTH = 3;
+const SELECTED_LINE_WIDTH = 5;
+
+/**
+ * Build material + width properties for a polyline that should
+ * highlight when the given (layerId, featureId) is the current
+ * chemrooms selection. The CallbackProperty re-evaluates each
+ * frame, reading the current selection state from the Zustand
+ * store imperatively — so there's no subscription to manage, no
+ * effect to synchronize. Cesium picks up the color/width change
+ * on the next frame.
+ */
+function makeSelectableOutline(
+  layerId: string,
+  featureId: string,
+  normalColor: Color,
+  normalWidth: number,
+  selectedWidth: number,
+) {
+  const isSelected = () => {
+    const sel = roomStore.getState().chemrooms.config.selectedEntity;
+    return (
+      sel?.kind === 'vector-feature' &&
+      sel.layerId === layerId &&
+      sel.featureId === featureId
+    );
+  };
+  return {
+    material: new ColorMaterialProperty(
+      new CallbackProperty(
+        () => (isSelected() ? SELECTED_OUTLINE : normalColor),
+        false,
+      ),
+    ),
+    width: new CallbackProperty(
+      () => (isSelected() ? selectedWidth : normalWidth),
+      false,
+    ),
+  };
+}
 
 export function useChemroomsVectorEntities(
   args: UseChemroomsVectorEntitiesArgs,
@@ -130,13 +186,20 @@ export function useChemroomsVectorEntities(
                 args.drapeMode,
               );
               if (!positions || positions.length < 2) continue;
+              const {material, width} = makeSelectableOutline(
+                args.layerId,
+                rowId,
+                FALLBACK_OUTLINE,
+                NORMAL_LINE_WIDTH,
+                SELECTED_LINE_WIDTH,
+              );
               const entity = viewer.entities.add({
                 id,
                 name: label,
                 polyline: {
                   positions,
-                  width: 3,
-                  material: FALLBACK_OUTLINE,
+                  width,
+                  material,
                   clampToGround: args.drapeMode === 'drape',
                 },
               });
@@ -180,7 +243,18 @@ export function useChemroomsVectorEntities(
 
                 // Outline rings — outer + holes, all ground-clamped.
                 // GeoJSON rings are closed by spec so we don't need to
-                // re-append the first point.
+                // re-append the first point. All rings of a single
+                // feature share the same selectable outline
+                // properties so the whole boundary highlights
+                // together when the feature is selected.
+                const {material: outlineMaterial, width: outlineWidth} =
+                  makeSelectableOutline(
+                    args.layerId,
+                    rowId,
+                    FALLBACK_OUTLINE,
+                    NORMAL_OUTLINE_WIDTH,
+                    SELECTED_OUTLINE_WIDTH,
+                  );
                 const rings = [outer, ...holePositions];
                 for (let r = 0; r < rings.length; r++) {
                   const outlineId = `${id}:outline:${r}`;
@@ -188,8 +262,8 @@ export function useChemroomsVectorEntities(
                     id: outlineId,
                     polyline: {
                       positions: rings[r]!,
-                      width: 2,
-                      material: FALLBACK_OUTLINE,
+                      width: outlineWidth,
+                      material: outlineMaterial,
                       clampToGround: true,
                     },
                   });
