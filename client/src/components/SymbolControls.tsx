@@ -2,17 +2,23 @@
  * Rendering controls for the active recipe — how chemduck entities
  * appear in 3D. Renders inside the Active Recipe box in the sidebar.
  *
- *   - Render mode: auto / sphere / volume
- *   - Sphere radius (meters)
- *   - Volume radius (meters)
+ *   - Render mode: auto / sphere / volume (immediate, no debounce)
+ *   - Sphere radius slider (debounced 250ms)
+ *   - Volume radius slider (debounced 250ms)
  *
- * These values drive the live samples layer AND are captured when
- * the user clicks "Freeze layer" (they're part of VisualEncoding
- * and participate in the content hash).
+ * Both sliders follow the same debounce pattern as the vertical
+ * exaggeration slider: the displayed value updates in real time so
+ * the user sees instant feedback, but the Zustand store update
+ * (which triggers a full entity rebuild in useChemroomsEntities) is
+ * deferred until the slider has been still for a beat. Without this
+ * the web-3D pipeline stacks up entity removes + adds per notch and
+ * the tab stalls.
  */
 
-import React, {useCallback} from 'react';
+import React, {useState, useCallback, useEffect, useRef} from 'react';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
+
+const DEBOUNCE_MS = 250;
 
 export const SymbolControls: React.FC<{disabled?: boolean}> = ({
   disabled,
@@ -36,6 +42,60 @@ export const SymbolControls: React.FC<{disabled?: boolean}> = ({
     (s) => s.chemrooms.setVolumeRadiusMeters,
   );
 
+  // ── Debounced sphere slider ──────────────────────────────────────
+  const [sphereDisplay, setSphereDisplay] = useState(sphereRadius);
+  const sphereTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setSphereDisplay(sphereRadius);
+  }, [sphereRadius]);
+
+  const handleSphereChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const v = Number(e.target.value);
+      setSphereDisplay(v);
+      if (sphereTimerRef.current !== null) {
+        clearTimeout(sphereTimerRef.current);
+      }
+      sphereTimerRef.current = setTimeout(() => {
+        sphereTimerRef.current = null;
+        setSphereRadius(v);
+      }, DEBOUNCE_MS);
+    },
+    [setSphereRadius],
+  );
+
+  // ── Debounced volume slider ──────────────────────────────────────
+  const [volumeDisplay, setVolumeDisplay] = useState(volumeRadius);
+  const volumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setVolumeDisplay(volumeRadius);
+  }, [volumeRadius]);
+
+  const handleVolumeChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const v = Number(e.target.value);
+      setVolumeDisplay(v);
+      if (volumeTimerRef.current !== null) {
+        clearTimeout(volumeTimerRef.current);
+      }
+      volumeTimerRef.current = setTimeout(() => {
+        volumeTimerRef.current = null;
+        setVolumeRadius(v);
+      }, DEBOUNCE_MS);
+    },
+    [setVolumeRadius],
+  );
+
+  // Cancel pending timers on unmount
+  useEffect(() => {
+    return () => {
+      if (sphereTimerRef.current !== null) clearTimeout(sphereTimerRef.current);
+      if (volumeTimerRef.current !== null) clearTimeout(volumeTimerRef.current);
+    };
+  }, []);
+
   const handleModeChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       setSampleRenderAs(e.target.value as 'auto' | 'sphere' | 'volume');
@@ -49,7 +109,7 @@ export const SymbolControls: React.FC<{disabled?: boolean}> = ({
         Symbols
       </div>
 
-      {/* Render mode */}
+      {/* Render mode — immediate, no debounce */}
       <label className="flex items-center gap-2 text-xs">
         <span className="w-16 shrink-0 text-muted-foreground">Mode</span>
         <select
@@ -64,7 +124,7 @@ export const SymbolControls: React.FC<{disabled?: boolean}> = ({
         </select>
       </label>
 
-      {/* Sphere radius */}
+      {/* Sphere radius — debounced */}
       <label className="flex items-center gap-2 text-xs">
         <span className="w-16 shrink-0 text-muted-foreground">Sphere</span>
         <input
@@ -72,17 +132,17 @@ export const SymbolControls: React.FC<{disabled?: boolean}> = ({
           min={0.5}
           max={50}
           step={0.5}
-          value={sphereRadius}
-          onChange={(e) => setSphereRadius(Number(e.target.value))}
+          value={sphereDisplay}
+          onChange={handleSphereChange}
           className="min-w-0 flex-1 disabled:opacity-50"
           disabled={disabled}
         />
         <span className="w-10 text-right tabular-nums text-muted-foreground">
-          {sphereRadius}m
+          {sphereDisplay}m
         </span>
       </label>
 
-      {/* Volume radius */}
+      {/* Volume radius — debounced */}
       <label className="flex items-center gap-2 text-xs">
         <span className="w-16 shrink-0 text-muted-foreground">Volume</span>
         <input
@@ -90,13 +150,13 @@ export const SymbolControls: React.FC<{disabled?: boolean}> = ({
           min={0.1}
           max={20}
           step={0.1}
-          value={volumeRadius}
-          onChange={(e) => setVolumeRadius(Number(e.target.value))}
+          value={volumeDisplay}
+          onChange={handleVolumeChange}
           className="min-w-0 flex-1 disabled:opacity-50"
           disabled={disabled}
         />
         <span className="w-10 text-right tabular-nums text-muted-foreground">
-          {volumeRadius}m
+          {volumeDisplay}m
         </span>
       </label>
     </div>
