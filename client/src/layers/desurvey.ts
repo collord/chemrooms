@@ -110,9 +110,23 @@ export function fabricateTrajectory(
   // This is the "assign a single survey point at the collar,
   // pointing vertically down" convention that Leapfrog uses
   // for wells without deviation data.
+  //
+  // IMPORTANT: the bottom endpoint is nudged by a tiny epsilon in
+  // longitude (~1mm at mid-latitudes). Cesium's polylineVolume
+  // computes cross-section normals by crossing the path direction
+  // with an ellipsoid "up" vector. For a perfectly vertical path,
+  // direction IS the up vector → cross product is zero → normalize()
+  // crashes with "normalized result is not a number". The epsilon
+  // gives the direction vector a tiny horizontal component so the
+  // cross product is non-degenerate. Visually imperceptible.
+  const VERTICAL_NUDGE_DEG = 1e-8;
   return [
     {lon: collarLon, lat: collarLat, alt: surfaceElevM - topDepthM},
-    {lon: collarLon, lat: collarLat, alt: surfaceElevM - bottomDepthM},
+    {
+      lon: collarLon + VERTICAL_NUDGE_DEG,
+      lat: collarLat,
+      alt: surfaceElevM - bottomDepthM,
+    },
   ];
 }
 
@@ -154,8 +168,16 @@ export function desurveySample(
   _surveyStations: SurveyStation[],
 ): TrajectoryPoint[] {
   // STUB: vertical fallback. Replace with minimum curvature.
+  // Same nudge as the vertical default above — once the real
+  // algorithm is implemented, naturally-deviated trajectories
+  // won't need it because they'll have horizontal displacement.
+  const VERTICAL_NUDGE_DEG = 1e-8;
   return [
     {lon: collarLon, lat: collarLat, alt: surfaceElevM - topDepthM},
-    {lon: collarLon, lat: collarLat, alt: surfaceElevM - bottomDepthM},
+    {
+      lon: collarLon + VERTICAL_NUDGE_DEG,
+      lat: collarLat,
+      alt: surfaceElevM - bottomDepthM,
+    },
   ];
 }
