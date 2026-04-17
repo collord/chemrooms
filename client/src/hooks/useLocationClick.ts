@@ -58,7 +58,6 @@ export function useLocationClick() {
       }
 
       const entity = picked.id;
-      setSelectedEntityInCesium(entity);
 
       // Read our metadata off the entity via the WeakMap. If the
       // entity wasn't created by one of our hooks (e.g., a tileset
@@ -68,12 +67,16 @@ export function useLocationClick() {
       const meta = getEntityMetadata(entity);
       if (!meta) {
         setSelectedEntityInSlice(null);
+        setSelectedEntityInCesium(null);
       } else if (meta.kind === 'chemduck-location') {
         setSelectedEntityInSlice({
           kind: 'chemduck-location',
           locationId: meta.locationId,
           source: meta.layerId,
         });
+        // Chemduck points have a real terrain-aware position, so
+        // Cesium's selectionIndicator frames them correctly.
+        setSelectedEntityInCesium(entity);
       } else {
         setSelectedEntityInSlice({
           kind: 'vector-feature',
@@ -82,6 +85,15 @@ export function useLocationClick() {
           label: meta.label,
           properties: meta.properties,
         });
+        // Vector features have hierarchy/polyline positions at
+        // ellipsoid height 0 (we strip heights to let
+        // clampToGround do the work), so Cesium's bounding-sphere-
+        // based selectionIndicator would render below the terrain.
+        // The Inspector pane already shows what's selected, so skip
+        // the redundant indicator rather than fight the bounding-
+        // sphere math. A future session could sample terrain at the
+        // centroid to drive a proper indicator position.
+        setSelectedEntityInCesium(null);
       }
 
       viewer.flyTo(entity, {duration: 1.0});
