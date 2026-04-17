@@ -28,6 +28,19 @@ export interface Bbox {
 
 const layerBboxes = new Map<string, Bbox>();
 
+/** Listeners notified whenever any layer bbox changes. */
+const listeners = new Set<() => void>();
+
+/** Subscribe to bbox changes. Returns an unsubscribe function. */
+export function onBboxChange(fn: () => void): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
+function notifyListeners(): void {
+  for (const fn of listeners) fn();
+}
+
 /**
  * Set the bbox for a layer. Called from the entity creation hooks
  * after iterating query results. Pass null to clear (e.g., when
@@ -39,6 +52,7 @@ export function setLayerBbox(layerId: string, bbox: Bbox | null): void {
   } else {
     layerBboxes.delete(layerId);
   }
+  notifyListeners();
 }
 
 /** Get a specific layer's bbox. */

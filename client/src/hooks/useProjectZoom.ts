@@ -3,27 +3,15 @@
  * on initial load, and provide a zoomToFit that does the same on
  * demand.
  *
- * The bbox comes from layerBbox.ts, which each entity hook
- * populates as it creates entities. The project bbox is the union
- * of all per-layer bboxes.
- *
- * Two behaviors:
- *
- * 1. **Initial zoom** — runs once, after the first entity layer
- *    has finished rendering. Uses a small margin around the data
- *    extent so the camera isn't pixel-tight on the edges.
- *
- * 2. **zoomToFit** — imperative, called from a button or shortcut.
- *    Reads the current project bbox and flies to it. Overwrites
- *    @sqlrooms/cesium's built-in zoomToFit (which uses
- *    viewer.zoomTo(viewer.entities) and computes wrong bounding
- *    spheres for polylineVolume / terrain-clamped entities).
+ * Reactive: subscribes to bbox change notifications from
+ * layerBbox.ts. The initial zoom fires the moment the first layer
+ * registers a non-null bbox — no fixed delay, no polling.
  */
 
 import {useEffect, useRef, useCallback} from 'react';
 import {Rectangle, Math as CesiumMath, type Viewer} from 'cesium';
 import {useStoreWithCesium} from '@sqlrooms/cesium';
-import {getProjectBbox} from '../layers/layerBbox';
+import {getProjectBbox, onBboxChange} from '../layers/layerBbox';
 
 /** Margin around the data extent in degrees. */
 const MARGIN_DEG = 0.005;
@@ -53,28 +41,39 @@ function flyToProjectBbox(viewer: Viewer): void {
 }
 
 /**
- * Hook: auto-fly to the project extent on initial entity load,
- * and expose a zoomToFit callback for button wiring.
+ * Hook: auto-fly to the project extent when the first layer bbox
+ * is registered, and expose a zoomToFit callback for button wiring.
  */
 export function useProjectZoom(): {zoomToFit: () => void} {
   const viewer = useStoreWithCesium((s) => s.cesium.viewer);
   const initialZoomDoneRef = useRef(false);
 
-  // Initial zoom — fires once when the viewer is ready and at
-  // least one layer has data. We poll the project bbox on a short
-  // timer because the entity hooks run asynchronously and bbox
-  // registration happens at the end of their creation loop. A
-  // 1-second delay after mount is usually enough for the first
-  // data layer to finish.
+  // Subscribe to bbox changes. When the first non-null project
+  // bbox appears (i.e., any layer has finished creating entities
+  // and registered its extent), fire the initial zoom exactly once.
   useEffect(() => {
     if (!viewer || viewer.isDestroyed() || initialZoomDoneRef.current) return;
-    const timer = setTimeout(() => {
-      const bbox = getProjectBbox();
-      if (!bbox) return;
+
+    // Check immediately — the bbox might already be available if
+    // entities were created before this effect ran.
+    const bbox = getProjectBbox();
+    if (bbox) {
       initialZoomDoneRef.current = true;
       flyToProjectBbox(viewer);
-    }, 1500);
-    return () => clearTimeout(timer);
+      return;
+    }
+
+    // Otherwise, wait for the first bbox registration.
+    const unsubscribe = onBboxChange(() => {
+      if (initialZoomDoneRef.current) return;
+      const b = getProjectBbox();
+      if (!b) return;
+      initialZoomDoneRef.current = true;
+      flyToProjectBbox(viewer);
+      unsubscribe();
+    });
+
+    return unsubscribe;
   }, [viewer]);
 
   const zoomToFit = useCallback(() => {
