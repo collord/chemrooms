@@ -212,38 +212,51 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
           let entity;
 
           // ── polylineVolume (borehole segment) ──────────────────
+          // Guard: the segment must have enough vertical separation
+          // for Cesium to compute a direction normal. A zero- or
+          // near-zero-length segment (top_depth ≈ bottom_depth)
+          // produces identical positions → normalize(zero) → NaN →
+          // crash in createPolylineVolumeGeometry. Fall back to
+          // sphere for degenerate intervals.
+          const MIN_SEGMENT_LENGTH_M = 0.1;
           if (isChemduck && hasDepth && renderMode !== 'sphere') {
             const topM = Number(topDepthRaw);
             const bottomM = Number(bottomDepthRaw);
-            const trajectory = fabricateTrajectory(
-              lon,
-              lat,
-              surfaceElev,
-              topM,
-              bottomM,
-            );
-            const positions = trajectory.map((p) =>
-              Cartesian3.fromDegrees(p.lon, p.lat, p.alt),
-            );
-            entity = viewer.entities.add({
-              id,
-              name: label,
-              polylineVolume: {
-                positions,
-                shape: volumeShape,
-                material: color,
-              },
-            });
-            setEntityMetadata(entity, {
-              kind: 'chemduck-location',
-              layerId: args.layerId,
-              locationId: rowId,
-              normalColor: color,
-              primitiveType: 'polylineVolume',
-            });
+            const segmentLength = Math.abs(bottomM - topM);
 
-            // ── ellipsoid (3D sphere) ────────────────────────────
-          } else if (isChemduck && hasExplicitAlt) {
+            if (segmentLength >= MIN_SEGMENT_LENGTH_M) {
+              const trajectory = fabricateTrajectory(
+                lon,
+                lat,
+                surfaceElev,
+                topM,
+                bottomM,
+              );
+              const positions = trajectory.map((p) =>
+                Cartesian3.fromDegrees(p.lon, p.lat, p.alt),
+              );
+              entity = viewer.entities.add({
+                id,
+                name: label,
+                polylineVolume: {
+                  positions,
+                  shape: volumeShape,
+                  material: color,
+                },
+              });
+              setEntityMetadata(entity, {
+                kind: 'chemduck-location',
+                layerId: args.layerId,
+                locationId: rowId,
+                normalColor: color,
+                primitiveType: 'polylineVolume',
+              });
+            }
+            // Degenerate segment — fall through to the sphere path
+          }
+
+          // ── ellipsoid (3D sphere) ────────────────────────────
+          if (!entity && isChemduck && hasExplicitAlt) {
             entity = viewer.entities.add({
               id,
               name: label,
@@ -262,7 +275,7 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
             });
 
             // ── 2D point fallback ────────────────────────────────
-          } else {
+          } else if (!entity) {
             entity = viewer.entities.add({
               id,
               name: label,

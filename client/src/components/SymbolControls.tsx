@@ -29,17 +29,11 @@ export const SymbolControls: React.FC<{disabled?: boolean}> = ({
   const sphereRadius = useChemroomsStore(
     (s) => s.chemrooms.config.sphereRadiusMeters,
   );
-  const volumeRadius = useChemroomsStore(
-    (s) => s.chemrooms.config.volumeRadiusMeters,
-  );
   const setSampleRenderAs = useChemroomsStore(
     (s) => s.chemrooms.setSampleRenderAs,
   );
   const setSphereRadius = useChemroomsStore(
     (s) => s.chemrooms.setSphereRadiusMeters,
-  );
-  const setVolumeRadius = useChemroomsStore(
-    (s) => s.chemrooms.setVolumeRadiusMeters,
   );
 
   // ── Debounced sphere slider ──────────────────────────────────────
@@ -65,34 +59,10 @@ export const SymbolControls: React.FC<{disabled?: boolean}> = ({
     [setSphereRadius],
   );
 
-  // ── Debounced volume slider ──────────────────────────────────────
-  const [volumeDisplay, setVolumeDisplay] = useState(volumeRadius);
-  const volumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    setVolumeDisplay(volumeRadius);
-  }, [volumeRadius]);
-
-  const handleVolumeChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const v = Number(e.target.value);
-      setVolumeDisplay(v);
-      if (volumeTimerRef.current !== null) {
-        clearTimeout(volumeTimerRef.current);
-      }
-      volumeTimerRef.current = setTimeout(() => {
-        volumeTimerRef.current = null;
-        setVolumeRadius(v);
-      }, DEBOUNCE_MS);
-    },
-    [setVolumeRadius],
-  );
-
-  // Cancel pending timers on unmount
+  // Cancel pending timer on unmount
   useEffect(() => {
     return () => {
       if (sphereTimerRef.current !== null) clearTimeout(sphereTimerRef.current);
-      if (volumeTimerRef.current !== null) clearTimeout(volumeTimerRef.current);
     };
   }, []);
 
@@ -142,23 +112,6 @@ export const SymbolControls: React.FC<{disabled?: boolean}> = ({
         </span>
       </label>
 
-      {/* Volume radius — debounced */}
-      <label className="flex items-center gap-2 text-xs">
-        <span className="w-16 shrink-0 text-muted-foreground">Volume</span>
-        <input
-          type="range"
-          min={0.1}
-          max={20}
-          step={0.1}
-          value={volumeDisplay}
-          onChange={handleVolumeChange}
-          className="min-w-0 flex-1 disabled:opacity-50"
-          disabled={disabled}
-        />
-        <span className="w-10 text-right tabular-nums text-muted-foreground">
-          {volumeDisplay}m
-        </span>
-      </label>
     </div>
   );
 };
