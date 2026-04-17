@@ -337,12 +337,45 @@ export const VisualEncoding = z.object({
   scaleType: z.enum(['linear', 'log', 'sqrt']).optional(),
   /** Override the domain for sequential coloring. Null = derive from data. */
   domain: z.tuple([z.number(), z.number()]).optional(),
-  /** Point size in pixels (for point render type). */
+  /** Point size in pixels (for 2D screen-space point fallback). */
   pointSize: z.number().default(8),
   /** Opacity (0–1). */
   opacity: z.number().min(0).max(1).default(1),
   /** Solid fallback color (CSS string) when colorBy is null. */
   color: z.string().default('#00ffff'),
+
+  /**
+   * How to render chemduck-sourced entities in 3D.
+   *
+   * - `auto` (default): spheres for surface-only rows (no depth
+   *   interval), polylineVolume tubes for rows with top_depth +
+   *   bottom_depth. Decided per row at render time.
+   * - `sphere`: force all rows to render as spheres (ignores depth
+   *   intervals). For overview / location-marker use cases.
+   * - `volume`: force all rows to render as polylineVolume tubes.
+   *   Only meaningful when the data actually has depth intervals.
+   *
+   * GIS vector features (geoparquet polylines/polygons) ignore this
+   * field — they're rendered by useChemroomsVectorEntities which
+   * has its own shape dispatch.
+   */
+  sampleRenderAs: z.enum(['auto', 'sphere', 'volume']).default('auto'),
+
+  /**
+   * Radius for 3D spheres (surface locations), in meters. Controls
+   * the Cesium `Entity.ellipsoid` radii. Visible in world space, so
+   * the size scales with the camera distance — 3m is a reasonable
+   * "visible at site scale" default.
+   */
+  sphereRadiusMeters: z.number().min(0.1).max(500).default(3),
+
+  /**
+   * Radius for borehole-segment tubes (polylineVolume cross-section
+   * circle), in meters. 1m is a reasonable default — wider than a
+   * real borehole (typically 15–30 cm) but visible at site-overview
+   * zoom levels. Leapfrog uses a similar exaggeration.
+   */
+  volumeRadiusMeters: z.number().min(0.1).max(100).default(1),
 });
 export type VisualEncoding = z.infer<typeof VisualEncoding>;
 
@@ -486,6 +519,9 @@ export async function freezeCurrentState(params: {
       pointSize: 8,
       opacity: 1,
       color: '#00ffff',
+      sampleRenderAs: 'auto',
+      sphereRadiusMeters: 3,
+      volumeRadiusMeters: 1,
     },
     visible: true,
     createdAt: new Date().toISOString(),

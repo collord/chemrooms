@@ -120,11 +120,33 @@ export function buildSamplesLayerSql(
         || '|' || CAST(agg.bottom_depth AS VARCHAR) AS location_id,
       agg.x AS longitude,
       agg.y AS latitude,
+      -- Surface elevation before depth subtraction. The renderer uses
+      -- this + the depth interval to fabricate a 3D trajectory for
+      -- polylineVolume rendering. Kept separate from altitude so the
+      -- desurvey logic can do its own math.
+      COALESCE(
+        ${surveyedSampleParent} + geoid_offset(agg.x, agg.y),
+        es.ellipsoidal_height_m,
+        0.0
+      ) AS surface_elev_m,
+      -- Midpoint altitude for backward compat with the sphere/point path.
       COALESCE(
         ${surveyedSampleParent} + geoid_offset(agg.x, agg.y),
         es.ellipsoidal_height_m,
         0.0
       ) - (COALESCE(agg.depth, (agg.top_depth + agg.bottom_depth) / 2.0, 0) * 0.3048) AS altitude,
+      -- Depth interval endpoints in meters below collar. The renderer
+      -- uses these with surface_elev_m and the desurvey function to
+      -- produce polylineVolume positions. Null when the sample has no
+      -- depth info (surface / grab sample → rendered as sphere).
+      CASE WHEN agg.top_depth IS NOT NULL
+        THEN agg.top_depth * 0.3048
+        ELSE NULL
+      END AS top_depth_m,
+      CASE WHEN agg.bottom_depth IS NOT NULL
+        THEN agg.bottom_depth * 0.3048
+        ELSE NULL
+      END AS bottom_depth_m,
       agg.matrix AS loc_type,
       agg.location_id || ' — ' || agg.analyte
         || ' (' || ROUND(agg.result, 3) || COALESCE(' ' || agg.units, '') || ')'

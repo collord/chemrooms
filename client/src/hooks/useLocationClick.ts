@@ -47,68 +47,102 @@ const SELECTED_OUTLINE = Color.YELLOW;
 const SELECTED_WIDTH_BOOST = 2;
 
 /**
- * Walk the viewer's entities and apply the correct outline style
- * (normal or selected) based on the current selection. Called
- * whenever the chemrooms SelectedEntity changes.
+ * Walk the viewer's entities and apply the correct selection
+ * highlight based on the current selection. Covers:
  *
- * We iterate viewer.entities.values rather than tracking entities
- * per feature because the N here is small in practice (usually
- * < 1000) and we avoid bookkeeping a parallel registry that would
- * need syncing with the hooks that create/destroy entities.
+ * - **Vector-feature polylines** (standalone + polygon outlines):
+ *   material + width swap, same as before.
  *
- * Only entities with outlineStyle in their metadata are touched —
- * that's polyline entities for vector features (standalone
- * LineStrings + polygon-outline rings). Fill polygons and point
- * entities have no outlineStyle and are skipped.
+ * - **Chemduck 3D primitives** (ellipsoid spheres + polylineVolume
+ *   borehole tubes): material swap to SELECTED_OUTLINE on select,
+ *   revert to the row's normalColor on deselect. The normalColor
+ *   is stored in metadata at creation time because these entities
+ *   use per-row data-driven color (from the vis spec colorBy
+ *   pipeline) and there's no one fallback color to revert to.
+ *
+ * - **2D point fallback**: no restyle. Screen-space points don't
+ *   need material swaps; they're small enough that the Inspector
+ *   pane is sufficient as a "what's selected" signal.
+ *
+ * We iterate viewer.entities.values — O(N) but N is typically
+ * < 1000 and selection changes are user-paced, not per-frame.
  */
-function applyVectorSelectionStyle(
+function applySelectionStyle(
   viewer: Viewer,
   sel: SelectedEntity | null,
 ): void {
-  const selLayer = sel?.kind === 'vector-feature' ? sel.layerId : null;
-  const selFeature = sel?.kind === 'vector-feature' ? sel.featureId : null;
   for (const entity of viewer.entities.values) {
     const meta = getEntityMetadata(entity);
-    if (!meta || meta.kind !== 'vector-feature') continue;
-    if (!meta.outlineStyle || !entity.polyline) continue;
-    const isSelected =
-      meta.layerId === selLayer && meta.featureId === selFeature;
-    const color = isSelected ? SELECTED_OUTLINE : meta.outlineStyle.normalColor;
-    const width = isSelected
-      ? meta.outlineStyle.normalWidth * SELECTED_WIDTH_BOOST
-      : meta.outlineStyle.normalWidth;
-    // Re-assigning these PolylineGraphics properties raises the
-    // polyline's definitionChanged event, which the visualizer
-    // listens to and uses to rebuild the primitive — including
-    // the GroundPolylinePrimitive path for terrain-clamped
-    // polylines, which is the path CallbackProperty alone
-    // doesn't properly drive.
-    entity.polyline.material = new ColorMaterialProperty(color);
-    entity.polyline.width = new ConstantProperty(width);
+    if (!meta) continue;
+
+    // ── Vector-feature polyline outlines ──────────────────────
+    if (meta.kind === 'vector-feature' && meta.outlineStyle && entity.polyline) {
+      const isSelected =
+        sel?.kind === 'vector-feature' &&
+        sel.layerId === meta.layerId &&
+        sel.featureId === meta.featureId;
+      const color = isSelected
+        ? SELECTED_OUTLINE
+        : meta.outlineStyle.normalColor;
+      const width = isSelected
+        ? meta.outlineStyle.normalWidth * SELECTED_WIDTH_BOOST
+        : meta.outlineStyle.normalWidth;
+      entity.polyline.material = new ColorMaterialProperty(color);
+      entity.polyline.width = new ConstantProperty(width);
+    }
+
+    // ── Chemduck 3D ellipsoid (sphere) ───────────────────────
+    if (
+      meta.kind === 'chemduck-location' &&
+      meta.primitiveType === 'ellipsoid' &&
+      meta.normalColor &&
+      entity.ellipsoid
+    ) {
+      const isSelected =
+        sel?.kind === 'chemduck-location' &&
+        sel.locationId === meta.locationId;
+      entity.ellipsoid.material = new ColorMaterialProperty(
+        isSelected ? SELECTED_OUTLINE : meta.normalColor,
+      );
+    }
+
+    // ── Chemduck 3D polylineVolume (borehole tube) ───────────
+    if (
+      meta.kind === 'chemduck-location' &&
+      meta.primitiveType === 'polylineVolume' &&
+      meta.normalColor &&
+      entity.polylineVolume
+    ) {
+      const isSelected =
+        sel?.kind === 'chemduck-location' &&
+        sel.locationId === meta.locationId;
+      entity.polylineVolume.material = new ColorMaterialProperty(
+        isSelected ? SELECTED_OUTLINE : meta.normalColor,
+      );
+    }
   }
 }
 
 /**
- * React hook: subscribe to selection changes and apply the outline
- * highlight to vector features. Mounted alongside useLocationClick
- * since both operate on the viewer and a single mount point keeps
- * the subscription count at one.
+ * React hook: subscribe to selection changes and apply the
+ * highlight to all entity types. Mounted alongside useLocationClick.
  */
-function useVectorSelectionHighlight() {
+function useSelectionHighlight() {
   const viewer = useChemroomsStore((s) => s.cesium.viewer);
   const selectedEntity = useChemroomsStore(
     (s) => s.chemrooms.config.selectedEntity,
   );
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
-    applyVectorSelectionStyle(viewer, selectedEntity);
+    applySelectionStyle(viewer, selectedEntity);
   }, [viewer, selectedEntity]);
 }
 
 export function useLocationClick() {
-  // Mount the vector-selection highlight effect alongside the
-  // click handler — they share a single lifecycle on the viewer.
-  useVectorSelectionHighlight();
+  // Mount the selection highlight + indicator-disable effects
+  // alongside the click handler — they share a single lifecycle
+  // on the viewer.
+  useSelectionHighlight();
   useDisableCesiumSelectionIndicator();
 
   const viewer = useChemroomsStore((s) => s.cesium.viewer);

@@ -19,7 +19,7 @@
  */
 
 import {useEffect} from 'react';
-import {Cartesian3, Color, HeightReference} from 'cesium';
+import {Cartesian2, Cartesian3, Color, HeightReference} from 'cesium';
 import {useStoreWithCesium} from '@sqlrooms/cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
 import {makeColorFnForColumn} from '../vis/colormap';
@@ -27,6 +27,23 @@ import {
   setEntityMetadata,
   stripPositioningColumns,
 } from '../layers/entityMetadata';
+import {fabricateTrajectory} from '../layers/desurvey';
+
+const VOLUME_SHAPE_SEGMENTS = 12;
+
+function circleShape(radiusMeters: number): Cartesian2[] {
+  const positions: Cartesian2[] = [];
+  for (let i = 0; i < VOLUME_SHAPE_SEGMENTS; i++) {
+    const angle = (i / VOLUME_SHAPE_SEGMENTS) * Math.PI * 2;
+    positions.push(
+      new Cartesian2(
+        Math.cos(angle) * radiusMeters,
+        Math.sin(angle) * radiusMeters,
+      ),
+    );
+  }
+  return positions;
+}
 
 export interface UseChemroomsEntitiesArgs {
   /** Stable string used to namespace entity IDs and clean them up. */
@@ -54,6 +71,17 @@ export interface UseChemroomsEntitiesArgs {
    * layers) are the common case.
    */
   entityKind?: 'chemduck-location' | 'vector-feature';
+  /**
+   * 3D rendering mode for chemduck-sourced entities.
+   * - `auto` (default): sphere for surface, polylineVolume for depth intervals
+   * - `sphere`: always sphere (ignore depth)
+   * - `volume`: always polylineVolume
+   */
+  sampleRenderAs?: 'auto' | 'sphere' | 'volume';
+  /** Radius of 3D spheres in meters. Default 3. */
+  sphereRadiusMeters?: number;
+  /** Radius of borehole polylineVolume cross-section in meters. Default 1. */
+  volumeRadiusMeters?: number;
 }
 
 const FALLBACK_COLOR = Color.CYAN;
@@ -122,20 +150,33 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
         }
       }
 
-      // Create entities. Each one gets a stable ID prefixed with layerId
-      // so we can clean it up unambiguously.
+      // Precompute 3D rendering shapes (reused across rows).
+      const isChemduck =
+        (args.entityKind ?? 'chemduck-location') === 'chemduck-location';
+      const renderMode = args.sampleRenderAs ?? 'auto';
+      const sphereR = args.sphereRadiusMeters ?? 3;
+      const volumeR = args.volumeRadiusMeters ?? 1;
+      const sphereRadii = new Cartesian3(sphereR, sphereR, sphereR);
+      const volumeShape = circleShape(volumeR);
+
+      // Create entities. Each one gets a stable ID prefixed with
+      // layerId so we can clean it up unambiguously.
       //
-      // Altitude handling: a SQL NULL in the altitude column comes
-      // through as row.altitude === null. We use this as the signal
-      // that the query didn't provide an ellipsoidal height, and
-      // fall back to terrain-clamping the entity (heightReference =
-      // CLAMP_TO_GROUND with position height 0). This is how a
-      // drag-dropped 2D geoparquet ends up riding the terrain
-      // surface without the loader needing to pre-sample elevations.
-      // Rows that DO provide a numeric altitude (chemduck layers,
-      // 3D geoparquet with ST_Z) keep the absolute-position
-      // (heightReference = NONE) behavior so their coordinates
-      // aren't silently overridden.
+      // Rendering decision tree (per row):
+      //
+      //  chemduck-location + depth interval → polylineVolume tube
+      //    (borehole segment, fabricated vertical trajectory unless
+      //    deviation survey data is available)
+      //
+      //  chemduck-location + no depth interval + altitude → ellipsoid
+      //    (3D sphere for surface locations / shallow grab samples)
+      //
+      //  vector-feature (geoparquet point) → 2D screen-space point
+      //    (terrain-clamped when altitude is missing)
+      //
+      //  chemduck-location + no altitude → 2D point fallback
+      //    (shouldn't happen because chemduck SQL always computes
+      //    an altitude, but safe to handle)
       for (const row of rows) {
         if (cancelled) break;
         const lon = Number(row.longitude);
@@ -147,49 +188,116 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
           altRaw != null && Number.isFinite(Number(altRaw));
         const alt = hasExplicitAlt ? Number(altRaw) : 0;
 
+        const surfaceElevRaw = row.surface_elev_m;
+        const surfaceElev =
+          surfaceElevRaw != null && Number.isFinite(Number(surfaceElevRaw))
+            ? Number(surfaceElevRaw)
+            : alt;
+
+        const topDepthRaw = row.top_depth_m;
+        const bottomDepthRaw = row.bottom_depth_m;
+        const hasDepth =
+          topDepthRaw != null &&
+          bottomDepthRaw != null &&
+          Number.isFinite(Number(topDepthRaw)) &&
+          Number.isFinite(Number(bottomDepthRaw));
+
         const value = colorByCol ? row[colorByCol] : undefined;
         const color = colorFn(value);
         const rowId = String(row.location_id ?? '');
         const id = `${args.layerId}:${rowId}`;
+        const label = String(row.label ?? rowId ?? args.layerId);
 
         try {
-          const label = String(row.label ?? rowId ?? args.layerId);
-          const entity = viewer.entities.add({
-            id,
-            name: label,
-            position: Cartesian3.fromDegrees(lon, lat, alt),
-            point: {
-              pixelSize: 8,
-              color,
-              outlineColor: Color.WHITE,
-              outlineWidth: 1,
-              heightReference: hasExplicitAlt
-                ? HeightReference.NONE
-                : HeightReference.CLAMP_TO_GROUND,
-            },
-          });
-          // Attach click-time metadata. The WeakMap entry goes away
-          // when the entity does, so no bookkeeping in the cleanup
-          // function is required.
-          if ((args.entityKind ?? 'chemduck-location') === 'vector-feature') {
-            setEntityMetadata(entity, {
-              kind: 'vector-feature',
-              layerId: args.layerId,
-              featureId: rowId,
-              label,
-              properties: stripPositioningColumns(row),
+          let entity;
+
+          // ── polylineVolume (borehole segment) ──────────────────
+          if (isChemduck && hasDepth && renderMode !== 'sphere') {
+            const topM = Number(topDepthRaw);
+            const bottomM = Number(bottomDepthRaw);
+            const trajectory = fabricateTrajectory(
+              lon,
+              lat,
+              surfaceElev,
+              topM,
+              bottomM,
+            );
+            const positions = trajectory.map((p) =>
+              Cartesian3.fromDegrees(p.lon, p.lat, p.alt),
+            );
+            entity = viewer.entities.add({
+              id,
+              name: label,
+              polylineVolume: {
+                positions,
+                shape: volumeShape,
+                material: color,
+              },
             });
-          } else {
             setEntityMetadata(entity, {
               kind: 'chemduck-location',
               layerId: args.layerId,
               locationId: rowId,
+              normalColor: color,
+              primitiveType: 'polylineVolume',
             });
+
+            // ── ellipsoid (3D sphere) ────────────────────────────
+          } else if (isChemduck && hasExplicitAlt) {
+            entity = viewer.entities.add({
+              id,
+              name: label,
+              position: Cartesian3.fromDegrees(lon, lat, alt),
+              ellipsoid: {
+                radii: sphereRadii,
+                material: color,
+              },
+            });
+            setEntityMetadata(entity, {
+              kind: 'chemduck-location',
+              layerId: args.layerId,
+              locationId: rowId,
+              normalColor: color,
+              primitiveType: 'ellipsoid',
+            });
+
+            // ── 2D point fallback ────────────────────────────────
+          } else {
+            entity = viewer.entities.add({
+              id,
+              name: label,
+              position: Cartesian3.fromDegrees(lon, lat, alt),
+              point: {
+                pixelSize: 8,
+                color,
+                outlineColor: Color.WHITE,
+                outlineWidth: 1,
+                heightReference: hasExplicitAlt
+                  ? HeightReference.NONE
+                  : HeightReference.CLAMP_TO_GROUND,
+              },
+            });
+            if (isChemduck) {
+              setEntityMetadata(entity, {
+                kind: 'chemduck-location',
+                layerId: args.layerId,
+                locationId: rowId,
+                primitiveType: 'point',
+              });
+            } else {
+              setEntityMetadata(entity, {
+                kind: 'vector-feature',
+                layerId: args.layerId,
+                featureId: rowId,
+                label,
+                properties: stripPositioningColumns(row),
+              });
+            }
           }
+
           created.push({id});
         } catch (e) {
-          // Duplicate id — skip silently. Shouldn't happen in practice
-          // because the cleanup function removes old entities first.
+          // Duplicate id — skip silently.
         }
       }
     })();

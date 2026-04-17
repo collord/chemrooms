@@ -30,6 +30,17 @@ export type EntityMetadata =
       layerId: string;
       /** `location_id` identifier from the chemduck schema. */
       locationId: string;
+      /**
+       * The entity's unselected material color. Stored so the
+       * selection-highlight logic can revert after deselection.
+       * Present on 3D primitives (sphere, polylineVolume); absent
+       * on the legacy 2D point fallback (which doesn't participate
+       * in the imperative restyle — it uses Cesium's screen-space
+       * rendering that doesn't need material swaps).
+       */
+      normalColor?: import('cesium').Color;
+      /** Which Cesium primitive this entity uses, for restyle dispatch. */
+      primitiveType?: 'ellipsoid' | 'polylineVolume' | 'point';
     }
   | {
       kind: 'vector-feature';
