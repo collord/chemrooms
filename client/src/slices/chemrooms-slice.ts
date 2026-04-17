@@ -130,6 +130,12 @@ export interface ChemroomsConfig {
   colorMode: ColorMode;
   selectedScreeningLevel: string | null;
   fractionFilter: string | null;
+  /** 3D rendering mode for chemduck entities. */
+  sampleRenderAs: 'auto' | 'sphere' | 'volume';
+  /** Radius of 3D spheres in meters. */
+  sphereRadiusMeters: number;
+  /** Radius of borehole polylineVolume tubes in meters. */
+  volumeRadiusMeters: number;
 }
 
 /** Lon/lat pairs for the two cross-section endpoints (degrees). */
@@ -225,6 +231,9 @@ export interface ChemroomsSliceState {
     setColorBy: (table: string, column: string | null) => void;
     setIsLoadingFilters: (loading: boolean) => void;
     setIsLoadingLocation: (loading: boolean) => void;
+    setSampleRenderAs: (mode: 'auto' | 'sphere' | 'volume') => void;
+    setSphereRadiusMeters: (radius: number) => void;
+    setVolumeRadiusMeters: (radius: number) => void;
   };
 }
 
@@ -268,6 +277,9 @@ const DEFAULT_CONFIG: ChemroomsConfig = {
   colorMode: 'concentration',
   selectedScreeningLevel: null,
   fractionFilter: null,
+  sampleRenderAs: 'auto',
+  sphereRadiusMeters: 3,
+  volumeRadiusMeters: 1,
 };
 
 export function createChemroomsSlice(
@@ -580,6 +592,21 @@ export function createChemroomsSlice(
       setIsLoadingLocation: (loading) =>
         set((state: ChemroomsSliceState) =>
           updateRuntime(state, {isLoadingLocation: loading}),
+        ),
+
+      setSampleRenderAs: (mode) =>
+        set((state: ChemroomsSliceState) =>
+          updateConfig(state, {sampleRenderAs: mode}),
+        ),
+
+      setSphereRadiusMeters: (radius) =>
+        set((state: ChemroomsSliceState) =>
+          updateConfig(state, {sphereRadiusMeters: radius}),
+        ),
+
+      setVolumeRadiusMeters: (radius) =>
+        set((state: ChemroomsSliceState) =>
+          updateConfig(state, {volumeRadiusMeters: radius}),
         ),
     },
   }));

@@ -495,6 +495,9 @@ export async function freezeCurrentState(params: {
   colorBy: string | null;
   palette?: string;
   scaleType?: 'linear' | 'log' | 'sqrt';
+  sampleRenderAs?: 'auto' | 'sphere' | 'volume';
+  sphereRadiusMeters?: number;
+  volumeRadiusMeters?: number;
 }): Promise<LayerConfig> {
   const draft: LayerConfig = {
     version: 1,
@@ -519,9 +522,9 @@ export async function freezeCurrentState(params: {
       pointSize: 8,
       opacity: 1,
       color: '#00ffff',
-      sampleRenderAs: 'auto',
-      sphereRadiusMeters: 3,
-      volumeRadiusMeters: 1,
+      sampleRenderAs: params.sampleRenderAs ?? 'auto',
+      sphereRadiusMeters: params.sphereRadiusMeters ?? 3,
+      volumeRadiusMeters: params.volumeRadiusMeters ?? 1,
     },
     visible: true,
     createdAt: new Date().toISOString(),

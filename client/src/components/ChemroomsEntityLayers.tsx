@@ -135,6 +135,15 @@ export const ChemroomsEntityLayers: React.FC = () => {
   const matrixFilter = useChemroomsStore(
     (s) => s.chemrooms.config.matrixFilter,
   );
+  const sampleRenderAs = useChemroomsStore(
+    (s) => s.chemrooms.config.sampleRenderAs,
+  );
+  const sphereRadiusMeters = useChemroomsStore(
+    (s) => s.chemrooms.config.sphereRadiusMeters,
+  );
+  const volumeRadiusMeters = useChemroomsStore(
+    (s) => s.chemrooms.config.volumeRadiusMeters,
+  );
 
   // ── Local state ─────────────────────────────────────────────────────
   const initRanRef = useRef(false);
@@ -428,12 +437,18 @@ export const ChemroomsEntityLayers: React.FC = () => {
         sqlQuery={locationsSql}
         visSpecTable="locations"
         visible={locationsVisible && !hasAnalyte}
+        sampleRenderAs={sampleRenderAs}
+        sphereRadiusMeters={sphereRadiusMeters}
+        volumeRadiusMeters={volumeRadiusMeters}
       />
       <ChemroomsEntityLayer
         layerId="samples"
         sqlQuery={samplesSql}
         visSpecTable={samplesVisSpecTable}
         visible={samplesVisible}
+        sampleRenderAs={sampleRenderAs}
+        sphereRadiusMeters={sphereRadiusMeters}
+        volumeRadiusMeters={volumeRadiusMeters}
       />
       {personalLayers.map((layer) =>
         renderSavedLayer(
@@ -532,6 +547,9 @@ function renderSavedLayer(
       visible={layer.visible}
       colorByOverride={layer.visual.colorBy}
       entityKind={entityKind}
+      sampleRenderAs={layer.visual.sampleRenderAs}
+      sphereRadiusMeters={layer.visual.sphereRadiusMeters}
+      volumeRadiusMeters={layer.visual.volumeRadiusMeters}
     />
   );
 }

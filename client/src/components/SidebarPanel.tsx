@@ -31,6 +31,7 @@ import {ColorByPicker} from './ColorByPicker';
 import {TopAnalytePicker} from './TopAnalytePicker';
 import {AggregationRulePicker} from './AggregationRulePicker';
 import {FreezeLayerButton} from './FreezeLayerButton';
+import {SymbolControls} from './SymbolControls';
 import {LayersPanel} from './LayersPanel';
 
 export const SidebarPanel: React.FC = () => {
@@ -65,6 +66,7 @@ export const SidebarPanel: React.FC = () => {
         />
         <FilterToolbar disabled={recipeDisabled} />
         <ColorByPicker disabled={recipeDisabled} />
+        <SymbolControls disabled={recipeDisabled} />
         <FreezeLayerButton />
       </div>
 

@@ -27,6 +27,15 @@ export const FreezeLayerButton: React.FC = () => {
   const colorByResults = useChemroomsStore(
     (s) => s.chemrooms.colorBy['v_results_denormalized'],
   );
+  const sampleRenderAs = useChemroomsStore(
+    (s) => s.chemrooms.config.sampleRenderAs,
+  );
+  const sphereRadiusMeters = useChemroomsStore(
+    (s) => s.chemrooms.config.sphereRadiusMeters,
+  );
+  const volumeRadiusMeters = useChemroomsStore(
+    (s) => s.chemrooms.config.volumeRadiusMeters,
+  );
   const setPersonalLayers = useChemroomsStore(
     (s) => s.chemrooms.setPersonalLayers,
   );
@@ -55,6 +64,9 @@ export const FreezeLayerButton: React.FC = () => {
       dupAgg,
       ndMethod,
       colorBy: colorByResults ?? null,
+      sampleRenderAs,
+      sphereRadiusMeters,
+      volumeRadiusMeters,
     });
 
     const {layers, added} = await addPersonalLayer(layer, personalLayers);
@@ -69,6 +81,9 @@ export const FreezeLayerButton: React.FC = () => {
     dupAgg,
     ndMethod,
     colorByResults,
+    sampleRenderAs,
+    sphereRadiusMeters,
+    volumeRadiusMeters,
     personalLayers,
     setPersonalLayers,
   ]);

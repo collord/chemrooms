@@ -319,6 +319,9 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
     args.visible,
     args.visSpecTable,
     args.entityKind,
+    args.sampleRenderAs,
+    args.sphereRadiusMeters,
+    args.volumeRadiusMeters,
     visSpec,
     colorByCol,
   ]);
