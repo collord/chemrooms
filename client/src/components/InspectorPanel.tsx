@@ -1,0 +1,295 @@
+/**
+ * Inspector panel — dedicated mosaic pane showing the
+ * currently-selected entity.
+ *
+ * Two variants, switched on selectedEntity.kind:
+ *
+ *  - `chemduck-location`: the existing LocationDetailCard content
+ *    (loc_type, loc_desc, region, sample count, date range,
+ *    matrices) plus the analytes-at-location table. Driven by
+ *    slice state that useLocationDetail fills in asynchronously
+ *    via the summary and analytes SQL queries.
+ *
+ *  - `vector-feature`: a generic key/value attribute table built
+ *    from the entity's `properties` (attached at creation time by
+ *    useChemroomsVectorEntities / useChemroomsEntities via the
+ *    entityMetadata WeakMap). No SQL needed — the properties
+ *    travel with the Cesium entity.
+ *
+ * Empty state (nothing selected) shows a short placeholder.
+ *
+ * Replaces the in-sidebar LocationDetailCard — attribute tables
+ * can be tall and deserve their own resizable pane rather than
+ * fighting the recipe controls for sidebar real estate.
+ */
+
+import React from 'react';
+import {
+  Calendar,
+  FlaskConical,
+  Layers as LayersIcon,
+  MapPin,
+  MousePointerClick,
+  Shapes,
+} from 'lucide-react';
+import {useChemroomsStore} from '../slices/chemrooms-slice';
+import type {
+  AnalyteInfo,
+  LocationSummary,
+  SelectedEntity,
+} from '../slices/chemrooms-slice';
+import {AnalytePicker} from './AnalytePicker';
+
+export const InspectorPanel: React.FC = () => {
+  const selectedEntity = useChemroomsStore(
+    (s) => s.chemrooms.config.selectedEntity,
+  );
+
+  if (!selectedEntity) return <EmptyState />;
+
+  if (selectedEntity.kind === 'chemduck-location') {
+    return <ChemduckLocationDetail entity={selectedEntity} />;
+  }
+  return <VectorFeatureDetail entity={selectedEntity} />;
+};
+
+// ---------------------------------------------------------------------------
+// Empty state
+// ---------------------------------------------------------------------------
+
+const EmptyState: React.FC = () => (
+  <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
+    <div className="flex max-w-xs flex-col items-center gap-2">
+      <MousePointerClick className="h-6 w-6 opacity-40" />
+      <div>Click an entity on the map to inspect its attributes.</div>
+    </div>
+  </div>
+);
+
+// ---------------------------------------------------------------------------
+// Chemduck location variant
+// ---------------------------------------------------------------------------
+
+const ChemduckLocationDetail: React.FC<{
+  entity: Extract<SelectedEntity, {kind: 'chemduck-location'}>;
+}> = ({entity}) => {
+  const summary = useChemroomsStore((s) => s.chemrooms.locationSummary);
+  const analytes = useChemroomsStore((s) => s.chemrooms.analytesAtLocation);
+  const isLoading = useChemroomsStore((s) => s.chemrooms.isLoadingLocation);
+
+  return (
+    <div className="flex h-full flex-col gap-3 overflow-y-auto p-3 text-sm">
+      <SelectionHeader
+        icon={<MapPin className="h-4 w-4 text-primary" />}
+        title={entity.locationId}
+        subtitle={entity.source !== 'unknown' ? entity.source : undefined}
+      />
+
+      {isLoading && !summary ? (
+        <div className="text-xs italic text-muted-foreground">Loading…</div>
+      ) : summary ? (
+        <LocationSummaryCard summary={summary} />
+      ) : (
+        <div className="text-xs italic text-muted-foreground">
+          No summary available for this location.
+        </div>
+      )}
+
+      {analytes.length > 0 && <AnalytesTable analytes={analytes} />}
+
+      {/* Time-series analyte picker — tied to this location. Picks
+          drive the TimeSeriesPanel, which renders in its own mosaic
+          pane. Only shown when we actually have analytes to pick
+          from. */}
+      {analytes.length > 0 && (
+        <div className="mt-2 border-t pt-3">
+          <AnalytePicker />
+        </div>
+      )}
+    </div>
+  );
+};
+
+const LocationSummaryCard: React.FC<{summary: LocationSummary}> = ({
+  summary,
+}) => (
+  <div className="flex flex-col gap-2 rounded-md border p-3">
+    {summary.locType && (
+      <span className="w-fit rounded bg-muted px-1.5 py-0.5 text-xs">
+        {summary.locType}
+      </span>
+    )}
+    {summary.locDesc && (
+      <p className="text-sm text-muted-foreground">{summary.locDesc}</p>
+    )}
+
+    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+      <div className="flex items-center gap-1 text-muted-foreground">
+        <LayersIcon className="h-3 w-3" />
+        <span>{summary.sampleCount} samples</span>
+      </div>
+      <div className="flex items-center gap-1 text-muted-foreground">
+        <FlaskConical className="h-3 w-3" />
+        <span>{summary.analyteCount} analytes</span>
+      </div>
+      <div className="flex items-center gap-1 text-muted-foreground">
+        <Calendar className="h-3 w-3" />
+        <span>{summary.firstDate}</span>
+      </div>
+      <div className="flex items-center gap-1 text-muted-foreground">
+        <Calendar className="h-3 w-3" />
+        <span>{summary.lastDate}</span>
+      </div>
+    </div>
+
+    {Array.isArray(summary.matrices) && summary.matrices.length > 0 && (
+      <div className="flex flex-wrap gap-1">
+        {summary.matrices.map((m) => (
+          <span
+            key={m}
+            className="rounded bg-muted px-1.5 py-0.5 text-xs"
+          >
+            {m}
+          </span>
+        ))}
+      </div>
+    )}
+  </div>
+);
+
+const AnalytesTable: React.FC<{analytes: AnalyteInfo[]}> = ({analytes}) => (
+  <div className="flex flex-col gap-1">
+    <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+      Analytes ({analytes.length})
+    </div>
+    <div className="rounded-md border">
+      <table className="w-full text-xs">
+        <thead className="border-b bg-muted/50">
+          <tr className="text-left">
+            <th className="px-2 py-1 font-normal">Analyte</th>
+            <th className="px-2 py-1 text-right font-normal">Detects</th>
+            <th className="px-2 py-1 text-right font-normal">Max</th>
+            <th className="px-2 py-1 font-normal">Units</th>
+          </tr>
+        </thead>
+        <tbody>
+          {analytes.map((a) => (
+            <tr
+              key={a.analyte}
+              className="border-b last:border-b-0 hover:bg-muted/30"
+            >
+              <td className="px-2 py-1">
+                <div className="truncate" title={a.analyte}>
+                  {a.analyte}
+                </div>
+                {a.analyteGroup && a.analyteGroup !== 'Other' && (
+                  <div className="text-[10px] text-muted-foreground">
+                    {a.analyteGroup}
+                  </div>
+                )}
+              </td>
+              <td className="px-2 py-1 text-right tabular-nums">
+                {a.detectCount}/{a.resultCount}
+              </td>
+              <td className="px-2 py-1 text-right tabular-nums">
+                {Number.isFinite(a.maxResult)
+                  ? a.maxResult.toPrecision(3)
+                  : '—'}
+              </td>
+              <td className="px-2 py-1 text-muted-foreground">{a.units}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+);
+
+// ---------------------------------------------------------------------------
+// Vector feature variant
+// ---------------------------------------------------------------------------
+
+const VectorFeatureDetail: React.FC<{
+  entity: Extract<SelectedEntity, {kind: 'vector-feature'}>;
+}> = ({entity}) => {
+  const entries = Object.entries(entity.properties);
+  return (
+    <div className="flex h-full flex-col gap-3 overflow-y-auto p-3 text-sm">
+      <SelectionHeader
+        icon={<Shapes className="h-4 w-4 text-primary" />}
+        title={entity.label || entity.featureId}
+        subtitle={entity.layerId}
+      />
+
+      {entries.length === 0 ? (
+        <div className="text-xs italic text-muted-foreground">
+          No attribute columns are exposed for this feature. Configure the
+          layer's <code>propertiesColumns</code> to pass columns through.
+        </div>
+      ) : (
+        <div className="rounded-md border">
+          <table className="w-full text-xs">
+            <tbody>
+              {entries.map(([key, value]) => (
+                <tr
+                  key={key}
+                  className="border-b last:border-b-0 hover:bg-muted/30"
+                >
+                  <td className="w-1/3 px-2 py-1 font-medium text-muted-foreground">
+                    {key}
+                  </td>
+                  <td className="px-2 py-1 font-mono text-[11px] break-all">
+                    {formatPropertyValue(value)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * Best-effort string rendering for a property value. Most DuckDB
+ * values come through as primitives or null; dates / blobs / lists
+ * need a little help. Errs on the side of "show something, don't
+ * throw" — if we can't interpret, fall back to JSON.
+ */
+function formatPropertyValue(value: unknown): string {
+  if (value === null || value === undefined) return '—';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'bigint') {
+    return String(value);
+  }
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (value instanceof Date) return value.toISOString();
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Shared selection header
+// ---------------------------------------------------------------------------
+
+const SelectionHeader: React.FC<{
+  icon: React.ReactNode;
+  title: string;
+  subtitle?: string;
+}> = ({icon, title, subtitle}) => (
+  <div className="flex items-start gap-2 border-b pb-2">
+    {icon}
+    <div className="flex min-w-0 flex-col">
+      <div className="truncate font-semibold">{title}</div>
+      {subtitle && (
+        <div className="truncate text-[11px] text-muted-foreground">
+          {subtitle}
+        </div>
+      )}
+    </div>
+  </div>
+);

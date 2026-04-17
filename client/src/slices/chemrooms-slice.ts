@@ -63,8 +63,57 @@ export interface AnalyteInfo {
   units: string;
 }
 
+/**
+ * The entity the user most recently clicked. Two variants because
+ * they have fundamentally different rendering in the Inspector:
+ *
+ * - `chemduck-location` → structured summary (loc_type, region,
+ *   sample count, date range) + the analytes-at-location table.
+ *   Triggered by clicking a point from the chemduck-driven locations
+ *   / samples layers (or any frozen chemduck recipe).
+ *
+ * - `vector-feature` → generic key/value attribute table. Triggered
+ *   by clicking any geometry from a dropped geoparquet.
+ *
+ * Clicking empty space sets this to null.
+ */
+export type SelectedEntity =
+  | {
+      kind: 'chemduck-location';
+      /** The `location_id` identifier to drive the summary queries. */
+      locationId: string;
+      /**
+       * Which layer the click originated from, e.g. `locations`,
+       * `samples`, or `personal:<hash>`. Kept for provenance / future
+       * "go to source layer" affordances; not currently used for
+       * dispatch.
+       */
+      source: string;
+    }
+  | {
+      kind: 'vector-feature';
+      /** Full layer id string, e.g. `personal:<hash>`. */
+      layerId: string;
+      /** Stable per-feature id (the `location_id` column in our SQL). */
+      featureId: string;
+      /** Display label (the `label` column in our SQL). */
+      label: string;
+      /**
+       * The feature's attribute columns as a plain record. Synthetic
+       * fields (`_kind`, `_layerId`, etc.) are stripped before this
+       * reaches the slice — this object only contains user-visible
+       * columns from the underlying parquet.
+       */
+      properties: Record<string, unknown>;
+    };
+
 export interface ChemroomsConfig {
-  selectedLocationId: string | null;
+  /**
+   * The currently-inspected entity, or null if nothing is selected.
+   * Replaces the old `selectedLocationId` field; a chemduck location
+   * is now one variant of a tagged union alongside vector features.
+   */
+  selectedEntity: SelectedEntity | null;
   timeSeriesAnalytes: string[];
   /**
    * Analyte to drive the samples layer aggregation/coloring. When null,
@@ -129,7 +178,21 @@ export interface ChemroomsSliceState {
     isLoadingFilters: boolean;
     isLoadingLocation: boolean;
     // Actions
-    setSelectedLocation: (locationId: string | null) => void;
+    /**
+     * Set the currently-inspected entity. Passing `null` deselects.
+     * Drives both the Inspector panel and (for chemduck-location
+     * selections) the summary-query hook.
+     */
+    setSelectedEntity: (entity: SelectedEntity | null) => void;
+    /**
+     * Convenience wrapper that constructs a `chemduck-location`
+     * SelectedEntity. Kept so existing callers (useBookmark) don't
+     * need to know about the union shape.
+     */
+    setSelectedLocation: (
+      locationId: string | null,
+      source?: string,
+    ) => void;
     setTimeSeriesAnalytes: (analytes: string[]) => void;
     addTimeSeriesAnalyte: (analyte: string) => void;
     removeTimeSeriesAnalyte: (analyte: string) => void;
@@ -195,7 +258,7 @@ function updateRuntime(
 // ---------------------------------------------------------------------------
 
 const DEFAULT_CONFIG: ChemroomsConfig = {
-  selectedLocationId: null,
+  selectedEntity: null,
   timeSeriesAnalytes: [],
   coloringAnalyte: null,
   matrixFilter: null,
@@ -232,25 +295,71 @@ export function createChemroomsSlice(
       isLoadingFilters: false,
       isLoadingLocation: false,
 
-      setSelectedLocation: (locationId) =>
-        set((state: ChemroomsSliceState) => ({
-          chemrooms: {
-            ...state.chemrooms,
-            config: {
-              ...state.chemrooms.config,
-              selectedLocationId: locationId,
-              timeSeriesAnalytes: locationId
-                ? state.chemrooms.config.timeSeriesAnalytes
-                : [],
+      setSelectedEntity: (entity) =>
+        set((state: ChemroomsSliceState) => {
+          const wasChemduck =
+            state.chemrooms.config.selectedEntity?.kind ===
+            'chemduck-location';
+          const isChemduck = entity?.kind === 'chemduck-location';
+          return {
+            chemrooms: {
+              ...state.chemrooms,
+              config: {
+                ...state.chemrooms.config,
+                selectedEntity: entity,
+                // timeSeriesAnalytes is a chemduck-specific concept;
+                // clear it when deselecting or switching to a vector
+                // feature so the time-series panel doesn't show stale
+                // charts against an unrelated selection.
+                timeSeriesAnalytes: isChemduck
+                  ? state.chemrooms.config.timeSeriesAnalytes
+                  : [],
+              },
+              // Clear the chemduck summary cache when moving away
+              // from a chemduck selection. useLocationDetail will
+              // re-fetch when/if a new chemduck-location is selected.
+              locationSummary:
+                wasChemduck && !isChemduck
+                  ? null
+                  : state.chemrooms.locationSummary,
+              analytesAtLocation:
+                wasChemduck && !isChemduck
+                  ? []
+                  : state.chemrooms.analytesAtLocation,
             },
-            locationSummary: locationId
-              ? state.chemrooms.locationSummary
-              : null,
-            analytesAtLocation: locationId
-              ? state.chemrooms.analytesAtLocation
-              : [],
-          },
-        })),
+          };
+        }),
+
+      setSelectedLocation: (locationId, source = 'unknown') =>
+        set((state: ChemroomsSliceState) => {
+          const entity: SelectedEntity | null = locationId
+            ? {kind: 'chemduck-location', locationId, source}
+            : null;
+          const wasChemduck =
+            state.chemrooms.config.selectedEntity?.kind ===
+            'chemduck-location';
+          const isChemduck = entity !== null;
+          return {
+            chemrooms: {
+              ...state.chemrooms,
+              config: {
+                ...state.chemrooms.config,
+                selectedEntity: entity,
+                timeSeriesAnalytes: isChemduck
+                  ? state.chemrooms.config.timeSeriesAnalytes
+                  : [],
+              },
+              locationSummary:
+                wasChemduck && !isChemduck
+                  ? null
+                  : state.chemrooms.locationSummary,
+              analytesAtLocation:
+                wasChemduck && !isChemduck
+                  ? []
+                  : state.chemrooms.analytesAtLocation,
+            },
+          };
+        }),
 
       setTimeSeriesAnalytes: (analytes) =>
         set((state: ChemroomsSliceState) =>

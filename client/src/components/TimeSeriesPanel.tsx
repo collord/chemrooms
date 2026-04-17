@@ -77,9 +77,17 @@ function buildTimeSeriesQuery(
 }
 
 export const TimeSeriesPanel: React.FC = () => {
-  const selectedLocationId = useChemroomsStore(
-    (s) => s.chemrooms.config.selectedLocationId,
+  // Time series is a chemduck-only concept — it's the
+  // sample_date/result chart for a specific location. For
+  // vector-feature selections it stays blank, same as when nothing
+  // is selected at all.
+  const selectedEntity = useChemroomsStore(
+    (s) => s.chemrooms.config.selectedEntity,
   );
+  const selectedLocationId =
+    selectedEntity?.kind === 'chemduck-location'
+      ? selectedEntity.locationId
+      : null;
   const selectedAnalytes = useChemroomsStore(
     (s) => s.chemrooms.config.timeSeriesAnalytes,
   );

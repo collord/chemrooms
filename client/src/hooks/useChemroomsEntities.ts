@@ -23,6 +23,10 @@ import {Cartesian3, Color, HeightReference} from 'cesium';
 import {useStoreWithCesium} from '@sqlrooms/cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
 import {makeColorFnForColumn} from '../vis/colormap';
+import {
+  setEntityMetadata,
+  stripPositioningColumns,
+} from '../layers/entityMetadata';
 
 export interface UseChemroomsEntitiesArgs {
   /** Stable string used to namespace entity IDs and clean them up. */
@@ -40,6 +44,16 @@ export interface UseChemroomsEntitiesArgs {
    * config rather than the global slice state.
    */
   colorByOverride?: string | null;
+  /**
+   * What kind of entity these rows represent. Drives click-handler
+   * behavior: chemduck-location triggers the structured summary
+   * queries in useLocationDetail; vector-feature carries its
+   * attributes inline via the entity metadata WeakMap. Defaults to
+   * 'chemduck-location' because the built-in chemrooms layers
+   * (locations, samples, and chemduck-recipe personal/bookmark
+   * layers) are the common case.
+   */
+  entityKind?: 'chemduck-location' | 'vector-feature';
 }
 
 const FALLBACK_COLOR = Color.CYAN;
@@ -139,9 +153,10 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
         const id = `${args.layerId}:${rowId}`;
 
         try {
-          viewer.entities.add({
+          const label = String(row.label ?? rowId ?? args.layerId);
+          const entity = viewer.entities.add({
             id,
-            name: String(row.label ?? rowId ?? args.layerId),
+            name: label,
             position: Cartesian3.fromDegrees(lon, lat, alt),
             point: {
               pixelSize: 8,
@@ -153,6 +168,24 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
                 : HeightReference.CLAMP_TO_GROUND,
             },
           });
+          // Attach click-time metadata. The WeakMap entry goes away
+          // when the entity does, so no bookkeeping in the cleanup
+          // function is required.
+          if ((args.entityKind ?? 'chemduck-location') === 'vector-feature') {
+            setEntityMetadata(entity, {
+              kind: 'vector-feature',
+              layerId: args.layerId,
+              featureId: rowId,
+              label,
+              properties: stripPositioningColumns(row),
+            });
+          } else {
+            setEntityMetadata(entity, {
+              kind: 'chemduck-location',
+              layerId: args.layerId,
+              locationId: rowId,
+            });
+          }
           created.push({id});
         } catch (e) {
           // Duplicate id — skip silently. Shouldn't happen in practice
@@ -177,6 +210,7 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
     args.sqlQuery,
     args.visible,
     args.visSpecTable,
+    args.entityKind,
     visSpec,
     colorByCol,
   ]);

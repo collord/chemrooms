@@ -12,8 +12,9 @@
  *   3. Scene tools: Bookmark, Cross Section, Vertical Exaggeration.
  *      Per-scene state, not part of the recipe.
  *
- * The selected location detail card and time-series analyte picker
- * (when a location is clicked) appear at the bottom.
+ * Entity-detail rendering (location summary, attribute tables, the
+ * per-location analyte picker) lives in the Inspector mosaic pane,
+ * not here — the sidebar focuses on the recipe.
  */
 
 import React from 'react';
@@ -22,8 +23,6 @@ import type {EventAgg} from '../slices/chemrooms-slice';
 import {useAvailableFilters} from '../hooks/useAvailableFilters';
 import {useLocationClick, useLocationDetail} from '../hooks/useLocationClick';
 import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts';
-import {LocationDetailCard} from './LocationDetailCard';
-import {AnalytePicker} from './AnalytePicker';
 import {FilterToolbar} from './FilterToolbar';
 import {CrossSectionToggle} from './CrossSectionToggle';
 import {VerticalExaggerationSlider} from './VerticalExaggerationSlider';
@@ -35,21 +34,15 @@ import {FreezeLayerButton} from './FreezeLayerButton';
 import {LayersPanel} from './LayersPanel';
 
 export const SidebarPanel: React.FC = () => {
-  // Activate hooks
+  // Activate hooks. useLocationClick / useLocationDetail are wiring
+  // (click handler + summary-query driver); they don't render
+  // anything here. We keep them in the sidebar because it's
+  // guaranteed-mounted; the Inspector panel can be closed/hidden.
   useAvailableFilters();
   useLocationClick();
   useLocationDetail();
   useKeyboardShortcuts();
 
-  const selectedLocationId = useChemroomsStore(
-    (s) => s.chemrooms.config.selectedLocationId,
-  );
-  const locationSummary = useChemroomsStore(
-    (s) => s.chemrooms.locationSummary,
-  );
-  const isLoadingLocation = useChemroomsStore(
-    (s) => s.chemrooms.isLoadingLocation,
-  );
   const coloringAnalyte = useChemroomsStore(
     (s) => s.chemrooms.config.coloringAnalyte,
   );
@@ -84,27 +77,6 @@ export const SidebarPanel: React.FC = () => {
         <CrossSectionToggle />
         <VerticalExaggerationSlider />
       </div>
-
-      {/* ── Selected location detail (when a point is clicked) ─────── */}
-      {selectedLocationId ? (
-        <>
-          {isLoadingLocation ? (
-            <div className="text-muted-foreground py-4 text-center text-sm">
-              Loading location data...
-            </div>
-          ) : locationSummary ? (
-            <>
-              <LocationDetailCard summary={locationSummary} />
-              <AnalytePicker />
-            </>
-          ) : null}
-        </>
-      ) : (
-        <div className="text-muted-foreground py-2 text-center text-[11px] italic">
-          Click a location on the map to view details and select analytes
-          for time-series analysis.
-        </div>
-      )}
     </div>
   );
 };

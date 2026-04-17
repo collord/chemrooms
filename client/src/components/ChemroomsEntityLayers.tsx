@@ -514,6 +514,15 @@ function renderSavedLayer(
       />
     );
   }
+  // Point-geometry geoparquet layers share the entity pipeline
+  // with chemduck layers, but clicking them should open the
+  // vector-feature inspector variant (attribute table) rather than
+  // firing chemduck summary queries against a location_id that
+  // doesn't exist in the chemduck schema.
+  const entityKind: 'chemduck-location' | 'vector-feature' =
+    layer.dataSource.type === 'chemduck'
+      ? 'chemduck-location'
+      : 'vector-feature';
   return (
     <ChemroomsEntityLayer
       key={key}
@@ -522,6 +531,7 @@ function renderSavedLayer(
       visSpecTable={visSpecTableFor(layer)}
       visible={layer.visible}
       colorByOverride={layer.visual.colorBy}
+      entityKind={entityKind}
     />
   );
 }

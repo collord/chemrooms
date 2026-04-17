@@ -255,8 +255,13 @@ export function useBookmark() {
       params.set('layers', visibleLayers.join(','));
     }
 
-    if (config.selectedLocationId) {
-      params.set('loc', config.selectedLocationId);
+    // Only chemduck-location selections are serialized into bookmarks.
+    // Vector-feature selections reference a per-session layer table
+    // that won't exist on the receiver's side, so there's nothing
+    // stable to point at; if we ever move to a truly-shared blob
+    // store, we can revisit.
+    if (config.selectedEntity?.kind === 'chemduck-location') {
+      params.set('loc', config.selectedEntity.locationId);
     }
     if (config.matrixFilter) {
       params.set('matrix', config.matrixFilter);

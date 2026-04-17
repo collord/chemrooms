@@ -43,6 +43,10 @@ import {
 } from 'cesium';
 import {useStoreWithCesium} from '@sqlrooms/cesium';
 import {geoJsonToVectorPieces, type ResolvedDrapeMode} from '../layers/vectorGeometry';
+import {
+  setEntityMetadata,
+  stripPositioningColumns,
+} from '../layers/entityMetadata';
 
 export interface UseChemroomsVectorEntitiesArgs {
   /** Stable string used to namespace entity IDs and clean them up. */
@@ -105,6 +109,16 @@ export function useChemroomsVectorEntities(
 
         const rowId = String(row.location_id ?? '');
         const label = String(row.label ?? rowId ?? args.layerId);
+        // The attribute payload shared by every Cesium entity this
+        // row produces (fill + all outline rings, for a polygon).
+        // Clicking any of them should surface the same attributes.
+        const featureMeta = {
+          kind: 'vector-feature' as const,
+          layerId: args.layerId,
+          featureId: rowId,
+          label,
+          properties: stripPositioningColumns(row),
+        };
 
         for (let i = 0; i < pieces.length; i++) {
           const piece = pieces[i]!;
@@ -116,7 +130,7 @@ export function useChemroomsVectorEntities(
                 args.drapeMode,
               );
               if (!positions || positions.length < 2) continue;
-              viewer.entities.add({
+              const entity = viewer.entities.add({
                 id,
                 name: label,
                 polyline: {
@@ -126,6 +140,7 @@ export function useChemroomsVectorEntities(
                   clampToGround: args.drapeMode === 'drape',
                 },
               });
+              setEntityMetadata(entity, featureMeta);
               created.push(id);
             } else if (piece.kind === 'polygon') {
               const outer = positionsFromFlat(piece.outer, args.drapeMode);
@@ -149,7 +164,7 @@ export function useChemroomsVectorEntities(
                 // support terrain following. That gives us visible
                 // outlines on draped polygons, which entity polygons
                 // natively can't provide.
-                viewer.entities.add({
+                const fillEntity = viewer.entities.add({
                   id,
                   name: label,
                   polygon: {
@@ -160,6 +175,7 @@ export function useChemroomsVectorEntities(
                     material: FALLBACK_COLOR,
                   },
                 });
+                setEntityMetadata(fillEntity, featureMeta);
                 created.push(id);
 
                 // Outline rings — outer + holes, all ground-clamped.
@@ -168,7 +184,7 @@ export function useChemroomsVectorEntities(
                 const rings = [outer, ...holePositions];
                 for (let r = 0; r < rings.length; r++) {
                   const outlineId = `${id}:outline:${r}`;
-                  viewer.entities.add({
+                  const outlineEntity = viewer.entities.add({
                     id: outlineId,
                     polyline: {
                       positions: rings[r]!,
@@ -177,6 +193,9 @@ export function useChemroomsVectorEntities(
                       clampToGround: true,
                     },
                   });
+                  // Clicking the outline surfaces the same feature
+                  // attributes as clicking the fill.
+                  setEntityMetadata(outlineEntity, featureMeta);
                   created.push(outlineId);
                 }
               } else {
@@ -184,7 +203,7 @@ export function useChemroomsVectorEntities(
                 // no terrain interaction. Outlines work natively on
                 // un-clamped polygons because Cesium uses the
                 // GeometryInstance path there.
-                viewer.entities.add({
+                const entity = viewer.entities.add({
                   id,
                   name: label,
                   polygon: {
@@ -197,6 +216,7 @@ export function useChemroomsVectorEntities(
                     outlineColor: FALLBACK_OUTLINE,
                   },
                 });
+                setEntityMetadata(entity, featureMeta);
                 created.push(id);
               }
             } else if (piece.kind === 'point') {
@@ -206,7 +226,7 @@ export function useChemroomsVectorEntities(
               // Cesium point so we don't silently drop it.
               const [lon, lat, h] = piece.coord;
               const position = Cartesian3.fromDegrees(lon, lat, h ?? 0);
-              viewer.entities.add({
+              const entity = viewer.entities.add({
                 id,
                 name: label,
                 position,
@@ -221,6 +241,7 @@ export function useChemroomsVectorEntities(
                       : HeightReference.NONE,
                 },
               });
+              setEntityMetadata(entity, featureMeta);
               created.push(id);
             }
           } catch (e) {

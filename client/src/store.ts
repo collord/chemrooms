@@ -26,7 +26,12 @@ import {
   createSqlEditorSlice,
   type SqlEditorSliceState,
 } from '@sqlrooms/sql-editor';
-import {Globe, SlidersHorizontalIcon, ChartLineIcon} from 'lucide-react';
+import {
+  Globe,
+  SlidersHorizontalIcon,
+  ChartLineIcon,
+  SearchIcon,
+} from 'lucide-react';
 
 import {
   createChemroomsSlice,
@@ -34,6 +39,7 @@ import {
 } from './slices/chemrooms-slice';
 import {SidebarPanel} from './components/SidebarPanel';
 import {TimeSeriesPanel} from './components/TimeSeriesPanel';
+import {InspectorPanel} from './components/InspectorPanel';
 import {registerSpatialProbeGlobal} from './dev/probeSpatial';
 
 // ---------------------------------------------------------------------------
@@ -139,10 +145,15 @@ export const {roomStore, useRoomStore} = createRoomStore<RoomState>(
             direction: 'row',
             first: 'sidebar',
             second: {
-              direction: 'column',
-              first: MAIN_VIEW,
-              second: 'timeseries',
-              splitPercentage: 60,
+              direction: 'row',
+              first: {
+                direction: 'column',
+                first: MAIN_VIEW,
+                second: 'timeseries',
+                splitPercentage: 60,
+              },
+              second: 'inspector',
+              splitPercentage: 75,
             },
             splitPercentage: 22,
           },
@@ -164,6 +175,12 @@ export const {roomStore, useRoomStore} = createRoomStore<RoomState>(
             title: 'Time Series',
             icon: ChartLineIcon,
             component: TimeSeriesPanel,
+            placement: 'main',
+          },
+          inspector: {
+            title: 'Inspector',
+            icon: SearchIcon,
+            component: InspectorPanel,
             placement: 'main',
           },
         },

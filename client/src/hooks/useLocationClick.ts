@@ -1,9 +1,22 @@
 /**
- * Wires Cesium entity click events to the chemrooms slice.
- * When a user clicks a location entity on the globe, this hook:
- * 1. Sets the selectedLocationId in the chemrooms slice
- * 2. Fires a query for the location summary
- * 3. Fires a query for the analytes available at that location
+ * Cesium entity click → chemrooms selection.
+ *
+ * One viewer-level screen-space click handler picks whatever the
+ * user clicked, inspects the entity's metadata (attached at entity
+ * creation by useChemroomsEntities / useChemroomsVectorEntities),
+ * and pushes a typed SelectedEntity into the slice. Clicking empty
+ * space deselects.
+ *
+ * The slice's selectedEntity then drives two things:
+ *  - The Inspector panel (rendered in the mosaic layout) which
+ *    shows a chemduck-location summary OR a generic vector-feature
+ *    attributes table depending on kind.
+ *  - useLocationDetail (below), which fires the summary + analytes
+ *    SQL queries when the selection is a chemduck-location.
+ *
+ * Old name `useLocationClick` is preserved for backwards-compatible
+ * imports; the implementation no longer assumes the clicked entity
+ * is a chemduck location.
  */
 
 import {useEffect, useRef} from 'react';
@@ -15,13 +28,14 @@ import {
 } from 'cesium';
 import {useSql} from '@sqlrooms/duckdb';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
+import {getEntityMetadata} from '../layers/entityMetadata';
 
 export function useLocationClick() {
   const viewer = useChemroomsStore((s) => s.cesium.viewer);
-  const setSelectedLocation = useChemroomsStore(
-    (s) => s.chemrooms.setSelectedLocation,
+  const setSelectedEntityInSlice = useChemroomsStore(
+    (s) => s.chemrooms.setSelectedEntity,
   );
-  const setSelectedEntity = useChemroomsStore(
+  const setSelectedEntityInCesium = useChemroomsStore(
     (s) => s.cesium.setSelectedEntity,
   );
   const handlerRef = useRef<ScreenSpaceEventHandler | null>(null);
@@ -34,19 +48,43 @@ export function useLocationClick() {
 
     handler.setInputAction((movement: {position: Cartesian2}) => {
       const picked = viewer.scene.pick(movement.position);
-      if (defined(picked) && picked.id) {
-        const entity = picked.id;
-        const locationId = entity.name ?? entity.id;
-        setSelectedEntity(entity);
-        setSelectedLocation(locationId);
-
-        // Fly to the selected location
-        viewer.flyTo(entity, {duration: 1.0});
-      } else {
-        // Clicked empty space — deselect
-        setSelectedEntity(null);
-        setSelectedLocation(null);
+      if (!defined(picked) || !picked.id) {
+        // Clicked empty space — deselect in both the cesium slice
+        // (used for the "selected" highlight) and the chemrooms
+        // slice (used for the Inspector).
+        setSelectedEntityInCesium(null);
+        setSelectedEntityInSlice(null);
+        return;
       }
+
+      const entity = picked.id;
+      setSelectedEntityInCesium(entity);
+
+      // Read our metadata off the entity via the WeakMap. If the
+      // entity wasn't created by one of our hooks (e.g., a tileset
+      // feature or a base-imagery pick), meta will be undefined and
+      // we fall back to just flying to it without setting a
+      // chemrooms selection.
+      const meta = getEntityMetadata(entity);
+      if (!meta) {
+        setSelectedEntityInSlice(null);
+      } else if (meta.kind === 'chemduck-location') {
+        setSelectedEntityInSlice({
+          kind: 'chemduck-location',
+          locationId: meta.locationId,
+          source: meta.layerId,
+        });
+      } else {
+        setSelectedEntityInSlice({
+          kind: 'vector-feature',
+          layerId: meta.layerId,
+          featureId: meta.featureId,
+          label: meta.label,
+          properties: meta.properties,
+        });
+      }
+
+      viewer.flyTo(entity, {duration: 1.0});
     }, ScreenSpaceEventType.LEFT_CLICK);
 
     return () => {
@@ -55,16 +93,23 @@ export function useLocationClick() {
       }
       handlerRef.current = null;
     };
-  }, [viewer, setSelectedLocation, setSelectedEntity]);
+  }, [viewer, setSelectedEntityInSlice, setSelectedEntityInCesium]);
 }
 
 /**
- * Loads location summary + analyte list when selectedLocationId changes.
+ * Loads location summary + analyte list when the selection is a
+ * chemduck-location. No-ops for vector-feature selections (those
+ * have no server-side summary to fetch — their properties travel
+ * with the Cesium entity).
  */
 export function useLocationDetail() {
-  const selectedLocationId = useChemroomsStore(
-    (s) => s.chemrooms.config.selectedLocationId,
+  const selectedEntity = useChemroomsStore(
+    (s) => s.chemrooms.config.selectedEntity,
   );
+  const selectedLocationId =
+    selectedEntity?.kind === 'chemduck-location'
+      ? selectedEntity.locationId
+      : null;
   const matrixFilter = useChemroomsStore(
     (s) => s.chemrooms.config.matrixFilter,
   );
