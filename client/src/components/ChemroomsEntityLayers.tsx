@@ -50,6 +50,7 @@ import {
   savePersonalLayers,
 } from '../layers/layerStorage';
 import {rehydrateGeoparquetLayers} from '../layers/registerGeoparquetLayer';
+import {useProjectZoom} from '../hooks/useProjectZoom';
 import type {LayerConfig} from '../layers/layerSchema';
 
 const VIS_SPEC_TABLES = [
@@ -85,6 +86,12 @@ async function sampleTerrainForLocations(
 }
 
 export const ChemroomsEntityLayers: React.FC = () => {
+  // ── Project-level zoom ─────────────────────────────────────────────
+  // Auto-flies to the data extent on initial load. The zoomToFit
+  // callback isn't wired to a button yet (that's in the @sqlrooms
+  // cesium toolbar) but is available if we want to expose one.
+  useProjectZoom();
+
   // ── Environment ─────────────────────────────────────────────────────
   const isDataAvailable = useStoreWithCesium(
     (s) => s.room.isDataAvailable,

@@ -28,6 +28,7 @@ import {
   stripPositioningColumns,
 } from '../layers/entityMetadata';
 import {fabricateTrajectory} from '../layers/desurvey';
+import {BboxAccumulator, setLayerBbox} from '../layers/layerBbox';
 
 const VOLUME_SHAPE_SEGMENTS = 12;
 
@@ -150,6 +151,10 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
         }
       }
 
+      // Track the spatial extent of this layer's data for the project
+      // bbox / initial zoom. Accumulates lon/lat while creating entities.
+      const bboxAcc = new BboxAccumulator();
+
       // Precompute 3D rendering shapes (reused across rows).
       const isChemduck =
         (args.entityKind ?? 'chemduck-location') === 'chemduck-location';
@@ -182,6 +187,7 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
         const lon = Number(row.longitude);
         const lat = Number(row.latitude);
         if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+        bboxAcc.add(lon, lat);
 
         const altRaw = row.altitude;
         const hasExplicitAlt =
@@ -313,10 +319,14 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
           // Duplicate id — skip silently.
         }
       }
+
+      // Register this layer's data extent for project bbox / zoomToFit.
+      setLayerBbox(args.layerId, bboxAcc.toBbox());
     })();
 
     return () => {
       cancelled = true;
+      setLayerBbox(args.layerId, null);
       if (!viewer || viewer.isDestroyed()) return;
       for (const e of created) {
         if (viewer.entities.getById(e.id)) {

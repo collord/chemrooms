@@ -47,6 +47,7 @@ import {
   setEntityMetadata,
   stripPositioningColumns,
 } from '../layers/entityMetadata';
+import {BboxAccumulator, setLayerBbox} from '../layers/layerBbox';
 
 export interface UseChemroomsVectorEntitiesArgs {
   /** Stable string used to namespace entity IDs and clean them up. */
@@ -101,6 +102,8 @@ export function useChemroomsVectorEntities(
       }
       if (cancelled || rows.length === 0) return;
 
+      const bboxAcc = new BboxAccumulator();
+
       for (const row of rows) {
         if (cancelled) break;
 
@@ -114,6 +117,24 @@ export function useChemroomsVectorEntities(
         }
         const pieces = geoJsonToVectorPieces(parsed);
         if (pieces.length === 0) continue;
+
+        // Accumulate bbox from the geometry's coordinates.
+        for (const piece of pieces) {
+          if (piece.kind === 'point') {
+            bboxAcc.add(piece.coord[0], piece.coord[1]);
+          } else if (piece.kind === 'polyline') {
+            // Flat 2D: [lon, lat, lon, lat, ...] or 3D: [lon, lat, h, ...]
+            const stride = piece.positions.length % 3 === 0 && piece.positions.length % 2 !== 0 ? 3 : 2;
+            for (let j = 0; j < piece.positions.length; j += stride) {
+              bboxAcc.add(piece.positions[j]!, piece.positions[j + 1]!);
+            }
+          } else if (piece.kind === 'polygon') {
+            const stride = piece.outer.length % 3 === 0 && piece.outer.length % 2 !== 0 ? 3 : 2;
+            for (let j = 0; j < piece.outer.length; j += stride) {
+              bboxAcc.add(piece.outer[j]!, piece.outer[j + 1]!);
+            }
+          }
+        }
 
         const rowId = String(row.location_id ?? '');
         const label = String(row.label ?? rowId ?? args.layerId);
@@ -272,10 +293,13 @@ export function useChemroomsVectorEntities(
           }
         }
       }
+
+      setLayerBbox(args.layerId, bboxAcc.toBbox());
     })();
 
     return () => {
       cancelled = true;
+      setLayerBbox(args.layerId, null);
       if (!viewer || viewer.isDestroyed()) return;
       for (const id of created) {
         if (viewer.entities.getById(id)) {
