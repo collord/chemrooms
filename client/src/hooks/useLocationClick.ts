@@ -109,13 +109,11 @@ export function useLocationClick() {
   // Mount the vector-selection highlight effect alongside the
   // click handler — they share a single lifecycle on the viewer.
   useVectorSelectionHighlight();
+  useDisableCesiumSelectionIndicator();
 
   const viewer = useChemroomsStore((s) => s.cesium.viewer);
   const setSelectedEntityInSlice = useChemroomsStore(
     (s) => s.chemrooms.setSelectedEntity,
-  );
-  const setSelectedEntityInCesium = useChemroomsStore(
-    (s) => s.cesium.setSelectedEntity,
   );
   const handlerRef = useRef<ScreenSpaceEventHandler | null>(null);
 
@@ -128,10 +126,9 @@ export function useLocationClick() {
     handler.setInputAction((movement: {position: Cartesian2}) => {
       const picked = viewer.scene.pick(movement.position);
       if (!defined(picked) || !picked.id) {
-        // Clicked empty space — deselect in both the cesium slice
-        // (used for the "selected" highlight) and the chemrooms
-        // slice (used for the Inspector).
-        setSelectedEntityInCesium(null);
+        // Clicked empty space — deselect. The Cesium selection
+        // indicator is disabled elsewhere, so there's nothing to
+        // clear on that side.
         setSelectedEntityInSlice(null);
         return;
       }
@@ -142,20 +139,21 @@ export function useLocationClick() {
       // entity wasn't created by one of our hooks (e.g., a tileset
       // feature or a base-imagery pick), meta will be undefined and
       // we fall back to just flying to it without setting a
-      // chemrooms selection.
+      // chemrooms selection. We no longer touch viewer.selectedEntity
+      // at all — Cesium's selection indicator is disabled globally
+      // (see useDisableCesiumSelectionIndicator below) because
+      // (a) it positions incorrectly for terrain-clamped vector
+      // features and (b) the Inspector pane already serves as the
+      // "what's selected" signal.
       const meta = getEntityMetadata(entity);
       if (!meta) {
         setSelectedEntityInSlice(null);
-        setSelectedEntityInCesium(null);
       } else if (meta.kind === 'chemduck-location') {
         setSelectedEntityInSlice({
           kind: 'chemduck-location',
           locationId: meta.locationId,
           source: meta.layerId,
         });
-        // Chemduck points have a real terrain-aware position, so
-        // Cesium's selectionIndicator frames them correctly.
-        setSelectedEntityInCesium(entity);
       } else {
         setSelectedEntityInSlice({
           kind: 'vector-feature',
@@ -164,15 +162,6 @@ export function useLocationClick() {
           label: meta.label,
           properties: meta.properties,
         });
-        // Vector features have hierarchy/polyline positions at
-        // ellipsoid height 0 (we strip heights to let
-        // clampToGround do the work), so Cesium's bounding-sphere-
-        // based selectionIndicator would render below the terrain.
-        // The Inspector pane already shows what's selected, so skip
-        // the redundant indicator rather than fight the bounding-
-        // sphere math. A future session could sample terrain at the
-        // centroid to drive a proper indicator position.
-        setSelectedEntityInCesium(null);
       }
 
       viewer.flyTo(entity, {duration: 1.0});
@@ -184,7 +173,41 @@ export function useLocationClick() {
       }
       handlerRef.current = null;
     };
-  }, [viewer, setSelectedEntityInSlice, setSelectedEntityInCesium]);
+  }, [viewer, setSelectedEntityInSlice]);
+}
+
+/**
+ * Disable Cesium's built-in selection indicator (the green
+ * rectangle widget). The Inspector pane is the canonical "what's
+ * selected" signal; the indicator's bounding-sphere-based
+ * positioning also renders incorrectly for terrain-clamped vector
+ * features (below the terrain, at ellipsoid height). Kill both.
+ *
+ * Belt-and-suspenders: we set `showSelection = false` on the view
+ * model AND hide the DOM container, because Cesium sometimes
+ * re-positions the indicator on internal clock ticks even when the
+ * view model says don't show.
+ */
+function useDisableCesiumSelectionIndicator(): void {
+  const viewer = useChemroomsStore((s) => s.cesium.viewer);
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    const indicator = viewer.selectionIndicator;
+    if (!indicator) return;
+    // Toggle the viewmodel flag so Cesium's own rendering loop
+    // doesn't try to position the indicator.
+    try {
+      (indicator.viewModel as {showSelection: boolean}).showSelection = false;
+    } catch {
+      // Older Cesium versions or read-only accessor — fall through
+      // to the DOM-hide path below.
+    }
+    // Hide the widget's container so even if Cesium flips
+    // showSelection back on internally, nothing actually renders.
+    if (indicator.container instanceof HTMLElement) {
+      indicator.container.style.display = 'none';
+    }
+  }, [viewer]);
 }
 
 /**
