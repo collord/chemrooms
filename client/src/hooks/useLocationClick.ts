@@ -265,10 +265,15 @@ export function useLocationDetail() {
   const selectedEntity = useChemroomsStore(
     (s) => s.chemrooms.config.selectedEntity,
   );
-  const selectedLocationId =
+  // The entity's locationId may be a composite from the aggregate
+  // query: "SYN-0188|Water|0.0|0.0". The SQL queries below need
+  // just the base location_id ("SYN-0188") to match against the
+  // locations table. Split on '|' and take the first part.
+  const rawLocationId =
     selectedEntity?.kind === 'chemduck-location'
       ? selectedEntity.locationId
       : null;
+  const selectedLocationId = rawLocationId?.split('|')[0] ?? null;
   const matrixFilter = useChemroomsStore(
     (s) => s.chemrooms.config.matrixFilter,
   );

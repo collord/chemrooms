@@ -70,6 +70,30 @@ const EmptyState: React.FC = () => (
 // Chemduck location variant
 // ---------------------------------------------------------------------------
 
+/**
+ * Parse the composite location_id produced by buildSamplesLayerSql's
+ * aggregate path: `location_id|matrix|top_depth|bottom_depth`. The
+ * pipe-delimited format is a stable identifier for the entity, but
+ * for display we want the pieces broken out.
+ */
+function parseCompositeLocationId(raw: string): {
+  locationId: string;
+  matrix?: string;
+  topDepth?: string;
+  bottomDepth?: string;
+} {
+  const parts = raw.split('|');
+  if (parts.length >= 4) {
+    return {
+      locationId: parts[0]!,
+      matrix: parts[1] || undefined,
+      topDepth: parts[2] !== '0.0' ? parts[2] : undefined,
+      bottomDepth: parts[3] !== '0.0' ? parts[3] : undefined,
+    };
+  }
+  return {locationId: raw};
+}
+
 const ChemduckLocationDetail: React.FC<{
   entity: Extract<SelectedEntity, {kind: 'chemduck-location'}>;
 }> = ({entity}) => {
@@ -83,13 +107,27 @@ const ChemduckLocationDetail: React.FC<{
     (s) => s.chemrooms.config.coloringAnalyte,
   );
 
+  const parsed = parseCompositeLocationId(entity.locationId);
+
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-3 text-sm">
-      <SelectionHeader
-        icon={<MapPin className="h-4 w-4 text-primary" />}
-        title={entity.locationId}
-        subtitle={entity.source !== 'unknown' ? entity.source : undefined}
-      />
+      <div className="flex items-start gap-2 border-b pb-2">
+        <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+        <div className="flex min-w-0 flex-col">
+          <div className="truncate font-semibold">{parsed.locationId}</div>
+          <div className="flex flex-wrap gap-x-2 text-[11px] text-muted-foreground">
+            {parsed.matrix && <span>{parsed.matrix}</span>}
+            {parsed.topDepth && (
+              <span>
+                {parsed.topDepth}–{parsed.bottomDepth ?? '?'} ft
+              </span>
+            )}
+            {entity.source !== 'unknown' && (
+              <span className="opacity-60">{entity.source}</span>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* Aggregation context — reminds the user which recipe is
           active so the numbers in the table below make sense. */}
@@ -350,7 +388,7 @@ const ClickedValueCard: React.FC<{rowData: Record<string, unknown>}> = ({
           <span>{detected ? 'Detected' : 'Non-detect'}</span>
         )}
         {nEvents != null && <span>{String(nEvents)} events</span>}
-        {repDate != null && <span>{String(repDate)}</span>}
+        {repDate != null && <span>{formatDate(repDate)}</span>}
         {rowData.detection_limit != null &&
           Number.isFinite(Number(rowData.detection_limit)) && (
             <span>DL: {Number(rowData.detection_limit).toPrecision(3)}{unitsStr}</span>
@@ -405,6 +443,46 @@ const VectorFeatureDetail: React.FC<{
     </div>
   );
 };
+
+/**
+ * Best-effort date formatting. DuckDB returns dates as either
+ * ISO 8601 strings or Unix timestamps (milliseconds). Detect and
+ * format to a human-readable short date.
+ */
+function formatDate(value: unknown): string {
+  if (value == null) return '—';
+  // If it's a number that looks like a Unix epoch (ms since 1970),
+  // convert it. Heuristic: numbers > 1e9 and < 1e14 are likely
+  // epoch-ms (1970–5138).
+  if (typeof value === 'number' || typeof value === 'bigint') {
+    const n = Number(value);
+    if (n > 1e9 && n < 1e14) {
+      try {
+        return new Date(n).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+        });
+      } catch {
+        return String(value);
+      }
+    }
+    return String(value);
+  }
+  // If it's already a string, try to parse as a date for formatting.
+  if (typeof value === 'string') {
+    const d = new Date(value);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+    }
+    return value;
+  }
+  return String(value);
+}
 
 /**
  * Best-effort string rendering for a property value. Most DuckDB
