@@ -148,7 +148,6 @@ export const TimeSeriesPanel: React.FC = () => {
       ],
       xLabel: 'Sample Date',
       yLabel: 'Concentration',
-      colorLegend: true,
       width: 800,
       height: 300,
     };
