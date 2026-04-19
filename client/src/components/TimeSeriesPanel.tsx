@@ -53,10 +53,14 @@ function buildTimeSeriesQuery(
       break;
   }
 
+  // Cast sample_date to VARCHAR so it arrives as an ISO 8601
+  // string in JS — Observable Plot (via VgPlotChart) can auto-
+  // parse ISO strings as dates but chokes on epoch numbers or
+  // DuckDB's typed DATE values that Arrow serializes as integers.
   return `
     SELECT
       r.analyte,
-      s.sample_date,
+      CAST(s.sample_date AS VARCHAR) AS sample_date,
       (${ndExpression}) AS plot_value,
       r.result,
       r.detected,
@@ -191,7 +195,9 @@ export const TimeSeriesPanel: React.FC = () => {
         {selectedAnalytes.join(', ')}
       </div>
       {spec ? (
-        <VgPlotChart spec={spec as any} />
+        <div className="min-h-[200px] flex-1">
+          <VgPlotChart spec={spec as any} />
+        </div>
       ) : (
         <div className="text-sm text-muted-foreground">Building chart...</div>
       )}
