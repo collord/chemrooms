@@ -104,6 +104,9 @@ export function useChemroomsVectorEntities(
 
       const bboxAcc = new BboxAccumulator();
 
+      // Batch entity creation to avoid O(N^2) from per-add events.
+      viewer.entities.suspendEvents();
+
       for (const row of rows) {
         if (cancelled) break;
 
@@ -294,6 +297,7 @@ export function useChemroomsVectorEntities(
         }
       }
 
+      viewer.entities.resumeEvents();
       setLayerBbox(args.layerId, bboxAcc.toBbox());
     })();
 

@@ -193,6 +193,13 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
       const sphereRadii = new Cartesian3(sphereR, sphereR, sphereR);
       const volumeShape = circleShape(volumeR);
 
+      // Suspend collection-change events during the batch so Cesium
+      // processes the full set once at the end rather than per-add.
+      // Without this, 200+ ellipsoid adds fire 200+ events, each
+      // triggering listeners (vertical exaggeration, etc.) that
+      // walk the full entity list — O(N^2) total.
+      viewer.entities.suspendEvents();
+
       // Create entities. Each one gets a stable ID prefixed with
       // layerId so we can clean it up unambiguously.
       //
@@ -349,6 +356,8 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
           // Duplicate id — skip silently.
         }
       }
+
+      viewer.entities.resumeEvents();
     })();
 
     return () => {
