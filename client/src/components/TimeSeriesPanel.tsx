@@ -193,7 +193,21 @@ export const TimeSeriesPanel: React.FC = () => {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-auto p-2">
+    <div className="ts-chart-container flex h-full flex-col overflow-auto p-2">
+      {/* Observable Plot tooltip dark-theme overrides. The tip mark
+          renders a foreignObject <div> with inline white background +
+          dark text. We force dark colors with !important. The
+          .ts-chart-container scope keeps these overrides local. */}
+      <style>{`
+        .ts-chart-container [class*="plot"] foreignObject div,
+        .ts-chart-container figure foreignObject div,
+        .ts-chart-container svg foreignObject div {
+          background: hsl(222 47% 11%) !important;
+          color: hsl(210 40% 96%) !important;
+          border-color: hsl(217 33% 25%) !important;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.5) !important;
+        }
+      `}</style>
       <div className="mb-2 text-xs text-muted-foreground">
         <span className="font-medium">{selectedLocationId}</span>
         {' — '}
