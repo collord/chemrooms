@@ -127,6 +127,8 @@ export const TimeSeriesPanel: React.FC = () => {
       ndMethod,
     );
 
+    console.log('[timeseries] query:', query);
+
     return {
       data: {
         ts_data: {type: 'table' as const, query},
