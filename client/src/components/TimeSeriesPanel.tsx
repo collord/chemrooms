@@ -53,16 +53,20 @@ function buildTimeSeriesQuery(
       break;
   }
 
-  // Cast sample_date to VARCHAR so it arrives as an ISO 8601
-  // string in JS — Observable Plot (via VgPlotChart) can auto-
-  // parse ISO strings as dates but chokes on epoch numbers or
-  // DuckDB's typed DATE values that Arrow serializes as integers.
+  // sample_date: cast to VARCHAR → ISO 8601 string that Observable
+  // Plot can parse as temporal. DuckDB's typed DATE over Arrow
+  // serializes as epoch integers which the plot engine can't handle.
+  //
+  // plot_value: explicit CAST to DOUBLE to ensure the CASE
+  // expression result is numeric, not inferred as VARCHAR by
+  // DuckDB/Arrow. Without this the chart y-axis shows string-
+  // sorted values (monotonically increasing row indices).
   return `
     SELECT
       r.analyte,
       CAST(s.sample_date AS VARCHAR) AS sample_date,
-      (${ndExpression}) AS plot_value,
-      r.result,
+      CAST((${ndExpression}) AS DOUBLE) AS plot_value,
+      CAST(r.result AS DOUBLE) AS result,
       r.detected,
       COALESCE(r.reporting_limit, r.method_detection_limit, r.quantitation_limit)
         AS detection_limit,
@@ -129,12 +133,12 @@ export const TimeSeriesPanel: React.FC = () => {
       },
       plot: [
         {
-          mark: 'lineY',
+          mark: 'line',
           data: {from: 'ts_data'},
           x: 'sample_date',
           y: 'plot_value',
           stroke: 'analyte',
-          strokeWidth: 1.5,
+          strokeWidth: 2,
         },
         {
           mark: 'dot',
@@ -148,8 +152,10 @@ export const TimeSeriesPanel: React.FC = () => {
       ],
       xLabel: 'Sample Date',
       yLabel: 'Concentration',
+      xTickRotate: -25,
+      marginBottom: 80,
       width: 800,
-      height: 300,
+      height: 350,
     };
   }, [
     hasSelection,
