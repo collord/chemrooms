@@ -143,7 +143,7 @@ export function useLocationClick() {
   // alongside the click handler — they share a single lifecycle
   // on the viewer.
   useSelectionHighlight();
-  useDisableCesiumSelectionIndicator();
+  useDisableCesiumWidgets();
 
   const viewer = useChemroomsStore((s) => s.cesium.viewer);
   const setSelectedEntityInSlice = useChemroomsStore(
@@ -198,7 +198,10 @@ export function useLocationClick() {
         });
       }
 
-      viewer.flyTo(entity, {duration: 1.0});
+      // Intentionally no flyTo — the user stays at their current
+      // view and sees the details appear in the Inspector panel.
+      // Flying on every click is disorienting when you're clicking
+      // through several adjacent points to compare values.
     }, ScreenSpaceEventType.LEFT_CLICK);
 
     return () => {
@@ -212,34 +215,41 @@ export function useLocationClick() {
 
 /**
  * Disable Cesium's built-in selection indicator (the green
- * rectangle widget). The Inspector pane is the canonical "what's
- * selected" signal; the indicator's bounding-sphere-based
- * positioning also renders incorrectly for terrain-clamped vector
- * features (below the terrain, at ellipsoid height). Kill both.
- *
- * Belt-and-suspenders: we set `showSelection = false` on the view
- * model AND hide the DOM container, because Cesium sometimes
- * re-positions the indicator on internal clock ticks even when the
- * view model says don't show.
+ * rectangle widget) and infoBox popup. The Inspector pane is the
+ * canonical "what's selected" signal; Cesium's defaults either
+ * render incorrectly (indicator below terrain for clamped entities)
+ * or duplicate information (infoBox popup).
  */
-function useDisableCesiumSelectionIndicator(): void {
+function useDisableCesiumWidgets(): void {
   const viewer = useChemroomsStore((s) => s.cesium.viewer);
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
+
+    // Kill the selection indicator (green rectangle).
     const indicator = viewer.selectionIndicator;
-    if (!indicator) return;
-    // Toggle the viewmodel flag so Cesium's own rendering loop
-    // doesn't try to position the indicator.
-    try {
-      (indicator.viewModel as {showSelection: boolean}).showSelection = false;
-    } catch {
-      // Older Cesium versions or read-only accessor — fall through
-      // to the DOM-hide path below.
+    if (indicator) {
+      try {
+        (indicator.viewModel as {showSelection: boolean}).showSelection = false;
+      } catch {
+        // Older Cesium versions or read-only accessor.
+      }
+      if (indicator.container instanceof HTMLElement) {
+        indicator.container.style.display = 'none';
+      }
     }
-    // Hide the widget's container so even if Cesium flips
-    // showSelection back on internally, nothing actually renders.
-    if (indicator.container instanceof HTMLElement) {
-      indicator.container.style.display = 'none';
+
+    // Kill the infoBox popup that appears when viewer.selectedEntity
+    // is set (even though we no longer set it — belt-and-suspenders).
+    const infoBox = viewer.infoBox;
+    if (infoBox) {
+      try {
+        (infoBox.viewModel as {showInfo: boolean}).showInfo = false;
+      } catch {
+        // Same fallback as above.
+      }
+      if (infoBox.container instanceof HTMLElement) {
+        infoBox.container.style.display = 'none';
+      }
     }
   }, [viewer]);
 }

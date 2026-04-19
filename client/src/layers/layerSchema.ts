@@ -367,7 +367,7 @@ export const VisualEncoding = z.object({
    * the size scales with the camera distance — 3m is a reasonable
    * "visible at site scale" default.
    */
-  sphereRadiusMeters: z.number().min(0.1).max(500).default(3),
+  sphereRadiusMeters: z.number().min(0.1).max(500).default(2),
 
   /**
    * Radius for borehole-segment tubes (polylineVolume cross-section
@@ -523,7 +523,7 @@ export async function freezeCurrentState(params: {
       opacity: 1,
       color: '#00ffff',
       sampleRenderAs: params.sampleRenderAs ?? 'auto',
-      sphereRadiusMeters: params.sphereRadiusMeters ?? 3,
+      sphereRadiusMeters: params.sphereRadiusMeters ?? 2,
       volumeRadiusMeters: params.volumeRadiusMeters ?? 1,
     },
     visible: true,

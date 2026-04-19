@@ -49,7 +49,7 @@ function makeLayer(overrides: Partial<LayerConfig> = {}): LayerConfig {
       opacity: 1,
       color: '#00ffff',
       sampleRenderAs: 'auto',
-      sphereRadiusMeters: 3,
+      sphereRadiusMeters: 2,
       volumeRadiusMeters: 1,
     },
     visible: true,

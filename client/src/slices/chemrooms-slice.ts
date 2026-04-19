@@ -278,7 +278,7 @@ const DEFAULT_CONFIG: ChemroomsConfig = {
   selectedScreeningLevel: null,
   fractionFilter: null,
   sampleRenderAs: 'auto',
-  sphereRadiusMeters: 3,
+  sphereRadiusMeters: 2,
   volumeRadiusMeters: 1,
 };
 

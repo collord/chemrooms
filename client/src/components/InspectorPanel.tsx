@@ -23,11 +23,12 @@
  * fighting the recipe controls for sidebar real estate.
  */
 
-import React from 'react';
+import React, {useCallback} from 'react';
 import {
   Calendar,
   FlaskConical,
   Layers as LayersIcon,
+  LineChart,
   MapPin,
   MousePointerClick,
   Shapes,
@@ -38,7 +39,6 @@ import type {
   LocationSummary,
   SelectedEntity,
 } from '../slices/chemrooms-slice';
-import {AnalytePicker} from './AnalytePicker';
 
 export const InspectorPanel: React.FC = () => {
   const selectedEntity = useChemroomsStore(
@@ -76,6 +76,12 @@ const ChemduckLocationDetail: React.FC<{
   const summary = useChemroomsStore((s) => s.chemrooms.locationSummary);
   const analytes = useChemroomsStore((s) => s.chemrooms.analytesAtLocation);
   const isLoading = useChemroomsStore((s) => s.chemrooms.isLoadingLocation);
+  const eventAgg = useChemroomsStore((s) => s.chemrooms.config.eventAgg);
+  const dupAgg = useChemroomsStore((s) => s.chemrooms.config.dupAgg);
+  const ndMethod = useChemroomsStore((s) => s.chemrooms.config.ndMethod);
+  const coloringAnalyte = useChemroomsStore(
+    (s) => s.chemrooms.config.coloringAnalyte,
+  );
 
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-3 text-sm">
@@ -83,6 +89,15 @@ const ChemduckLocationDetail: React.FC<{
         icon={<MapPin className="h-4 w-4 text-primary" />}
         title={entity.locationId}
         subtitle={entity.source !== 'unknown' ? entity.source : undefined}
+      />
+
+      {/* Aggregation context — reminds the user which recipe is
+          active so the numbers in the table below make sense. */}
+      <AggregationBanner
+        eventAgg={eventAgg}
+        dupAgg={dupAgg}
+        ndMethod={ndMethod}
+        coloringAnalyte={coloringAnalyte}
       />
 
       {isLoading && !summary ? (
@@ -96,19 +111,44 @@ const ChemduckLocationDetail: React.FC<{
       )}
 
       {analytes.length > 0 && <AnalytesTable analytes={analytes} />}
-
-      {/* Time-series analyte picker — tied to this location. Picks
-          drive the TimeSeriesPanel, which renders in its own mosaic
-          pane. Only shown when we actually have analytes to pick
-          from. */}
-      {analytes.length > 0 && (
-        <div className="mt-2 border-t pt-3">
-          <AnalytePicker />
-        </div>
-      )}
     </div>
   );
 };
+
+/**
+ * Shows the active aggregation parameters so the user knows what
+ * the per-analyte numbers represent.
+ */
+const AggregationBanner: React.FC<{
+  eventAgg: string;
+  dupAgg: string;
+  ndMethod: string;
+  coloringAnalyte: string | null;
+}> = ({eventAgg, dupAgg, ndMethod, coloringAnalyte}) => (
+  <div className="flex flex-wrap items-center gap-1.5 rounded bg-muted/50 px-2 py-1.5 text-[10px] text-muted-foreground">
+    {coloringAnalyte && (
+      <span className="font-medium text-foreground">{coloringAnalyte}</span>
+    )}
+    <span
+      className="rounded bg-background px-1 py-0.5"
+      title="Event aggregation"
+    >
+      {eventAgg}
+    </span>
+    <span
+      className="rounded bg-background px-1 py-0.5"
+      title="Duplicate aggregation"
+    >
+      dup: {dupAgg}
+    </span>
+    <span
+      className="rounded bg-background px-1 py-0.5"
+      title="Non-detect method"
+    >
+      ND: {ndMethod}
+    </span>
+  </div>
+);
 
 const LocationSummaryCard: React.FC<{summary: LocationSummary}> = ({
   summary,
@@ -157,53 +197,108 @@ const LocationSummaryCard: React.FC<{summary: LocationSummary}> = ({
   </div>
 );
 
-const AnalytesTable: React.FC<{analytes: AnalyteInfo[]}> = ({analytes}) => (
-  <div className="flex flex-col gap-1">
-    <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
-      Analytes ({analytes.length})
-    </div>
-    <div className="rounded-md border">
-      <table className="w-full text-xs">
-        <thead className="border-b bg-muted/50">
-          <tr className="text-left">
-            <th className="px-2 py-1 font-normal">Analyte</th>
-            <th className="px-2 py-1 text-right font-normal">Detects</th>
-            <th className="px-2 py-1 text-right font-normal">Max</th>
-            <th className="px-2 py-1 font-normal">Units</th>
-          </tr>
-        </thead>
-        <tbody>
-          {analytes.map((a) => (
-            <tr
-              key={a.analyte}
-              className="border-b last:border-b-0 hover:bg-muted/30"
-            >
-              <td className="px-2 py-1">
-                <div className="truncate" title={a.analyte}>
-                  {a.analyte}
-                </div>
-                {a.analyteGroup && a.analyteGroup !== 'Other' && (
-                  <div className="text-[10px] text-muted-foreground">
-                    {a.analyteGroup}
-                  </div>
-                )}
-              </td>
-              <td className="px-2 py-1 text-right tabular-nums">
-                {a.detectCount}/{a.resultCount}
-              </td>
-              <td className="px-2 py-1 text-right tabular-nums">
-                {Number.isFinite(a.maxResult)
-                  ? a.maxResult.toPrecision(3)
-                  : '—'}
-              </td>
-              <td className="px-2 py-1 text-muted-foreground">{a.units}</td>
+/**
+ * Per-analyte summary table with integrated time-series toggle.
+ * Each row shows the aggregated result + a small line-chart icon
+ * that adds/removes that analyte from the TimeSeriesPanel.
+ */
+const AnalytesTable: React.FC<{analytes: AnalyteInfo[]}> = ({analytes}) => {
+  const selectedAnalytes = useChemroomsStore(
+    (s) => s.chemrooms.config.timeSeriesAnalytes,
+  );
+  const addAnalyte = useChemroomsStore(
+    (s) => s.chemrooms.addTimeSeriesAnalyte,
+  );
+  const removeAnalyte = useChemroomsStore(
+    (s) => s.chemrooms.removeTimeSeriesAnalyte,
+  );
+
+  const toggleAnalyte = useCallback(
+    (analyte: string) => {
+      if (selectedAnalytes.includes(analyte)) {
+        removeAnalyte(analyte);
+      } else {
+        addAnalyte(analyte);
+      }
+    },
+    [selectedAnalytes, addAnalyte, removeAnalyte],
+  );
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+        Analytes at location ({analytes.length})
+      </div>
+      <div className="rounded-md border">
+        <table className="w-full text-xs">
+          <thead className="border-b bg-muted/50">
+            <tr className="text-left">
+              <th className="px-2 py-1 font-normal">Analyte</th>
+              <th className="px-2 py-1 text-right font-normal">Detects</th>
+              <th className="px-2 py-1 text-right font-normal">Max</th>
+              <th className="px-2 py-1 font-normal">Units</th>
+              <th className="w-6 px-1 py-1" />
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {analytes.map((a) => {
+              const isCharted = selectedAnalytes.includes(a.analyte);
+              const atLimit = !isCharted && selectedAnalytes.length >= 4;
+              return (
+                <tr
+                  key={a.analyte}
+                  className="border-b last:border-b-0 hover:bg-muted/30"
+                >
+                  <td className="px-2 py-1">
+                    <div className="truncate" title={a.analyte}>
+                      {a.analyte}
+                    </div>
+                    {a.analyteGroup && a.analyteGroup !== 'Other' && (
+                      <div className="text-[10px] text-muted-foreground">
+                        {a.analyteGroup}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-2 py-1 text-right tabular-nums">
+                    {a.detectCount}/{a.resultCount}
+                  </td>
+                  <td className="px-2 py-1 text-right tabular-nums">
+                    {Number.isFinite(a.maxResult)
+                      ? a.maxResult.toPrecision(3)
+                      : '—'}
+                  </td>
+                  <td className="px-2 py-1 text-muted-foreground">
+                    {a.units}
+                  </td>
+                  <td className="px-1 py-1">
+                    <button
+                      onClick={() => toggleAnalyte(a.analyte)}
+                      disabled={atLimit}
+                      title={
+                        isCharted
+                          ? 'Remove from time-series chart'
+                          : atLimit
+                            ? 'Max 4 analytes charted at once'
+                            : 'Show in time-series chart'
+                      }
+                      className={`rounded p-0.5 transition-colors ${
+                        isCharted
+                          ? 'text-primary hover:text-primary/70'
+                          : 'text-muted-foreground/40 hover:text-foreground disabled:opacity-30'
+                      }`}
+                    >
+                      <LineChart className="h-3.5 w-3.5" />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 // ---------------------------------------------------------------------------
 // Vector feature variant
