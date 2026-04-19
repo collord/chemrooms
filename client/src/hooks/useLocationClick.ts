@@ -187,6 +187,7 @@ export function useLocationClick() {
           kind: 'chemduck-location',
           locationId: meta.locationId,
           source: meta.layerId,
+          rowData: meta.rowData,
         });
       } else {
         setSelectedEntityInSlice({

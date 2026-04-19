@@ -100,6 +100,14 @@ const ChemduckLocationDetail: React.FC<{
         coloringAnalyte={coloringAnalyte}
       />
 
+      {/* Clicked point's actual values — the specific row data from
+          the aggregate query. Shows the analyte, result value, units,
+          detection status, etc. Only present when the clicked entity
+          was from an analyte-driven view (not the locations overview). */}
+      {entity.rowData && Object.keys(entity.rowData).length > 0 && (
+        <ClickedValueCard rowData={entity.rowData} />
+      )}
+
       {isLoading && !summary ? (
         <div className="text-xs italic text-muted-foreground">Loading…</div>
       ) : summary ? (
@@ -295,6 +303,58 @@ const AnalytesTable: React.FC<{analytes: AnalyteInfo[]}> = ({analytes}) => {
             })}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Shows the specific data values from the clicked entity's row —
+ * the actual aggregated result the user is looking at. Prominent
+ * display of the primary value (analyte + result + units) with
+ * secondary metadata (detection status, sample dates, etc.) below.
+ */
+const ClickedValueCard: React.FC<{rowData: Record<string, unknown>}> = ({
+  rowData,
+}) => {
+  const analyte = rowData.analyte;
+  const result = rowData.result;
+  const units = rowData.units ?? rowData.std_units;
+  const detected = rowData.detected;
+  const matrix = rowData.matrix;
+  const nEvents = rowData.n_events;
+  const repDate = rowData.rep_sample_date;
+
+  const resultStr =
+    result != null && Number.isFinite(Number(result))
+      ? Number(result).toPrecision(4)
+      : '—';
+  const unitsStr = units ? ` ${String(units)}` : '';
+
+  return (
+    <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
+      {analyte && (
+        <div className="text-xs font-medium text-muted-foreground">
+          {String(analyte)}
+          {matrix ? ` — ${String(matrix)}` : ''}
+        </div>
+      )}
+      <div className="mt-0.5 text-lg font-bold tabular-nums">
+        {resultStr}
+        <span className="ml-1 text-sm font-normal text-muted-foreground">
+          {unitsStr}
+        </span>
+      </div>
+      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
+        {detected != null && (
+          <span>{detected ? 'Detected' : 'Non-detect'}</span>
+        )}
+        {nEvents != null && <span>{String(nEvents)} events</span>}
+        {repDate != null && <span>{String(repDate)}</span>}
+        {rowData.detection_limit != null &&
+          Number.isFinite(Number(rowData.detection_limit)) && (
+            <span>DL: {Number(rowData.detection_limit).toPrecision(3)}{unitsStr}</span>
+          )}
       </div>
     </div>
   );

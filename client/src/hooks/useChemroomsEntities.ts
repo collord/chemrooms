@@ -151,16 +151,45 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
         }
       }
 
-      // Track the spatial extent of this layer's data for the project
-      // bbox / initial zoom. Accumulates lon/lat while creating entities.
+      // First pass: compute the spatial extent from the data positions.
+      // This drives both the project bbox (for initial zoom) and the
+      // dynamic sphere radius (0.01 × extent so spheres are visible
+      // at whatever zoom shows the full dataset).
       const bboxAcc = new BboxAccumulator();
+      for (const row of rows) {
+        const lon = Number(row.longitude);
+        const lat = Number(row.latitude);
+        if (Number.isFinite(lon) && Number.isFinite(lat)) {
+          bboxAcc.add(lon, lat);
+        }
+      }
+      const layerBbox = bboxAcc.toBbox();
+      setLayerBbox(args.layerId, layerBbox);
 
       // Precompute 3D rendering shapes (reused across rows).
       const isChemduck =
         (args.entityKind ?? 'chemduck-location') === 'chemduck-location';
       const renderMode = args.sampleRenderAs ?? 'auto';
-      const sphereR = args.sphereRadiusMeters ?? 3;
       const volumeR = args.volumeRadiusMeters ?? 1;
+
+      // Dynamic sphere radius: 1% of the data extent in meters.
+      // At mid-latitudes, 1 degree ≈ 111km. This gives spheres
+      // that are visible at the overview zoom level regardless of
+      // how large the site is. Falls back to 2m if the bbox is
+      // degenerate (single point).
+      const DEG_TO_METERS = 111_000;
+      const RADIUS_FRACTION = 0.01;
+      let sphereR: number;
+      if (layerBbox) {
+        const extentDeg = Math.max(
+          layerBbox.east - layerBbox.west,
+          layerBbox.north - layerBbox.south,
+        );
+        const extentMeters = extentDeg * DEG_TO_METERS;
+        sphereR = Math.max(extentMeters * RADIUS_FRACTION, 0.5);
+      } else {
+        sphereR = args.sphereRadiusMeters ?? 2;
+      }
       const sphereRadii = new Cartesian3(sphereR, sphereR, sphereR);
       const volumeShape = circleShape(volumeR);
 
@@ -187,7 +216,6 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
         const lon = Number(row.longitude);
         const lat = Number(row.latitude);
         if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
-        bboxAcc.add(lon, lat);
 
         const altRaw = row.altitude;
         const hasExplicitAlt =
@@ -256,6 +284,7 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
                 locationId: rowId,
                 normalColor: color,
                 primitiveType: 'polylineVolume',
+                rowData: stripPositioningColumns(row),
               });
             }
             // Degenerate segment — fall through to the sphere path
@@ -278,6 +307,7 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
               locationId: rowId,
               normalColor: color,
               primitiveType: 'ellipsoid',
+              rowData: stripPositioningColumns(row),
             });
 
             // ── 2D point fallback ────────────────────────────────
@@ -319,9 +349,6 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
           // Duplicate id — skip silently.
         }
       }
-
-      // Register this layer's data extent for project bbox / zoomToFit.
-      setLayerBbox(args.layerId, bboxAcc.toBbox());
     })();
 
     return () => {

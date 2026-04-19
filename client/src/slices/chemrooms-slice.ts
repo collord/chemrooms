@@ -89,6 +89,14 @@ export type SelectedEntity =
        * dispatch.
        */
       source: string;
+      /**
+       * Row-level data values from the clicked entity (result,
+       * analyte, units, matrix, etc.). Present when the entity was
+       * created from an analyte-driven query; absent for the
+       * locations-overview layer which doesn't have per-row
+       * chemistry data.
+       */
+      rowData?: Record<string, unknown>;
     }
   | {
       kind: 'vector-feature';

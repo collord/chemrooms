@@ -41,6 +41,13 @@ export type EntityMetadata =
       normalColor?: import('cesium').Color;
       /** Which Cesium primitive this entity uses, for restyle dispatch. */
       primitiveType?: 'ellipsoid' | 'polylineVolume' | 'point';
+      /**
+       * Row-level data values from the query (result, analyte,
+       * units, etc.). Carried so the Inspector can display the
+       * specific clicked value without re-querying. Positioning
+       * columns (longitude, latitude, altitude, etc.) are stripped.
+       */
+      rowData?: Record<string, unknown>;
     }
   | {
       kind: 'vector-feature';
