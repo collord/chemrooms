@@ -200,6 +200,17 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
       // walk the full entity list — O(N^2) total.
       viewer.entities.suspendEvents();
 
+      // Performance gate: Entity.ellipsoid creates a full 3D mesh
+      // per point. Fine for 200–500 aggregated results, but the
+      // no-analyte samples overview can have 10K+ rows and each
+      // sphere is a geometry instance — way too slow. When the row
+      // count exceeds the threshold, fall back to screen-space
+      // Entity.point (hardware-accelerated, one draw call for all
+      // points). The user gets 3D spheres on the analyte-selected
+      // view (small N) and fast dots on the overview (large N).
+      const SPHERE_THRESHOLD = 500;
+      const forceScreenSpace = rows.length > SPHERE_THRESHOLD;
+
       // Create entities. Each one gets a stable ID prefixed with
       // layerId so we can clean it up unambiguously.
       //
@@ -252,6 +263,46 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
         try {
           let entity;
 
+          // ── Screen-space fast path (large datasets) ────────────
+          // When row count exceeds the threshold, skip 3D geometry
+          // entirely and use Entity.point (single draw call, handles
+          // 10K+ points without lag). This is the no-analyte overview
+          // path; the analyte-selected view with fewer aggregated
+          // rows still gets 3D spheres/tubes below.
+          if (forceScreenSpace) {
+            entity = viewer.entities.add({
+              id,
+              name: label,
+              position: Cartesian3.fromDegrees(lon, lat, alt),
+              point: {
+                pixelSize: 10,
+                color,
+                outlineColor: Color.WHITE,
+                outlineWidth: 1,
+                heightReference: hasExplicitAlt
+                  ? HeightReference.NONE
+                  : HeightReference.CLAMP_TO_GROUND,
+              },
+            });
+            if (isChemduck) {
+              setEntityMetadata(entity, {
+                kind: 'chemduck-location',
+                layerId: args.layerId,
+                locationId: rowId,
+                primitiveType: 'point',
+                rowData: stripPositioningColumns(row),
+              });
+            } else {
+              setEntityMetadata(entity, {
+                kind: 'vector-feature',
+                layerId: args.layerId,
+                featureId: rowId,
+                label,
+                properties: stripPositioningColumns(row),
+              });
+            }
+          }
+
           // ── polylineVolume (borehole segment) ──────────────────
           // Guard: the segment must have enough vertical separation
           // for Cesium to compute a direction normal. A zero- or
@@ -260,7 +311,7 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
           // crash in createPolylineVolumeGeometry. Fall back to
           // sphere for degenerate intervals.
           const MIN_SEGMENT_LENGTH_M = 0.1;
-          if (isChemduck && hasDepth && renderMode !== 'sphere') {
+          if (!entity && isChemduck && hasDepth && renderMode !== 'sphere') {
             const topM = Number(topDepthRaw);
             const bottomM = Number(bottomDepthRaw);
             const segmentLength = Math.abs(bottomM - topM);
@@ -306,6 +357,8 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
               ellipsoid: {
                 radii: sphereRadii,
                 material: color,
+                stackPartitions: 8,
+                slicePartitions: 8,
               },
             });
             setEntityMetadata(entity, {
