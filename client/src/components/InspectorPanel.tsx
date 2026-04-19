@@ -327,13 +327,13 @@ const AnalytesTable: React.FC<{analytes: AnalyteInfo[]}> = ({analytes}) => {
                             ? 'Max 4 analytes charted at once'
                             : 'Show in time-series chart'
                       }
-                      className={`rounded p-0.5 transition-colors ${
+                      className={`rounded p-1 transition-colors ${
                         isCharted
-                          ? 'text-primary hover:text-primary/70'
-                          : 'text-muted-foreground/40 hover:text-foreground disabled:opacity-30'
+                          ? 'bg-primary/20 text-primary hover:bg-primary/30'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30'
                       }`}
                     >
-                      <LineChart className="h-3.5 w-3.5" />
+                      <LineChart className="h-4 w-4" />
                     </button>
                   </td>
                 </tr>

@@ -84,10 +84,14 @@ export const TimeSeriesPanel: React.FC = () => {
   const selectedEntity = useChemroomsStore(
     (s) => s.chemrooms.config.selectedEntity,
   );
-  const selectedLocationId =
+  // The entity's locationId may be a composite from the aggregate
+  // query: "SYN-0188|Water|0.0|0.0". The time-series SQL query
+  // needs just the base location_id ("SYN-0188").
+  const rawLocationId =
     selectedEntity?.kind === 'chemduck-location'
       ? selectedEntity.locationId
       : null;
+  const selectedLocationId = rawLocationId?.split('|')[0] ?? null;
   const selectedAnalytes = useChemroomsStore(
     (s) => s.chemrooms.config.timeSeriesAnalytes,
   );
