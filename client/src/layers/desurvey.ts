@@ -106,27 +106,31 @@ export function fabricateTrajectory(
       surveyStations,
     );
   }
-  // Vertical default: two points straight down from the collar.
-  // This is the "assign a single survey point at the collar,
-  // pointing vertically down" convention that Leapfrog uses
-  // for wells without deviation data.
+  // Vertical default: three-point zigzag straight down from the
+  // collar. Top → midpoint (nudged) → bottom.
   //
-  // IMPORTANT: the bottom endpoint is nudged by a tiny epsilon in
-  // longitude (~1mm at mid-latitudes). Cesium's polylineVolume
-  // computes cross-section normals by crossing the path direction
-  // with an ellipsoid "up" vector. For a perfectly vertical path,
-  // direction IS the up vector → cross product is zero → normalize()
-  // crashes with "normalized result is not a number". The epsilon
-  // gives the direction vector a tiny horizontal component so the
-  // cross product is non-degenerate. Visually imperceptible.
-  const VERTICAL_NUDGE_DEG = 1e-8;
+  // Why three points? Cesium's PolylineVolumeGeometry computes
+  // cross-section normals by crossing the segment direction with
+  // an "up" vector. For a perfectly vertical two-point path,
+  // direction IS the up vector → cross product = zero → either
+  // a NaN crash or a degenerate 90-degree-rotated cross-section.
+  //
+  // The three-point zigzag gives Cesium two segments, each with a
+  // slight lean (the midpoint is nudged in longitude by ~1m). This
+  // is enough horizontal displacement for the cross product to be
+  // well-defined while being invisible at site scale. The tube
+  // renders as a vertical cylinder with correct cross-section
+  // orientation.
+  const NUDGE_DEG = 1e-5; // ~1m at mid-latitudes
+  const midDepth = (topDepthM + bottomDepthM) / 2;
   return [
     {lon: collarLon, lat: collarLat, alt: surfaceElevM - topDepthM},
     {
-      lon: collarLon + VERTICAL_NUDGE_DEG,
+      lon: collarLon + NUDGE_DEG,
       lat: collarLat,
-      alt: surfaceElevM - bottomDepthM,
+      alt: surfaceElevM - midDepth,
     },
+    {lon: collarLon, lat: collarLat, alt: surfaceElevM - bottomDepthM},
   ];
 }
 
@@ -168,16 +172,16 @@ export function desurveySample(
   _surveyStations: SurveyStation[],
 ): TrajectoryPoint[] {
   // STUB: vertical fallback. Replace with minimum curvature.
-  // Same nudge as the vertical default above — once the real
-  // algorithm is implemented, naturally-deviated trajectories
-  // won't need it because they'll have horizontal displacement.
-  const VERTICAL_NUDGE_DEG = 1e-8;
+  // Same three-point zigzag as the vertical default above.
+  const NUDGE_DEG = 1e-5;
+  const midDepth = (topDepthM + bottomDepthM) / 2;
   return [
     {lon: collarLon, lat: collarLat, alt: surfaceElevM - topDepthM},
     {
-      lon: collarLon + VERTICAL_NUDGE_DEG,
+      lon: collarLon + NUDGE_DEG,
       lat: collarLat,
-      alt: surfaceElevM - bottomDepthM,
+      alt: surfaceElevM - midDepth,
     },
+    {lon: collarLon, lat: collarLat, alt: surfaceElevM - bottomDepthM},
   ];
 }
