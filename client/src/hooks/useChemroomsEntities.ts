@@ -205,7 +205,12 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
         diameter = args.sphereRadiusMeters ?? 2;
       }
       const sphereR = diameter / 2;
-      const volumeR = diameter / 2;
+      // Tube cross-section radius: much smaller than sphere radius.
+      // Tubes represent borehole intervals (real diameter ~0.1–0.3m);
+      // we exaggerate for visibility but cap relative to the sphere
+      // size so tubes look like sticks, not ribbons. When the sphere
+      // diameter is 11m (1% of a 1km site), the tube radius is ~1m.
+      const volumeR = Math.max(0.3, diameter / 10);
       const lineWidth = Math.max(2, Math.min(20, diameter));
 
       const forceScreenSpace = rows.length > SPHERE_THRESHOLD;
