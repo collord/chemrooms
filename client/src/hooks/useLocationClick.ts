@@ -37,6 +37,8 @@ import {
 import {useSql} from '@sqlrooms/duckdb';
 import {
   useChemroomsStore,
+  type AnalyteInfo,
+  type LocationSummary,
   type SelectedEntity,
 } from '../slices/chemrooms-slice';
 import {
@@ -278,18 +280,21 @@ function useDisableCesiumWidgets(): void {
 
 /**
  * Loads location summary + analyte list when the selection is a
- * chemduck-location. No-ops for vector-feature selections (those
- * have no server-side summary to fetch — their properties travel
- * with the Cesium entity).
+ * chemduck-location. Returns the query results directly — no store
+ * push, no manual invalidation. When the selectedEntity changes,
+ * useSql's query key changes, and the data updates automatically.
+ *
+ * Consumers (InspectorPanel) call this hook and use the returned
+ * .summary / .analytes / .isLoading directly.
  */
-export function useLocationDetail() {
+export function useLocationDetail(): {
+  summary: LocationSummary | null;
+  analytes: AnalyteInfo[];
+  isLoading: boolean;
+} {
   const selectedEntity = useChemroomsStore(
     (s) => s.chemrooms.config.selectedEntity,
   );
-  // The entity's locationId may be a composite from the aggregate
-  // query: "SYN-0188|Water|0.0|0.0". The SQL queries below need
-  // just the base location_id ("SYN-0188") to match against the
-  // locations table. Split on '|' and take the first part.
   const rawLocationId =
     selectedEntity?.kind === 'chemduck-location'
       ? selectedEntity.locationId
@@ -301,21 +306,11 @@ export function useLocationDetail() {
   const fractionFilter = useChemroomsStore(
     (s) => s.chemrooms.config.fractionFilter,
   );
-  const setLocationSummary = useChemroomsStore(
-    (s) => s.chemrooms.setLocationSummary,
-  );
-  const setAnalytesAtLocation = useChemroomsStore(
-    (s) => s.chemrooms.setAnalytesAtLocation,
-  );
-  const setIsLoadingLocation = useChemroomsStore(
-    (s) => s.chemrooms.setIsLoadingLocation,
-  );
 
   const locationsTable = useChemroomsStore((s) =>
     s.db.findTableByName('locations'),
   );
 
-  // Location summary query
   const {data: summaryData, isLoading: summaryLoading} = useSql<{
     location_id: string;
     loc_type: string;
@@ -347,7 +342,6 @@ export function useLocationDetail() {
     enabled: Boolean(selectedLocationId) && Boolean(locationsTable),
   });
 
-  // Analytes at this location
   const matrixClause = matrixFilter ? `AND s.matrix = '${matrixFilter}'` : '';
   const fractionClause = fractionFilter
     ? `AND r.fraction = '${fractionFilter}'`
@@ -384,56 +378,42 @@ export function useLocationDetail() {
     enabled: Boolean(selectedLocationId) && Boolean(locationsTable),
   });
 
-  useEffect(() => {
-    setIsLoadingLocation(summaryLoading || analytesLoading);
-  }, [summaryLoading, analytesLoading, setIsLoadingLocation]);
+  // Derive the return values from query results — no store push.
+  const summary: LocationSummary | null = (() => {
+    if (!summaryData) return null;
+    const row = summaryData.toArray()[0] as Record<string, unknown> | undefined;
+    if (!row) return null;
+    return {
+      locationId: String(row.location_id),
+      locType: String(row.loc_type),
+      locDesc: String(row.loc_desc),
+      region: String(row.region),
+      sampleCount: Number(row.sample_count),
+      analyteCount: Number(row.analyte_count),
+      firstDate: String(row.first_date),
+      lastDate: String(row.last_date),
+      matrices: Array.isArray(row.matrices)
+        ? row.matrices
+        : (row.matrices as {toArray?: () => string[]})?.toArray?.() ?? [],
+    };
+  })();
 
-  useEffect(() => {
-    if (summaryData) {
-      const row = summaryData.toArray()[0];
-      if (row) {
-        setLocationSummary({
-          locationId: row.location_id,
-          locType: row.loc_type,
-          locDesc: row.loc_desc,
-          region: row.region,
-          sampleCount: row.sample_count,
-          analyteCount: row.analyte_count,
-          firstDate: row.first_date,
-          lastDate: row.last_date,
-          matrices: Array.isArray(row.matrices)
-            ? row.matrices
-            : row.matrices?.toArray?.() ?? [],
-        });
-      }
-    } else if (!selectedLocationId) {
-      setLocationSummary(null);
-    }
-  }, [summaryData, selectedLocationId, setLocationSummary]);
+  const analytes: AnalyteInfo[] = analytesData
+    ? analytesData.toArray().map((r: Record<string, unknown>) => ({
+        analyte: String(r.analyte),
+        analyteGroup: String(r.analyte_group),
+        casNumber: String(r.cas_number),
+        resultCount: Number(r.result_count),
+        detectCount: Number(r.detect_count),
+        minResult: Number(r.min_result),
+        maxResult: Number(r.max_result),
+        units: String(r.units),
+      }))
+    : [];
 
-  useEffect(() => {
-    if (analytesData) {
-      setAnalytesAtLocation(
-        analytesData.toArray().map((r: {
-          analyte: string;
-          analyte_group: string;
-          cas_number: string;
-          result_count: number;
-          detect_count: number;
-          min_result: number;
-          max_result: number;
-          units: string;
-        }) => ({
-          analyte: r.analyte,
-          analyteGroup: r.analyte_group,
-          casNumber: r.cas_number,
-          resultCount: r.result_count,
-          detectCount: r.detect_count,
-          minResult: r.min_result,
-          maxResult: r.max_result,
-          units: r.units,
-        })),
-      );
-    }
-  }, [analytesData, setAnalytesAtLocation]);
+  return {
+    summary,
+    analytes,
+    isLoading: summaryLoading || analytesLoading,
+  };
 }

@@ -9,33 +9,17 @@
  */
 
 import React, {useState, useCallback} from 'react';
+import {useShallow} from 'zustand/react/shallow';
 import {Snowflake} from 'lucide-react';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
+import {selectCurrentRecipe, selectColorByResults} from '../slices/selectors';
 import {freezeCurrentState} from '../layers/layerSchema';
 import {addPersonalLayer} from '../layers/layerStorage';
 
 export const FreezeLayerButton: React.FC = () => {
-  const coloringAnalyte = useChemroomsStore(
-    (s) => s.chemrooms.config.coloringAnalyte,
-  );
-  const matrixFilter = useChemroomsStore(
-    (s) => s.chemrooms.config.matrixFilter,
-  );
-  const eventAgg = useChemroomsStore((s) => s.chemrooms.config.eventAgg);
-  const dupAgg = useChemroomsStore((s) => s.chemrooms.config.dupAgg);
-  const ndMethod = useChemroomsStore((s) => s.chemrooms.config.ndMethod);
-  const colorByResults = useChemroomsStore(
-    (s) => s.chemrooms.colorBy['v_results_denormalized'],
-  );
-  const sampleRenderAs = useChemroomsStore(
-    (s) => s.chemrooms.config.sampleRenderAs,
-  );
-  const sphereRadiusMeters = useChemroomsStore(
-    (s) => s.chemrooms.config.sphereRadiusMeters,
-  );
-  const volumeRadiusMeters = useChemroomsStore(
-    (s) => s.chemrooms.config.volumeRadiusMeters,
-  );
+  // One subscription for all recipe fields instead of 9 individual ones.
+  const recipe = useChemroomsStore(useShallow(selectCurrentRecipe));
+  const colorByResults = useChemroomsStore(selectColorByResults);
   const setPersonalLayers = useChemroomsStore(
     (s) => s.chemrooms.setPersonalLayers,
   );
@@ -48,25 +32,25 @@ export const FreezeLayerButton: React.FC = () => {
   );
 
   const handleClick = useCallback(async () => {
-    if (!coloringAnalyte) return;
+    if (!recipe.coloringAnalyte) return;
 
-    const defaultName = matrixFilter
-      ? `${coloringAnalyte} — ${matrixFilter} — ${eventAgg}`
-      : `${coloringAnalyte} — ${eventAgg}`;
+    const defaultName = recipe.matrixFilter
+      ? `${recipe.coloringAnalyte} — ${recipe.matrixFilter} — ${recipe.eventAgg}`
+      : `${recipe.coloringAnalyte} — ${recipe.eventAgg}`;
     const name = window.prompt('Layer name:', defaultName);
     if (!name) return;
 
     const layer = await freezeCurrentState({
       name,
-      analyte: coloringAnalyte,
-      matrix: matrixFilter,
-      eventAgg,
-      dupAgg,
-      ndMethod,
-      colorBy: colorByResults ?? null,
-      sampleRenderAs,
-      sphereRadiusMeters,
-      volumeRadiusMeters,
+      analyte: recipe.coloringAnalyte,
+      matrix: recipe.matrixFilter,
+      eventAgg: recipe.eventAgg,
+      dupAgg: recipe.dupAgg,
+      ndMethod: recipe.ndMethod,
+      colorBy: colorByResults,
+      sampleRenderAs: recipe.sampleRenderAs,
+      sphereRadiusMeters: recipe.sphereRadiusMeters,
+      volumeRadiusMeters: recipe.volumeRadiusMeters,
     });
 
     const {layers, added} = await addPersonalLayer(layer, personalLayers);
@@ -74,21 +58,9 @@ export const FreezeLayerButton: React.FC = () => {
 
     setStatus(added ? 'frozen' : 'duplicate');
     setTimeout(() => setStatus('idle'), 1800);
-  }, [
-    coloringAnalyte,
-    matrixFilter,
-    eventAgg,
-    dupAgg,
-    ndMethod,
-    colorByResults,
-    sampleRenderAs,
-    sphereRadiusMeters,
-    volumeRadiusMeters,
-    personalLayers,
-    setPersonalLayers,
-  ]);
+  }, [recipe, colorByResults, personalLayers, setPersonalLayers]);
 
-  const disabled = !coloringAnalyte;
+  const disabled = !recipe.coloringAnalyte;
 
   return (
     <button

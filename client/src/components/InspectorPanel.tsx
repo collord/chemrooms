@@ -39,6 +39,7 @@ import type {
   LocationSummary,
   SelectedEntity,
 } from '../slices/chemrooms-slice';
+import {useLocationDetail} from '../hooks/useLocationClick';
 
 export const InspectorPanel: React.FC = () => {
   const selectedEntity = useChemroomsStore(
@@ -97,9 +98,8 @@ function parseCompositeLocationId(raw: string): {
 const ChemduckLocationDetail: React.FC<{
   entity: Extract<SelectedEntity, {kind: 'chemduck-location'}>;
 }> = ({entity}) => {
-  const summary = useChemroomsStore((s) => s.chemrooms.locationSummary);
-  const analytes = useChemroomsStore((s) => s.chemrooms.analytesAtLocation);
-  const isLoading = useChemroomsStore((s) => s.chemrooms.isLoadingLocation);
+  // Query results consumed directly from the hook — no store intermediary.
+  const {summary, analytes, isLoading} = useLocationDetail();
   const eventAgg = useChemroomsStore((s) => s.chemrooms.config.eventAgg);
   const dupAgg = useChemroomsStore((s) => s.chemrooms.config.dupAgg);
   const ndMethod = useChemroomsStore((s) => s.chemrooms.config.ndMethod);

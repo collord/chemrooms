@@ -170,8 +170,6 @@ export interface ChemroomsSliceState {
      */
     locationsVisible: boolean;
     samplesVisible: boolean;
-    locationSummary: LocationSummary | null;
-    analytesAtLocation: AnalyteInfo[];
     crossSectionPoints: CrossSectionPoints;
     /** Vis specs loaded from `<table>.vis.json` sidecars, keyed by table. */
     visSpecs: Record<string, VisSpec>;
@@ -190,7 +188,6 @@ export interface ChemroomsSliceState {
      */
     bookmarkLayers: LayerConfig[];
     isLoadingFilters: boolean;
-    isLoadingLocation: boolean;
     // Actions
     /**
      * Set the currently-inspected entity. Passing `null` deselects.
@@ -218,8 +215,6 @@ export interface ChemroomsSliceState {
     setColorMode: (mode: ColorMode) => void;
     setSelectedScreeningLevel: (name: string | null) => void;
     setFractionFilter: (fraction: string | null) => void;
-    setLocationSummary: (summary: LocationSummary | null) => void;
-    setAnalytesAtLocation: (analytes: AnalyteInfo[]) => void;
     setAvailableAnalytes: (analytes: AnalyteInfo[]) => void;
     setAvailableAnalyteNames: (names: string[]) => void;
     setAvailableMatrices: (matrices: string[]) => void;
@@ -238,7 +233,6 @@ export interface ChemroomsSliceState {
     setVisSpec: (table: string, spec: VisSpec) => void;
     setColorBy: (table: string, column: string | null) => void;
     setIsLoadingFilters: (loading: boolean) => void;
-    setIsLoadingLocation: (loading: boolean) => void;
     setSampleRenderAs: (mode: 'auto' | 'sphere' | 'volume') => void;
     setSphereRadiusMeters: (radius: number) => void;
     setVolumeRadiusMeters: (radius: number) => void;
@@ -305,21 +299,14 @@ export function createChemroomsSlice(
       aggregationRules: {},
       locationsVisible: true,
       samplesVisible: true,
-      locationSummary: null,
-      analytesAtLocation: [],
       crossSectionPoints: null,
       visSpecs: {},
       colorBy: {},
       personalLayers: [],
       bookmarkLayers: [],
       isLoadingFilters: false,
-      isLoadingLocation: false,
-
       setSelectedEntity: (entity) =>
         set((state: ChemroomsSliceState) => {
-          const wasChemduck =
-            state.chemrooms.config.selectedEntity?.kind ===
-            'chemduck-location';
           const isChemduck = entity?.kind === 'chemduck-location';
           return {
             chemrooms: {
@@ -335,17 +322,10 @@ export function createChemroomsSlice(
                   ? state.chemrooms.config.timeSeriesAnalytes
                   : [],
               },
-              // Clear the chemduck summary cache when moving away
-              // from a chemduck selection. useLocationDetail will
-              // re-fetch when/if a new chemduck-location is selected.
-              locationSummary:
-                wasChemduck && !isChemduck
-                  ? null
-                  : state.chemrooms.locationSummary,
-              analytesAtLocation:
-                wasChemduck && !isChemduck
-                  ? []
-                  : state.chemrooms.analytesAtLocation,
+              // No manual clearing of locationSummary/analytesAtLocation
+              // needed — those are now returned directly from the
+              // useLocationDetail hook, which re-queries automatically
+              // when the selectedEntity changes.
             },
           };
         }),
@@ -355,30 +335,13 @@ export function createChemroomsSlice(
           const entity: SelectedEntity | null = locationId
             ? {kind: 'chemduck-location', locationId, source}
             : null;
-          const wasChemduck =
-            state.chemrooms.config.selectedEntity?.kind ===
-            'chemduck-location';
           const isChemduck = entity !== null;
-          return {
-            chemrooms: {
-              ...state.chemrooms,
-              config: {
-                ...state.chemrooms.config,
-                selectedEntity: entity,
-                timeSeriesAnalytes: isChemduck
-                  ? state.chemrooms.config.timeSeriesAnalytes
-                  : [],
-              },
-              locationSummary:
-                wasChemduck && !isChemduck
-                  ? null
-                  : state.chemrooms.locationSummary,
-              analytesAtLocation:
-                wasChemduck && !isChemduck
-                  ? []
-                  : state.chemrooms.analytesAtLocation,
-            },
-          };
+          return updateConfig(state, {
+            selectedEntity: entity,
+            timeSeriesAnalytes: isChemduck
+              ? state.chemrooms.config.timeSeriesAnalytes
+              : [],
+          });
         }),
 
       setTimeSeriesAnalytes: (analytes) =>
@@ -443,16 +406,6 @@ export function createChemroomsSlice(
       setFractionFilter: (fraction) =>
         set((state: ChemroomsSliceState) =>
           updateConfig(state, {fractionFilter: fraction}),
-        ),
-
-      setLocationSummary: (summary) =>
-        set((state: ChemroomsSliceState) =>
-          updateRuntime(state, {locationSummary: summary}),
-        ),
-
-      setAnalytesAtLocation: (analytes) =>
-        set((state: ChemroomsSliceState) =>
-          updateRuntime(state, {analytesAtLocation: analytes}),
         ),
 
       setAvailableAnalytes: (analytes) =>
@@ -595,11 +548,6 @@ export function createChemroomsSlice(
       setIsLoadingFilters: (loading) =>
         set((state: ChemroomsSliceState) =>
           updateRuntime(state, {isLoadingFilters: loading}),
-        ),
-
-      setIsLoadingLocation: (loading) =>
-        set((state: ChemroomsSliceState) =>
-          updateRuntime(state, {isLoadingLocation: loading}),
         ),
 
       setSampleRenderAs: (mode) =>

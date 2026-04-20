@@ -21,7 +21,7 @@ import React from 'react';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
 import type {EventAgg} from '../slices/chemrooms-slice';
 import {useAvailableFilters} from '../hooks/useAvailableFilters';
-import {useLocationClick, useLocationDetail} from '../hooks/useLocationClick';
+import {useLocationClick} from '../hooks/useLocationClick';
 import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts';
 import {FilterToolbar} from './FilterToolbar';
 import {CrossSectionToggle} from './CrossSectionToggle';
@@ -35,13 +35,10 @@ import {SymbolControls} from './SymbolControls';
 import {LayersPanel} from './LayersPanel';
 
 export const SidebarPanel: React.FC = () => {
-  // Activate hooks. useLocationClick / useLocationDetail are wiring
-  // (click handler + summary-query driver); they don't render
-  // anything here. We keep them in the sidebar because it's
-  // guaranteed-mounted; the Inspector panel can be closed/hidden.
+  // Activate hooks. useLocationClick is wiring (click handler);
+  // useLocationDetail is now consumed by InspectorPanel directly.
   useAvailableFilters();
   useLocationClick();
-  useLocationDetail();
   useKeyboardShortcuts();
 
   const coloringAnalyte = useChemroomsStore(
