@@ -145,6 +145,7 @@ export const TimeSeriesPanel: React.FC = () => {
           data: {from: tableKey},
           x: 'sample_date',
           y: 'plot_value',
+          z: 'analyte',
           stroke: 'analyte',
           strokeWidth: 2,
         },
