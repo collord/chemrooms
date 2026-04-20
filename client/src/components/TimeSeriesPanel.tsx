@@ -129,14 +129,20 @@ export const TimeSeriesPanel: React.FC = () => {
 
     console.log('[timeseries] query:', query);
 
+    // Use a unique table name per query so Mosaic doesn't serve
+    // stale cached data when the analyte selection changes. Without
+    // this, Mosaic sees "ts_data" and reuses the previous result
+    // even though the underlying SQL is different.
+    const tableKey = `ts_${selectedLocationId}_${selectedAnalytes.join('_')}`.replace(/[^a-zA-Z0-9_]/g, '_');
+
     return {
       data: {
-        ts_data: {type: 'table' as const, query},
+        [tableKey]: {type: 'table' as const, query},
       },
       plot: [
         {
           mark: 'line',
-          data: {from: 'ts_data'},
+          data: {from: tableKey},
           x: 'sample_date',
           y: 'plot_value',
           stroke: 'analyte',
@@ -144,7 +150,7 @@ export const TimeSeriesPanel: React.FC = () => {
         },
         {
           mark: 'dot',
-          data: {from: 'ts_data'},
+          data: {from: tableKey},
           x: 'sample_date',
           y: 'plot_value',
           fill: 'analyte',
