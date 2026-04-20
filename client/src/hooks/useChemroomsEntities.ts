@@ -378,18 +378,32 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
 
       if (!viewer || viewer.isDestroyed()) return;
 
-      // Remove primitives
+      // Remove primitives. Wrapped in try/catch because the
+      // cleanup can race with Cesium's render loop — if the
+      // primitive is mid-render when React's effect cleanup
+      // fires (e.g., cross-section toggle causes a re-render),
+      // remove() destroys the primitive and the renderer
+      // crashes with "This object was destroyed." The catch
+      // swallows the race; the primitive will be GC'd anyway.
       for (const p of primitivesRef.current) {
-        if (!p.isDestroyed()) {
-          viewer.scene.primitives.remove(p);
+        try {
+          if (!p.isDestroyed()) {
+            viewer.scene.primitives.remove(p);
+          }
+        } catch {
+          // Already destroyed or mid-render — safe to ignore
         }
       }
       primitivesRef.current = [];
 
       // Remove Entity.point fallbacks
       for (const id of entityIdsRef.current) {
-        if (viewer.entities.getById(id)) {
-          viewer.entities.removeById(id);
+        try {
+          if (viewer.entities.getById(id)) {
+            viewer.entities.removeById(id);
+          }
+        } catch {
+          // Same race protection
         }
       }
       entityIdsRef.current = [];
