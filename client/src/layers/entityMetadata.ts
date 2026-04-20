@@ -78,6 +78,7 @@ export type EntityMetadata =
       };
     };
 
+// ── Entity-based metadata (WeakMap, for vector features + point fallback) ──
 const entityMetadata = new WeakMap<Entity, EntityMetadata>();
 
 export function setEntityMetadata(entity: Entity, meta: EntityMetadata): void {
@@ -86,6 +87,28 @@ export function setEntityMetadata(entity: Entity, meta: EntityMetadata): void {
 
 export function getEntityMetadata(entity: Entity): EntityMetadata | undefined {
   return entityMetadata.get(entity);
+}
+
+// ── Primitive-instance metadata (Map<string>, for sphere/tube primitives) ──
+// Keyed by the GeometryInstance.id string. scene.pick() on a Primitive
+// returns {id: thisString, primitive: thePrimitive}.
+const primitiveMetadata = new Map<string, EntityMetadata>();
+
+export function setPrimitiveMetadata(id: string, meta: EntityMetadata): void {
+  primitiveMetadata.set(id, meta);
+}
+
+export function getPrimitiveMetadata(id: string): EntityMetadata | undefined {
+  return primitiveMetadata.get(id);
+}
+
+/** Clear all primitive metadata for a given layer (by id prefix). */
+export function clearPrimitiveMetadataForLayer(layerIdPrefix: string): void {
+  for (const key of primitiveMetadata.keys()) {
+    if (key.startsWith(layerIdPrefix + ':')) {
+      primitiveMetadata.delete(key);
+    }
+  }
 }
 
 /**

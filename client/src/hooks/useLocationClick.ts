@@ -23,8 +23,11 @@ import {useEffect, useRef} from 'react';
 import {
   Cartesian2,
   Color,
+  ColorGeometryInstanceAttribute,
   ColorMaterialProperty,
   ConstantProperty,
+  PerInstanceColorAppearance,
+  Primitive,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
   defined,
@@ -35,7 +38,11 @@ import {
   useChemroomsStore,
   type SelectedEntity,
 } from '../slices/chemrooms-slice';
-import {getEntityMetadata} from '../layers/entityMetadata';
+import {
+  getEntityMetadata,
+  getPrimitiveMetadata,
+  type EntityMetadata,
+} from '../layers/entityMetadata';
 
 /**
  * Selection highlight color — applied imperatively to the outline
@@ -71,11 +78,11 @@ function applySelectionStyle(
   viewer: Viewer,
   sel: SelectedEntity | null,
 ): void {
+  // ── Entity-based highlights (vector features + point fallback) ──
   for (const entity of viewer.entities.values) {
     const meta = getEntityMetadata(entity);
     if (!meta) continue;
 
-    // ── Vector-feature polyline outlines ──────────────────────
     if (meta.kind === 'vector-feature' && meta.outlineStyle && entity.polyline) {
       const isSelected =
         sel?.kind === 'vector-feature' &&
@@ -90,38 +97,46 @@ function applySelectionStyle(
       entity.polyline.material = new ColorMaterialProperty(color);
       entity.polyline.width = new ConstantProperty(width);
     }
+  }
 
-    // ── Chemduck 3D ellipsoid (sphere) ───────────────────────
-    if (
-      meta.kind === 'chemduck-location' &&
-      meta.primitiveType === 'ellipsoid' &&
-      meta.normalColor &&
-      entity.ellipsoid
-    ) {
-      const isSelected =
-        sel?.kind === 'chemduck-location' &&
-        sel.locationId === meta.locationId;
-      entity.ellipsoid.material = new ColorMaterialProperty(
-        isSelected ? SELECTED_OUTLINE : meta.normalColor,
-      );
-    }
+  // ── Primitive-based highlights (spheres + tubes) ───────────────
+  // Walk scene.primitives looking for our Primitives (the ones with
+  // PerInstanceColorAppearance). For each, walk their instances and
+  // update the color attribute based on the current selection.
+  const selLocId =
+    sel?.kind === 'chemduck-location' ? sel.locationId : null;
+  const numPrimitives = viewer.scene.primitives.length;
+  for (let i = 0; i < numPrimitives; i++) {
+    const p = viewer.scene.primitives.get(i);
+    if (!(p instanceof Primitive) || p.isDestroyed()) continue;
+    if (!(p.appearance instanceof PerInstanceColorAppearance)) continue;
 
-    // ── Chemduck 3D polylineVolume (borehole tube) ───────────
-    if (
-      meta.kind === 'chemduck-location' &&
-      meta.primitiveType === 'polylineVolume' &&
-      meta.normalColor &&
-      entity.polylineVolume
-    ) {
-      const isSelected =
-        sel?.kind === 'chemduck-location' &&
-        sel.locationId === meta.locationId;
-      entity.polylineVolume.material = new ColorMaterialProperty(
-        isSelected ? SELECTED_OUTLINE : meta.normalColor,
-      );
+    // Get the instance ids from this primitive's geometryInstances
+    const instances = p.geometryInstances;
+    if (!instances) continue;
+    const instArray = Array.isArray(instances) ? instances : [instances];
+
+    for (const inst of instArray) {
+      const instId = inst.id as string;
+      const meta = getPrimitiveMetadata(instId);
+      if (!meta || meta.kind !== 'chemduck-location') continue;
+
+      const isSelected = meta.locationId === selLocId;
+      try {
+        const attrs = p.getGeometryInstanceAttributes(instId);
+        if (attrs) {
+          attrs.color = ColorGeometryInstanceAttribute.toValue(
+            isSelected ? SELECTED_OUTLINE : (meta.normalColor ?? FALLBACK_COLOR),
+          );
+        }
+      } catch {
+        // Primitive not yet ready (async geometry compilation)
+      }
     }
   }
 }
+
+const FALLBACK_COLOR = Color.CYAN;
 
 /**
  * React hook: subscribe to selection changes and apply the
@@ -167,19 +182,18 @@ export function useLocationClick() {
         return;
       }
 
-      const entity = picked.id;
+      // Resolve metadata from the pick. Two paths:
+      //  - Entity picks (vector features, point fallback): picked.id
+      //    is an Entity object → WeakMap lookup via getEntityMetadata
+      //  - Primitive picks (spheres, tubes): picked.id is the string
+      //    we set on GeometryInstance → Map lookup via getPrimitiveMetadata
+      let meta: EntityMetadata | undefined;
+      if (typeof picked.id === 'string') {
+        meta = getPrimitiveMetadata(picked.id);
+      } else if (picked.id) {
+        meta = getEntityMetadata(picked.id);
+      }
 
-      // Read our metadata off the entity via the WeakMap. If the
-      // entity wasn't created by one of our hooks (e.g., a tileset
-      // feature or a base-imagery pick), meta will be undefined and
-      // we fall back to just flying to it without setting a
-      // chemrooms selection. We no longer touch viewer.selectedEntity
-      // at all — Cesium's selection indicator is disabled globally
-      // (see useDisableCesiumSelectionIndicator below) because
-      // (a) it positions incorrectly for terrain-clamped vector
-      // features and (b) the Inspector pane already serves as the
-      // "what's selected" signal.
-      const meta = getEntityMetadata(entity);
       if (!meta) {
         setSelectedEntityInSlice(null);
       } else if (meta.kind === 'chemduck-location') {
