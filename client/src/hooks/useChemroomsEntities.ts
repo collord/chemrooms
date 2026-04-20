@@ -30,7 +30,12 @@ import {
 import {fabricateTrajectory} from '../layers/desurvey';
 import {BboxAccumulator, setLayerBbox} from '../layers/layerBbox';
 
-const VOLUME_SHAPE_SEGMENTS = 12;
+// Cross-section polygon for borehole tubes. 6 sides (hexagon) is
+// visually indistinguishable from round at the scale we render
+// (1-5m radius, viewed from tens to hundreds of meters) and
+// produces half the geometry of 12. Can go as low as 4 (square)
+// for extreme performance but the facets become visible up close.
+const VOLUME_SHAPE_SEGMENTS = 6;
 
 function circleShape(radiusMeters: number): Cartesian2[] {
   const positions: Cartesian2[] = [];
