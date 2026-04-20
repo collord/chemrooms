@@ -27,6 +27,7 @@ import {
   ColorMaterialProperty,
   ConstantProperty,
   PerInstanceColorAppearance,
+  PolylineColorAppearance,
   Primitive,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
@@ -109,7 +110,13 @@ function applySelectionStyle(
   for (let i = 0; i < numPrimitives; i++) {
     const p = viewer.scene.primitives.get(i);
     if (!(p instanceof Primitive) || p.isDestroyed()) continue;
-    if (!(p.appearance instanceof PerInstanceColorAppearance)) continue;
+    // Our primitives use either PerInstanceColorAppearance (spheres/tubes)
+    // or PolylineColorAppearance (simple lines) — both support per-
+    // instance color attributes.
+    if (
+      !(p.appearance instanceof PerInstanceColorAppearance) &&
+      !(p.appearance instanceof PolylineColorAppearance)
+    ) continue;
 
     // Get the instance ids from this primitive's geometryInstances
     const instances = p.geometryInstances;

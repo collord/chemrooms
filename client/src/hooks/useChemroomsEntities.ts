@@ -31,6 +31,8 @@ import {
   GeometryInstance,
   HeightReference,
   PerInstanceColorAppearance,
+  PolylineColorAppearance,
+  PolylineGeometry,
   PolylineVolumeGeometry,
   Primitive,
   Transforms,
@@ -77,6 +79,15 @@ export interface UseChemroomsEntitiesArgs {
 
 const FALLBACK_COLOR = Color.CYAN;
 const SPHERE_THRESHOLD = 500;
+/**
+ * Above this many depth-interval rows, use simple colored lines
+ * (PolylineGeometry) instead of filled tubes (PolylineVolumeGeometry).
+ * Tubes are expensive — each has a 6-sided cross-section mesh, and
+ * 5000+ of them overwhelms the async geometry compilation worker.
+ * Lines are orders of magnitude cheaper (two vertices each) and
+ * render the same borehole structure at overview zoom.
+ */
+const TUBE_THRESHOLD = 500;
 const MIN_SEGMENT_LENGTH_M = 0.1;
 
 export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
@@ -177,24 +188,21 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
 
       const forceScreenSpace = rows.length > SPHERE_THRESHOLD;
 
-      // Diagnostic: log first row's depth columns so we can verify
-      // the SQL is producing the depth data the tube path needs.
-      if (rows.length > 0) {
-        const r = rows[0];
-        console.log(
-          `[${args.layerId}] sample row:`,
-          `top_depth_m=${r.top_depth_m}`,
-          `bottom_depth_m=${r.bottom_depth_m}`,
-          `surface_elev_m=${r.surface_elev_m}`,
-          `altitude=${r.altitude}`,
-        );
+      // Pre-count depth rows to decide tube vs line rendering.
+      let depthRowCount = 0;
+      for (const row of rows) {
+        if (row.top_depth_m != null && row.bottom_depth_m != null) {
+          depthRowCount++;
+        }
       }
+      const useSimpleLines = depthRowCount > TUBE_THRESHOLD;
       const volumeShape = circleShape(volumeR);
       const vertexFormat = PerInstanceColorAppearance.VERTEX_FORMAT;
 
       // ── Second pass: build instances ──────────────────────────
       const sphereInstances: GeometryInstance[] = [];
       const tubeInstances: GeometryInstance[] = [];
+      const lineInstances: GeometryInstance[] = [];
       const pointEntityIds: string[] = [];
 
       // Batch Entity.point additions when needed
@@ -279,7 +287,7 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
           continue;
         }
 
-        // ── PolylineVolume tube (borehole segment) ──────────────
+        // ── Borehole segment (tube or line) ──────────────────────
         if (hasDepth && renderMode !== 'sphere') {
           const topM = Number(topDepthRaw);
           const bottomM = Number(bottomDepthRaw);
@@ -297,19 +305,37 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
               Cartesian3.fromDegrees(p.lon, p.lat, p.alt),
             );
             try {
-              tubeInstances.push(
-                new GeometryInstance({
-                  geometry: new PolylineVolumeGeometry({
-                    polylinePositions: positions,
-                    shapePositions: volumeShape,
-                    vertexFormat,
+              if (useSimpleLines) {
+                // Simple colored line — cheap, handles 5K+ segments
+                lineInstances.push(
+                  new GeometryInstance({
+                    geometry: new PolylineGeometry({
+                      positions,
+                      width: 4.0,
+                      vertexFormat: PolylineColorAppearance.VERTEX_FORMAT,
+                    }),
+                    attributes: {
+                      color: ColorGeometryInstanceAttribute.fromColor(color),
+                    },
+                    id,
                   }),
-                  attributes: {
-                    color: ColorGeometryInstanceAttribute.fromColor(color),
-                  },
-                  id,
-                }),
-              );
+                );
+              } else {
+                // Filled tube — 6-sided cross-section, for ≤500 segments
+                tubeInstances.push(
+                  new GeometryInstance({
+                    geometry: new PolylineVolumeGeometry({
+                      polylinePositions: positions,
+                      shapePositions: volumeShape,
+                      vertexFormat,
+                    }),
+                    attributes: {
+                      color: ColorGeometryInstanceAttribute.fromColor(color),
+                    },
+                    id,
+                  }),
+                );
+              }
               setPrimitiveMetadata(id, {
                 ...chemduckMeta,
                 primitiveType: 'polylineVolume',
@@ -353,7 +379,8 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
 
       console.log(
         `[${args.layerId}] rendering: ${sphereInstances.length} spheres, ` +
-          `${tubeInstances.length} tubes, ${pointEntityIds.length} points ` +
+          `${tubeInstances.length} tubes, ${lineInstances.length} lines, ` +
+          `${pointEntityIds.length} points ` +
           `(${rows.length} rows total, forceScreenSpace=${forceScreenSpace})`,
       );
 
@@ -384,6 +411,16 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
         });
         viewer.scene.primitives.add(tubePrimitive);
         newPrimitives.push(tubePrimitive);
+      }
+
+      if (lineInstances.length > 0 && !cancelled) {
+        const linePrimitive = new Primitive({
+          geometryInstances: lineInstances,
+          appearance: new PolylineColorAppearance(),
+          asynchronous: true,
+        });
+        viewer.scene.primitives.add(linePrimitive);
+        newPrimitives.push(linePrimitive);
       }
 
       primitivesRef.current = newPrimitives;
