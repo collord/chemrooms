@@ -263,13 +263,15 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
         try {
           let entity;
 
-          // ── Screen-space fast path (large datasets) ────────────
-          // When row count exceeds the threshold, skip 3D geometry
-          // entirely and use Entity.point (single draw call, handles
-          // 10K+ points without lag). This is the no-analyte overview
-          // path; the analyte-selected view with fewer aggregated
-          // rows still gets 3D spheres/tubes below.
-          if (forceScreenSpace) {
+          // ── Screen-space fast path (large datasets, surface only) ─
+          // When row count exceeds the threshold AND this row has no
+          // depth interval, use Entity.point (single draw call,
+          // handles 10K+ points without lag). Rows WITH depth
+          // intervals always get polylineVolume regardless of count,
+          // because borehole segments need 3D geometry to communicate
+          // depth — a 2D screen-space dot at the surface is useless
+          // for a subsurface sample.
+          if (forceScreenSpace && !hasDepth) {
             entity = viewer.entities.add({
               id,
               name: label,
