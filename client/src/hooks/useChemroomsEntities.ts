@@ -176,6 +176,19 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
       }
 
       const forceScreenSpace = rows.length > SPHERE_THRESHOLD;
+
+      // Diagnostic: log first row's depth columns so we can verify
+      // the SQL is producing the depth data the tube path needs.
+      if (rows.length > 0) {
+        const r = rows[0];
+        console.log(
+          `[${args.layerId}] sample row:`,
+          `top_depth_m=${r.top_depth_m}`,
+          `bottom_depth_m=${r.bottom_depth_m}`,
+          `surface_elev_m=${r.surface_elev_m}`,
+          `altitude=${r.altitude}`,
+        );
+      }
       const volumeShape = circleShape(volumeR);
       const vertexFormat = PerInstanceColorAppearance.VERTEX_FORMAT;
 
@@ -337,6 +350,12 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
       if (forceScreenSpace || !isChemduck) {
         viewer.entities.resumeEvents();
       }
+
+      console.log(
+        `[${args.layerId}] rendering: ${sphereInstances.length} spheres, ` +
+          `${tubeInstances.length} tubes, ${pointEntityIds.length} points ` +
+          `(${rows.length} rows total, forceScreenSpace=${forceScreenSpace})`,
+      );
 
       // ── Build Primitives ──────────────────────────────────────
       const newPrimitives: Primitive[] = [];
