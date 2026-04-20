@@ -94,9 +94,9 @@ export const SymbolControls: React.FC<{disabled?: boolean}> = ({
         </select>
       </label>
 
-      {/* Sphere radius — debounced */}
+      {/* Size — controls both sphere diameter and tube/line width */}
       <label className="flex items-center gap-2 text-xs">
-        <span className="w-16 shrink-0 text-muted-foreground">Sphere</span>
+        <span className="w-16 shrink-0 text-muted-foreground">Diameter</span>
         <input
           type="range"
           min={0.5}

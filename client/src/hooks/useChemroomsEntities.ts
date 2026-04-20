@@ -171,20 +171,26 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
       const isChemduck =
         (args.entityKind ?? 'chemduck-location') === 'chemduck-location';
       const renderMode = args.sampleRenderAs ?? 'auto';
-      const volumeR = args.volumeRadiusMeters ?? 1;
 
+      // The "Diameter" slider value drives both sphere size AND
+      // tube/line size. Internally we treat it as a diameter —
+      // sphere radius = value / 2, tube cross-section radius =
+      // value / 2, line width in pixels ≈ value (clamped).
       const DEG_TO_METERS = 111_000;
       const RADIUS_FRACTION = 0.01;
-      let sphereR: number;
+      let diameter: number;
       if (layerBbox) {
         const extentDeg = Math.max(
           layerBbox.east - layerBbox.west,
           layerBbox.north - layerBbox.south,
         );
-        sphereR = Math.max(extentDeg * DEG_TO_METERS * RADIUS_FRACTION, 0.5);
+        diameter = Math.max(extentDeg * DEG_TO_METERS * RADIUS_FRACTION, 1);
       } else {
-        sphereR = args.sphereRadiusMeters ?? 2;
+        diameter = args.sphereRadiusMeters ?? 2;
       }
+      const sphereR = diameter / 2;
+      const volumeR = diameter / 2;
+      const lineWidth = Math.max(2, Math.min(20, diameter));
 
       const forceScreenSpace = rows.length > SPHERE_THRESHOLD;
 
@@ -311,7 +317,7 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
                   new GeometryInstance({
                     geometry: new PolylineGeometry({
                       positions,
-                      width: 4.0,
+                      width: lineWidth,
                       vertexFormat: PolylineColorAppearance.VERTEX_FORMAT,
                     }),
                     attributes: {
