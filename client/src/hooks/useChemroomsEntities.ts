@@ -80,14 +80,23 @@ export interface UseChemroomsEntitiesArgs {
 const FALLBACK_COLOR = Color.CYAN;
 const SPHERE_THRESHOLD = 500;
 /**
- * Above this many depth-interval rows, use simple colored lines
- * (PolylineGeometry) instead of filled tubes (PolylineVolumeGeometry).
- * Tubes are expensive — each has a 6-sided cross-section mesh, and
- * 5000+ of them overwhelms the async geometry compilation worker.
- * Lines are orders of magnitude cheaper (two vertices each) and
- * render the same borehole structure at overview zoom.
+ * Above this many depth-interval rows, fall back to simple colored
+ * lines (PolylineGeometry) instead of filled tubes. The Primitive
+ * API handles thousands of tubes fine geometrically — the real
+ * constraint is the async geometry compilation time. 50K is a
+ * generous threshold; most environmental/minerals datasets are
+ * well under this.
  */
-const TUBE_THRESHOLD = 500;
+const TUBE_THRESHOLD = 50_000;
+
+/** Debounce delay for the entity creation effect. Selecting an
+ * analyte cascades multiple state changes (analyte, colorBy, etc.)
+ * that each trigger a re-render. Without debouncing, the effect
+ * runs N times in rapid succession, each time destroying the
+ * previous Primitive mid-compilation and starting a new 5000-tube
+ * compile — the old worker gets killed, the new one starts, repeat.
+ * A 300ms debounce lets the state settle before we do the heavy work. */
+const EFFECT_DEBOUNCE_MS = 300;
 const MIN_SEGMENT_LENGTH_M = 0.1;
 
 export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
@@ -118,6 +127,13 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
     }
 
     let cancelled = false;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    // Debounce: wait for deps to stabilize before doing the heavy
+    // geometry work. Without this, analyte selection triggers 3–4
+    // rapid re-runs that each destroy-and-recreate the Primitive.
+    debounceTimer = setTimeout(() => {
+    debounceTimer = null;
 
     (async () => {
       let rows: any[] = [];
@@ -433,8 +449,11 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
       entityIdsRef.current = pointEntityIds;
     })();
 
+    }, EFFECT_DEBOUNCE_MS); // end debounce timer
+
     return () => {
       cancelled = true;
+      if (debounceTimer !== null) clearTimeout(debounceTimer);
       setLayerBbox(args.layerId, null);
       clearPrimitiveMetadataForLayer(args.layerId);
 
