@@ -29,6 +29,7 @@ import {
   CylinderGeometry,
   EllipsoidGeometry,
   GeometryInstance,
+  HeadingPitchRoll,
   HeightReference,
   PerInstanceColorAppearance,
   PolylineColorAppearance,
@@ -331,13 +332,20 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
                   }),
                 );
               } else {
-                // CylinderGeometry — inherently vertical, no cross-
-                // section orientation issues. Positioned at the
-                // segment midpoint via modelMatrix. The cylinder's
-                // axis aligns with local "up" from
-                // eastNorthUpToFixedFrame, which IS vertical.
+                // CylinderGeometry + headingPitchRollToFixedFrame.
+                // For vertical wells: HPR = (0, 0, 0) → cylinder
+                // axis aligns with local "up" = vertical.
+                // For deviated wells (future): HPR = (azimuth,
+                // -inclination, 0) from the desurvey → cylinder
+                // tilts to follow the borehole trajectory. Each
+                // segment gets its own HPR so a chain of tilted
+                // cylinders traces the deviated path.
                 const midAlt = surfaceElev - (topM + bottomM) / 2;
                 const midPosition = Cartesian3.fromDegrees(lon, lat, midAlt);
+                // TODO: when deviation survey data is available,
+                // compute heading/pitch from the segment's azimuth
+                // and inclination instead of (0, 0, 0).
+                const hpr = new HeadingPitchRoll(0, 0, 0);
                 tubeInstances.push(
                   new GeometryInstance({
                     geometry: new CylinderGeometry({
@@ -347,7 +355,10 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
                       slices: CYLINDER_SLICES,
                       vertexFormat,
                     }),
-                    modelMatrix: Transforms.eastNorthUpToFixedFrame(midPosition),
+                    modelMatrix: Transforms.headingPitchRollToFixedFrame(
+                      midPosition,
+                      hpr,
+                    ),
                     attributes: {
                       color: ColorGeometryInstanceAttribute.fromColor(color),
                     },
