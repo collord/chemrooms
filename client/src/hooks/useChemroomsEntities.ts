@@ -23,17 +23,16 @@
 
 import {useEffect, useRef} from 'react';
 import {
-  Cartesian2,
   Cartesian3,
   Color,
   ColorGeometryInstanceAttribute,
+  CylinderGeometry,
   EllipsoidGeometry,
   GeometryInstance,
   HeightReference,
   PerInstanceColorAppearance,
   PolylineColorAppearance,
   PolylineGeometry,
-  PolylineVolumeGeometry,
   Primitive,
   Transforms,
 } from 'cesium';
@@ -46,24 +45,11 @@ import {
   setPrimitiveMetadata,
   stripPositioningColumns,
 } from '../layers/entityMetadata';
-import {fabricateTrajectory} from '../layers/desurvey';
 import {BboxAccumulator, setLayerBbox} from '../layers/layerBbox';
 
-const VOLUME_SHAPE_SEGMENTS = 6;
-
-function circleShape(radiusMeters: number): Cartesian2[] {
-  const positions: Cartesian2[] = [];
-  for (let i = 0; i < VOLUME_SHAPE_SEGMENTS; i++) {
-    const angle = (i / VOLUME_SHAPE_SEGMENTS) * Math.PI * 2;
-    positions.push(
-      new Cartesian2(
-        Math.cos(angle) * radiusMeters,
-        Math.sin(angle) * radiusMeters,
-      ),
-    );
-  }
-  return positions;
-}
+/** Number of side faces for CylinderGeometry. 6 (hexagonal) is
+ * visually round at the render scale and cheap. */
+const CYLINDER_SLICES = 6;
 
 export interface UseChemroomsEntitiesArgs {
   layerId: string;
@@ -221,7 +207,9 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
         }
       }
       const useSimpleLines = depthRowCount > TUBE_THRESHOLD;
-      const volumeShape = circleShape(volumeR);
+      // CylinderGeometry is inherently vertical, positioned at the
+      // segment midpoint via modelMatrix. No trajectory / cross-
+      // section computation needed.
       const vertexFormat = PerInstanceColorAppearance.VERTEX_FORMAT;
 
       // ── Second pass: build instances ──────────────────────────
@@ -312,26 +300,23 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
           continue;
         }
 
-        // ── Borehole segment (tube or line) ──────────────────────
+        // ── Borehole segment (cylinder or line) ────────────────────
         if (hasDepth && renderMode !== 'sphere') {
           const topM = Number(topDepthRaw);
           const bottomM = Number(bottomDepthRaw);
           const segmentLength = Math.abs(bottomM - topM);
 
           if (segmentLength >= MIN_SEGMENT_LENGTH_M) {
-            const trajectory = fabricateTrajectory(
-              lon,
-              lat,
-              surfaceElev,
-              topM,
-              bottomM,
-            );
-            const positions = trajectory.map((p) =>
-              Cartesian3.fromDegrees(p.lon, p.lat, p.alt),
-            );
             try {
               if (useSimpleLines) {
-                // Simple colored line — cheap, handles 5K+ segments
+                // Simple colored line — cheap, handles 50K+ segments.
+                // Two-point vertical path for the line.
+                const topAlt = surfaceElev - topM;
+                const bottomAlt = surfaceElev - bottomM;
+                const positions = [
+                  Cartesian3.fromDegrees(lon, lat, topAlt),
+                  Cartesian3.fromDegrees(lon, lat, bottomAlt),
+                ];
                 lineInstances.push(
                   new GeometryInstance({
                     geometry: new PolylineGeometry({
@@ -346,14 +331,23 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
                   }),
                 );
               } else {
-                // Filled tube — 6-sided cross-section, for ≤500 segments
+                // CylinderGeometry — inherently vertical, no cross-
+                // section orientation issues. Positioned at the
+                // segment midpoint via modelMatrix. The cylinder's
+                // axis aligns with local "up" from
+                // eastNorthUpToFixedFrame, which IS vertical.
+                const midAlt = surfaceElev - (topM + bottomM) / 2;
+                const midPosition = Cartesian3.fromDegrees(lon, lat, midAlt);
                 tubeInstances.push(
                   new GeometryInstance({
-                    geometry: new PolylineVolumeGeometry({
-                      polylinePositions: positions,
-                      shapePositions: volumeShape,
+                    geometry: new CylinderGeometry({
+                      length: segmentLength,
+                      topRadius: volumeR,
+                      bottomRadius: volumeR,
+                      slices: CYLINDER_SLICES,
                       vertexFormat,
                     }),
+                    modelMatrix: Transforms.eastNorthUpToFixedFrame(midPosition),
                     attributes: {
                       color: ColorGeometryInstanceAttribute.fromColor(color),
                     },
