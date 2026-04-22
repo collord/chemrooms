@@ -175,21 +175,26 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
         (args.entityKind ?? 'chemduck-location') === 'chemduck-location';
       const renderMode = args.sampleRenderAs ?? 'auto';
 
-      // The "Diameter" slider value drives both sphere size AND
-      // tube/line size. Internally we treat it as a diameter —
-      // sphere radius = value / 2, tube cross-section radius =
-      // value / 2, line width in pixels ≈ value (clamped).
+      // The "Diameter" slider drives sphere size, tube radius, and
+      // line width. When the slider is at its schema default (2m),
+      // we auto-size from the data extent (1% of the max dimension
+      // in meters) so entities are visible at overview zoom. Once
+      // the user moves the slider, their value wins.
+      const SCHEMA_DEFAULT = 2;
       const DEG_TO_METERS = 111_000;
       const RADIUS_FRACTION = 0.01;
+      const sliderValue = args.sphereRadiusMeters ?? SCHEMA_DEFAULT;
+      const isAtDefault = sliderValue === SCHEMA_DEFAULT;
+
       let diameter: number;
-      if (layerBbox) {
+      if (isAtDefault && layerBbox) {
         const extentDeg = Math.max(
           layerBbox.east - layerBbox.west,
           layerBbox.north - layerBbox.south,
         );
         diameter = Math.max(extentDeg * DEG_TO_METERS * RADIUS_FRACTION, 1);
       } else {
-        diameter = args.sphereRadiusMeters ?? 2;
+        diameter = sliderValue;
       }
       const sphereR = diameter / 2;
       // Tube cross-section uses the same diameter as spheres — the
