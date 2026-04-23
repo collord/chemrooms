@@ -301,7 +301,7 @@ export function createChemroomsSlice(
       samplesVisible: true,
       crossSectionPoints: null,
       visSpecs: {},
-      colorBy: {},
+      colorBy: {v_results_denormalized: 'result'},
       personalLayers: [],
       bookmarkLayers: [],
       isLoadingFilters: false,

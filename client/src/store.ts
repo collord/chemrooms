@@ -136,6 +136,11 @@ export const {roomStore, useRoomStore} = createRoomStore<RoomState>(
             type: 'url',
             url: `${DATA_BASE_URL}/unit_conversions.parquet`,
           },
+          {
+            tableName: 'downhole_survey',
+            type: 'url',
+            url: `${DATA_BASE_URL}/downhole_survey.parquet`,
+          },
         ],
       },
       layout: {
