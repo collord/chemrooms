@@ -149,6 +149,9 @@ export interface ChemroomsConfig {
 /** Lon/lat pairs for the two cross-section endpoints (degrees). */
 export type CrossSectionPoints = [[number, number], [number, number]] | null;
 
+/** Cross-section clipping mode. */
+export type CrossSectionMode = 'remove-front' | 'remove-back' | 'thick-slice';
+
 /** Per-table active "color by" column. */
 export type ColorBySelection = Record<string, string | null>;
 
@@ -171,6 +174,10 @@ export interface ChemroomsSliceState {
     locationsVisible: boolean;
     samplesVisible: boolean;
     crossSectionPoints: CrossSectionPoints;
+    crossSectionMode: CrossSectionMode;
+    /** Thickness in meters for thick-slice mode. Default computed
+     * from project extent (1/50, rounded to 2 sig figs). */
+    sliceThicknessM: number;
     /** Vis specs loaded from `<table>.vis.json` sidecars, keyed by table. */
     visSpecs: Record<string, VisSpec>;
     /** Active color-by column per table; null = no coloring. */
@@ -230,6 +237,8 @@ export interface ChemroomsSliceState {
     toggleBookmarkLayer: (id: string) => void;
     promoteBookmarkLayer: (id: string) => void;
     setCrossSectionPoints: (points: CrossSectionPoints) => void;
+    setCrossSectionMode: (mode: CrossSectionMode) => void;
+    setSliceThicknessM: (thickness: number) => void;
     setVisSpec: (table: string, spec: VisSpec) => void;
     setColorBy: (table: string, column: string | null) => void;
     setIsLoadingFilters: (loading: boolean) => void;
@@ -300,6 +309,8 @@ export function createChemroomsSlice(
       locationsVisible: true,
       samplesVisible: true,
       crossSectionPoints: null,
+      crossSectionMode: 'remove-front' as CrossSectionMode,
+      sliceThicknessM: 20, // default overridden by project extent
       visSpecs: {},
       colorBy: {v_results_denormalized: 'result'},
       personalLayers: [],
@@ -518,6 +529,16 @@ export function createChemroomsSlice(
       setCrossSectionPoints: (points) =>
         set((state: ChemroomsSliceState) =>
           updateRuntime(state, {crossSectionPoints: points}),
+        ),
+
+      setCrossSectionMode: (mode) =>
+        set((state: ChemroomsSliceState) =>
+          updateRuntime(state, {crossSectionMode: mode}),
+        ),
+
+      setSliceThicknessM: (thickness) =>
+        set((state: ChemroomsSliceState) =>
+          updateRuntime(state, {sliceThicknessM: thickness}),
         ),
 
       setVisSpec: (table, spec) =>

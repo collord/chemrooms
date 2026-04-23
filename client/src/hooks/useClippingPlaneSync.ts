@@ -1,14 +1,17 @@
 /**
  * Cross-section clipping plane sync.
  *
- * Watches `chemrooms.crossSectionPoints` and re-applies the resulting
- * world-space plane to:
+ * Watches `chemrooms.crossSectionPoints`, `crossSectionMode`, and
+ * `sliceThicknessM` and re-applies the resulting world-space plane(s)
+ * to:
  *   - All loaded 3D Tilesets
  *   - All Cesium entities (via show/hide)
+ *   - All Primitive geometry instances (via ShowGeometryInstanceAttribute)
  *
- * Also subscribes to `viewer.entities.collectionChanged` so newly-added
- * entities (e.g. when toggling a layer on or rebuilding the samples
- * layer) get the current clipping treatment immediately.
+ * Three modes:
+ *   - remove-front: single plane, hide the "front" side
+ *   - remove-back: single plane, hide the "back" side (default)
+ *   - thick-slice: two planes offset ±thickness/2, keep only the slab
  *
  * Re-entrancy guard: applying the clipping mutates entity.show, which
  * fires definitionChanged → collectionChanged → would re-enter the
@@ -16,14 +19,32 @@
  */
 
 import {useEffect, type RefObject} from 'react';
-import {Cartesian3, type Cesium3DTileset} from 'cesium';
+import {
+  Cartesian3,
+  ColorGeometryInstanceAttribute,
+  PerInstanceColorAppearance,
+  PolylineColorAppearance,
+  Primitive,
+  ShowGeometryInstanceAttribute,
+  type Cesium3DTileset,
+} from 'cesium';
 import {useStoreWithCesium} from '@sqlrooms/cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
+import {getPrimitiveMetadata} from '../layers/entityMetadata';
 import {
   applyClippingToEntities,
   applyClippingToTileset,
+  isPointVisible,
   planeFromPoints,
 } from '../lib/clippingPlane';
+
+/**
+ * For Primitive-based geometry instances, we need to know each
+ * instance's world position for the plane test. This module-level
+ * map is populated by useChemroomsEntities during entity creation.
+ * Keyed by instance id → Cartesian3 world position.
+ */
+export const primitiveInstancePositions = new Map<string, Cartesian3>();
 
 export function useClippingPlaneSync(
   tilesetRefs: RefObject<Record<string, Cesium3DTileset>>,
@@ -31,6 +52,12 @@ export function useClippingPlaneSync(
   const viewer = useStoreWithCesium((s) => s.cesium.viewer);
   const crossSectionPoints = useChemroomsStore(
     (s) => s.chemrooms.crossSectionPoints,
+  );
+  const crossSectionMode = useChemroomsStore(
+    (s) => s.chemrooms.crossSectionMode,
+  );
+  const sliceThicknessM = useChemroomsStore(
+    (s) => s.chemrooms.sliceThicknessM,
   );
 
   useEffect(() => {
@@ -48,10 +75,36 @@ export function useClippingPlaneSync(
       if (applying) return;
       applying = true;
       try {
+        // ── Tilesets ─────────────────────────────────────────────
         for (const ts of Object.values(tilesetRefs.current ?? {})) {
-          applyClippingToTileset(ts, worldNormal, worldDistance);
+          applyClippingToTileset(
+            ts,
+            worldNormal,
+            worldDistance,
+            crossSectionMode,
+            sliceThicknessM,
+          );
         }
-        applyClippingToEntities(viewer, worldNormal, worldDistance);
+
+        // ── Entities (screen-space points, vector features) ─────
+        applyClippingToEntities(
+          viewer,
+          worldNormal,
+          worldDistance,
+          crossSectionMode,
+          sliceThicknessM,
+        );
+
+        // ── Primitives (spheres, cylinders) ──────────────────────
+        if (viewer && !viewer.isDestroyed()) {
+          applyClippingToPrimitives(
+            viewer,
+            worldNormal,
+            worldDistance,
+            crossSectionMode,
+            sliceThicknessM,
+          );
+        }
       } finally {
         applying = false;
       }
@@ -62,5 +115,68 @@ export function useClippingPlaneSync(
     if (!viewer || viewer.isDestroyed?.()) return;
     const remove = viewer.entities.collectionChanged.addEventListener(apply);
     return () => remove();
-  }, [crossSectionPoints, viewer, tilesetRefs]);
+  }, [
+    crossSectionPoints,
+    crossSectionMode,
+    sliceThicknessM,
+    viewer,
+    tilesetRefs,
+  ]);
+}
+
+/**
+ * Walk all scene Primitives (ours have PerInstanceColorAppearance or
+ * PolylineColorAppearance) and toggle each instance's show attribute
+ * based on the plane test.
+ *
+ * Each instance's world position must be in the primitiveInstancePositions
+ * map (populated by useChemroomsEntities during creation).
+ */
+function applyClippingToPrimitives(
+  viewer: any,
+  worldNormal: Cartesian3 | null,
+  worldDistance: number | null,
+  mode: string,
+  thicknessM: number,
+): void {
+  const numPrimitives = viewer.scene.primitives.length;
+  for (let i = 0; i < numPrimitives; i++) {
+    const p = viewer.scene.primitives.get(i);
+    if (!(p instanceof Primitive) || p.isDestroyed()) continue;
+    if (
+      !(p.appearance instanceof PerInstanceColorAppearance) &&
+      !(p.appearance instanceof PolylineColorAppearance)
+    )
+      continue;
+
+    const instances = p.geometryInstances;
+    if (!instances) continue;
+    const instArray = Array.isArray(instances) ? instances : [instances];
+
+    for (const inst of instArray) {
+      const instId = inst.id as string;
+      const pos = primitiveInstancePositions.get(instId);
+      if (!pos) continue;
+
+      try {
+        const attrs = p.getGeometryInstanceAttributes(instId);
+        if (!attrs) continue;
+
+        if (worldNormal === null || worldDistance === null) {
+          attrs.show = ShowGeometryInstanceAttribute.toValue(true);
+        } else {
+          const visible = isPointVisible(
+            pos,
+            worldNormal,
+            worldDistance,
+            mode as any,
+            thicknessM,
+          );
+          attrs.show = ShowGeometryInstanceAttribute.toValue(visible);
+        }
+      } catch {
+        // Primitive not yet ready (async geometry compilation)
+      }
+    }
+  }
 }

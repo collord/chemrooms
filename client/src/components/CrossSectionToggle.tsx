@@ -24,7 +24,8 @@ import {
   CallbackProperty,
   PolylineDashMaterialProperty,
 } from 'cesium';
-import {useChemroomsStore} from '../slices/chemrooms-slice';
+import {useChemroomsStore, type CrossSectionMode} from '../slices/chemrooms-slice';
+import {getProjectBbox} from '../layers/layerBbox';
 
 type Mode = 'idle' | 'picking_first' | 'picking_second' | 'active';
 
@@ -52,6 +53,18 @@ export const CrossSectionToggle: React.FC = () => {
   );
   const crossSectionPoints = useChemroomsStore(
     (s) => s.chemrooms.crossSectionPoints,
+  );
+  const crossSectionMode = useChemroomsStore(
+    (s) => s.chemrooms.crossSectionMode,
+  );
+  const sliceThicknessM = useChemroomsStore(
+    (s) => s.chemrooms.sliceThicknessM,
+  );
+  const setCrossSectionMode = useChemroomsStore(
+    (s) => s.chemrooms.setCrossSectionMode,
+  );
+  const setSliceThicknessM = useChemroomsStore(
+    (s) => s.chemrooms.setSliceThicknessM,
   );
 
   // Sync mode to 'active' when restored from bookmark
@@ -258,30 +271,107 @@ export const CrossSectionToggle: React.FC = () => {
 
   const isPicking = mode === 'picking_first' || mode === 'picking_second';
 
+  // Compute default slice thickness from project extent (1/50,
+  // rounded to 2 significant figures). Only used to seed the
+  // thickness input on first activation.
+  const computeDefaultThickness = useCallback(() => {
+    const bbox = getProjectBbox();
+    if (!bbox) return 20;
+    const extentDeg = Math.max(
+      bbox.east - bbox.west,
+      bbox.north - bbox.south,
+    );
+    const extentM = extentDeg * 111_000;
+    const raw = extentM / 50;
+    // Round to 2 significant figures
+    if (raw <= 0) return 20;
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)) - 1);
+    return Math.round(raw / mag) * mag;
+  }, []);
+
+  // Seed thickness on first activation
+  useEffect(() => {
+    if (mode === 'active' && sliceThicknessM === 20) {
+      const computed = computeDefaultThickness();
+      if (computed !== 20) setSliceThicknessM(computed);
+    }
+  }, [mode, sliceThicknessM, computeDefaultThickness, setSliceThicknessM]);
+
   return (
-    <button
-      onClick={handleButtonClick}
-      className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors ${
-        mode === 'active'
-          ? 'border-primary bg-primary text-primary-foreground'
-          : isPicking
-            ? 'border-yellow-500 bg-yellow-500/10 text-yellow-600 animate-pulse'
-            : 'border-border bg-background text-muted-foreground hover:bg-muted'
-      }`}
-      title={
-        mode === 'active'
-          ? 'Click to disable cross-section'
-          : isPicking
-            ? 'Click to cancel'
-            : 'Define a cross-section plane by clicking two points on the globe'
-      }
-    >
-      {isPicking || mode === 'active' ? (
-        <X className="h-3.5 w-3.5" />
-      ) : (
-        <Scissors className="h-3.5 w-3.5" />
+    <div className="flex flex-col gap-1.5">
+      <button
+        onClick={handleButtonClick}
+        className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors ${
+          mode === 'active'
+            ? 'border-primary bg-primary text-primary-foreground'
+            : isPicking
+              ? 'border-yellow-500 bg-yellow-500/10 text-yellow-600 animate-pulse'
+              : 'border-border bg-background text-muted-foreground hover:bg-muted'
+        }`}
+        title={
+          mode === 'active'
+            ? 'Click to disable cross-section'
+            : isPicking
+              ? 'Click to cancel'
+              : 'Define a cross-section plane by clicking two points on the globe'
+        }
+      >
+        {isPicking || mode === 'active' ? (
+          <X className="h-3.5 w-3.5" />
+        ) : (
+          <Scissors className="h-3.5 w-3.5" />
+        )}
+        <span>{label}</span>
+      </button>
+
+      {mode === 'active' && (
+        <div className="flex flex-col gap-1 pl-1">
+          {/* Mode selector */}
+          <div className="flex gap-1 text-[10px]">
+            {(
+              [
+                ['remove-front', 'Front'],
+                ['remove-back', 'Back'],
+                ['thick-slice', 'Slice'],
+              ] as const
+            ).map(([value, lbl]) => (
+              <button
+                key={value}
+                onClick={() =>
+                  setCrossSectionMode(value as CrossSectionMode)
+                }
+                className={`rounded px-2 py-0.5 transition-colors ${
+                  crossSectionMode === value
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {lbl}
+              </button>
+            ))}
+          </div>
+
+          {/* Thickness input (only for thick-slice mode) */}
+          {crossSectionMode === 'thick-slice' && (
+            <label className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <span>Thickness:</span>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={sliceThicknessM}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  if (Number.isFinite(v) && v > 0)
+                    setSliceThicknessM(v);
+                }}
+                className="w-16 rounded border bg-background px-1.5 py-0.5 text-[10px] tabular-nums"
+              />
+              <span>m</span>
+            </label>
+          )}
+        </div>
       )}
-      <span>{label}</span>
-    </button>
+    </div>
   );
 };

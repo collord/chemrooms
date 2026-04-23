@@ -10,11 +10,14 @@
  *   3. Entities — Cesium has no clipping plane support for entities, so
  *      we manually toggle entity.show based on which side of the plane
  *      each one falls on
+ *   4. Primitives (spheres/cylinders) — same as entities, per-instance
+ *      show/hide via ShowGeometryInstanceAttribute
  *
- * These helpers compute and apply the plane for each system. The
- * `cross-section` UI in the sidebar (CrossSectionToggle) is the source
- * of truth — it sets `chemrooms.crossSectionPoints` to a pair of
- * (lon, lat) endpoints that define a vertical slicing plane.
+ * Three clipping modes:
+ *   - remove-front: single plane, hide where n·p+d >= 0
+ *   - remove-back: single plane, hide where n·p+d < 0 (current default)
+ *   - thick-slice: two planes offset ±thickness/2 from the centerline,
+ *     keep only points between them
  */
 
 import {
@@ -25,6 +28,11 @@ import {
   Matrix3,
   Matrix4,
 } from 'cesium';
+import type {CrossSectionMode} from '../slices/chemrooms-slice';
+
+// ─────────────────────────────────────────────────────────────────
+// Core plane computation
+// ─────────────────────────────────────────────────────────────────
 
 /**
  * Compute the ECEF clipping plane (normal, distance) from two lon/lat
@@ -49,15 +57,42 @@ export function planeFromPoints(
   return {normal, distance};
 }
 
+// ─────────────────────────────────────────────────────────────────
+// Point-vs-plane test (used for entities + primitives)
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * Test whether a world-space position should be visible given the
+ * cross-section mode. Returns true if the point should render.
+ *
+ * The signed distance from the centerline plane is:
+ *   sd = n · p + d
+ * where sd > 0 = "front" side, sd < 0 = "back" side.
+ */
+export function isPointVisible(
+  pos: Cartesian3,
+  normal: Cartesian3,
+  distance: number,
+  mode: CrossSectionMode,
+  thicknessM: number,
+): boolean {
+  const sd = Cartesian3.dot(normal, pos) + distance;
+  switch (mode) {
+    case 'remove-front':
+      return sd <= 0;
+    case 'remove-back':
+      return sd >= 0;
+    case 'thick-slice':
+      return Math.abs(sd) <= thicknessM / 2;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Transform to local tileset frame
+// ─────────────────────────────────────────────────────────────────
+
 /**
  * Transform an ECEF plane (n_w · p + d_w = 0) into a tileset's local frame.
- *
- * Given the tileset's modelMatrix M = [R | t], a local point p_l maps to
- * world space as p_w = R*p_l + t. Substituting into the plane equation:
- *   n_w · (R*p_l + t) + d_w = 0
- *   (R^T n_w) · p_l + (n_w · t + d_w) = 0
- *
- * So local normal = R^T * n_w, local distance = d_w + n_w · t.
  */
 export function transformPlaneToLocal(
   worldNormal: Cartesian3,
@@ -74,20 +109,30 @@ export function transformPlaneToLocal(
   Cartesian3.normalize(localNormal, localNormal);
 
   const translation = Matrix4.getTranslation(modelMatrix, new Cartesian3());
-  const localDistance = worldDistance + Cartesian3.dot(worldNormal, translation);
+  const localDistance =
+    worldDistance + Cartesian3.dot(worldNormal, translation);
 
   return {normal: localNormal, distance: localDistance};
 }
 
+// ─────────────────────────────────────────────────────────────────
+// Apply to tilesets
+// ─────────────────────────────────────────────────────────────────
+
 /**
- * Apply (or remove) a clipping plane to a single 3D Tileset. Pass null
- * for normal/distance to clear any existing planes.
+ * Apply clipping planes to a 3D Tileset. Supports all three modes:
+ * - remove-front/back: one plane (normal flipped for front)
+ * - thick-slice: two planes, offset ±thickness/2 from centerline,
+ *   with unionClippingRegions: true so points must be inside BOTH
+ *   halfspaces (between the planes)
  */
 export function applyClippingToTileset(
   tileset: Cesium3DTileset,
   worldNormal: Cartesian3 | null,
   worldDistance: number | null,
-) {
+  mode: CrossSectionMode,
+  thicknessM: number,
+): void {
   // Always start clean
   if (tileset.clippingPlanes) {
     tileset.clippingPlanes.removeAll();
@@ -95,42 +140,64 @@ export function applyClippingToTileset(
 
   if (worldNormal === null || worldDistance === null) return;
 
-  // Cesium tilesets evaluate clipping planes relative to their
-  // clippingPlanesOriginMatrix, which accounts for the root tile's
-  // transform plus the internal glTF Y-up→Z-up rotation. Using
-  // modelMatrix here is wrong (it's only the user-applied transform).
-  // (Property exists at runtime but isn't in the TS types.)
   const originMatrix: Matrix4 = (tileset as any).clippingPlanesOriginMatrix;
-  const {normal, distance} = transformPlaneToLocal(
-    worldNormal,
-    worldDistance,
-    originMatrix,
-  );
 
-  if (!tileset.clippingPlanes) {
+  if (mode === 'thick-slice') {
+    // Two planes: keep only the slab between them.
+    // Plane 1: clips sd < -T/2 (back overflow)
+    // Plane 2: clips sd > +T/2 (front overflow)
+    //
+    // For tilesets, we offset the center-plane distance by ±T/2
+    // and use unionClippingRegions: true (clip union = keep
+    // intersection = the slab between the planes).
+    const half = thicknessM / 2;
+    const p1 = transformPlaneToLocal(worldNormal, worldDistance + half, originMatrix);
+    const negNormal = Cartesian3.negate(worldNormal, new Cartesian3());
+    const p2 = transformPlaneToLocal(negNormal, -worldDistance + half, originMatrix);
+
     tileset.clippingPlanes = new ClippingPlaneCollection({
-      planes: [new ClippingPlane(normal, distance)],
+      planes: [
+        new ClippingPlane(p1.normal, p1.distance),
+        new ClippingPlane(p2.normal, p2.distance),
+      ],
       edgeWidth: 2.0,
+      unionClippingRegions: true,
     });
   } else {
-    tileset.clippingPlanes.add(new ClippingPlane(normal, distance));
+    // Single plane. For remove-front, flip the normal.
+    const n =
+      mode === 'remove-front'
+        ? Cartesian3.negate(worldNormal, new Cartesian3())
+        : worldNormal;
+    const d = mode === 'remove-front' ? -worldDistance : worldDistance;
+    const local = transformPlaneToLocal(n, d, originMatrix);
+
+    if (!tileset.clippingPlanes) {
+      tileset.clippingPlanes = new ClippingPlaneCollection({
+        planes: [new ClippingPlane(local.normal, local.distance)],
+        edgeWidth: 2.0,
+      });
+    } else {
+      tileset.clippingPlanes.add(new ClippingPlane(local.normal, local.distance));
+    }
   }
 }
 
+// ─────────────────────────────────────────────────────────────────
+// Apply to entities
+// ─────────────────────────────────────────────────────────────────
+
 /**
- * Cesium entities aren't affected by globe.clippingPlanes — only
- * terrain and tilesets are. To clip data points, we manually toggle
- * entity.show based on which side of the world-space plane each one
- * falls on.
- *
- * The plane equation is `n · p + d = 0`. Cesium's clipping convention
- * removes points where `n · p + d < 0`, so we mirror that here.
+ * Clip entities by toggling show/hide based on the plane test.
+ * Supports all three modes.
  */
 export function applyClippingToEntities(
   viewer: any,
   worldNormal: Cartesian3 | null,
   worldDistance: number | null,
-) {
+  mode: CrossSectionMode,
+  thicknessM: number,
+): void {
   if (!viewer || viewer.isDestroyed?.()) return;
   const entities = viewer.entities?.values;
   if (!entities) return;
@@ -145,7 +212,6 @@ export function applyClippingToEntities(
       continue;
     }
 
-    const side = Cartesian3.dot(worldNormal, pos) + worldDistance;
-    entity.show = side >= 0;
+    entity.show = isPointVisible(pos, worldNormal, worldDistance, mode, thicknessM);
   }
 }

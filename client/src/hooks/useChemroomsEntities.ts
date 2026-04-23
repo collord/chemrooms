@@ -35,6 +35,7 @@ import {
   PolylineColorAppearance,
   PolylineGeometry,
   Primitive,
+  ShowGeometryInstanceAttribute,
   Transforms,
 } from 'cesium';
 import {useStoreWithCesium} from '@sqlrooms/cesium';
@@ -47,6 +48,7 @@ import {
   stripPositioningColumns,
 } from '../layers/entityMetadata';
 import {BboxAccumulator, setLayerBbox} from '../layers/layerBbox';
+import {primitiveInstancePositions} from './useClippingPlaneSync';
 import {
   minimumCurvature,
   generateChunks,
@@ -379,10 +381,18 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
                     }),
                     attributes: {
                       color: ColorGeometryInstanceAttribute.fromColor(color),
+                      show: new ShowGeometryInstanceAttribute(true),
                     },
                     id,
                   }),
                 );
+                // Use midpoint for clipping test
+                const midPos = Cartesian3.midpoint(
+                  positions[0]!,
+                  positions[1]!,
+                  new Cartesian3(),
+                );
+                primitiveInstancePositions.set(id, midPos);
               } else {
                 // Split the sample interval into ≤1ft chunks along
                 // the desurvey trajectory. Each chunk is a short
@@ -435,10 +445,12 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
                       attributes: {
                         color:
                           ColorGeometryInstanceAttribute.fromColor(color),
+                        show: new ShowGeometryInstanceAttribute(true),
                       },
                       id: chunkId,
                     }),
                   );
+                  primitiveInstancePositions.set(chunkId, pos);
                   // All chunks of the same sample share metadata so
                   // click highlights the entire sample interval.
                   setPrimitiveMetadata(chunkId, {
@@ -473,10 +485,12 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
               modelMatrix: Transforms.eastNorthUpToFixedFrame(position),
               attributes: {
                 color: ColorGeometryInstanceAttribute.fromColor(color),
+                show: new ShowGeometryInstanceAttribute(true),
               },
               id,
             }),
           );
+          primitiveInstancePositions.set(id, position);
           setPrimitiveMetadata(id, {
             ...chemduckMeta,
             primitiveType: 'ellipsoid',
@@ -545,6 +559,12 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
       if (debounceTimer !== null) clearTimeout(debounceTimer);
       setLayerBbox(args.layerId, null);
       clearPrimitiveMetadataForLayer(args.layerId);
+      // Clear position tracking for clipping
+      for (const key of primitiveInstancePositions.keys()) {
+        if (key.startsWith(args.layerId + ':')) {
+          primitiveInstancePositions.delete(key);
+        }
+      }
 
       if (!viewer || viewer.isDestroyed()) return;
 
