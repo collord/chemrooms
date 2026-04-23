@@ -47,6 +47,12 @@ import {
   stripPositioningColumns,
 } from '../layers/entityMetadata';
 import {BboxAccumulator, setLayerBbox} from '../layers/layerBbox';
+import {
+  minimumCurvature,
+  generateChunks,
+  generateVerticalChunks,
+  type TrajectoryStation,
+} from '../layers/desurvey';
 
 /** Number of side faces for CylinderGeometry. 6 (hexagonal) is
  * visually round at the render scale and cheap. */
@@ -213,6 +219,47 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
         }
       }
       const useSimpleLines = depthRowCount > TUBE_THRESHOLD;
+
+      // ── Query deviation surveys + build trajectory cache ──────
+      // One trajectory per borehole (keyed by base location_id).
+      // If no survey data exists for a location, we fall back to
+      // generateVerticalChunks (straight-down assumption).
+      const trajectoryCache = new Map<string, TrajectoryStation[]>();
+      if (depthRowCount > 0 && isChemduck && !useSimpleLines) {
+        try {
+          const surveyResult = await connector.query(
+            'SELECT location_id, depth, dip, azimuth FROM downhole_survey ORDER BY location_id, depth',
+          );
+          const surveyRows = surveyResult.toArray() as Array<
+            Record<string, unknown>
+          >;
+          // Group by location_id
+          const byLocation = new Map<
+            string,
+            Array<{depth: number; dip: number; azimuth: number}>
+          >();
+          for (const sr of surveyRows) {
+            const locId = String(sr.location_id);
+            if (!byLocation.has(locId)) byLocation.set(locId, []);
+            byLocation.get(locId)!.push({
+              depth: Number(sr.depth),
+              dip: Number(sr.dip),
+              azimuth: Number(sr.azimuth),
+            });
+          }
+          for (const [locId, stations] of byLocation) {
+            trajectoryCache.set(locId, minimumCurvature(stations));
+          }
+          if (trajectoryCache.size > 0) {
+            console.log(
+              `[${args.layerId}] desurvey: ${trajectoryCache.size} trajectories from ${surveyRows.length} survey stations`,
+            );
+          }
+        } catch {
+          // downhole_survey table might not exist — that's OK,
+          // we fall back to vertical for all boreholes.
+        }
+      }
       // CylinderGeometry is inherently vertical, positioned at the
       // segment midpoint via modelMatrix. No trajectory / cross-
       // section computation needed.
@@ -337,39 +384,68 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
                   }),
                 );
               } else {
-                // CylinderGeometry + headingPitchRollToFixedFrame.
-                // For vertical wells: HPR = (0, 0, 0) → cylinder
-                // axis aligns with local "up" = vertical.
-                // For deviated wells (future): HPR = (azimuth,
-                // -inclination, 0) from the desurvey → cylinder
-                // tilts to follow the borehole trajectory. Each
-                // segment gets its own HPR so a chain of tilted
-                // cylinders traces the deviated path.
-                const midAlt = surfaceElev - (topM + bottomM) / 2;
-                const midPosition = Cartesian3.fromDegrees(lon, lat, midAlt);
-                // TODO: when deviation survey data is available,
-                // compute heading/pitch from the segment's azimuth
-                // and inclination instead of (0, 0, 0).
-                const hpr = new HeadingPitchRoll(0, 0, 0);
-                tubeInstances.push(
-                  new GeometryInstance({
-                    geometry: new CylinderGeometry({
-                      length: segmentLength,
-                      topRadius: volumeR,
-                      bottomRadius: volumeR,
-                      slices: CYLINDER_SLICES,
-                      vertexFormat,
+                // Split the sample interval into ≤1ft chunks along
+                // the desurvey trajectory. Each chunk is a short
+                // CylinderGeometry oriented by the local tangent.
+                // All chunks share the same metadata (locationId)
+                // so clicking any chunk highlights the whole sample.
+                const baseLocId = rowId.split('|')[0] ?? rowId;
+                const trajectory = trajectoryCache.get(baseLocId);
+                const chunks = trajectory
+                  ? generateChunks(
+                      trajectory,
+                      lon,
+                      lat,
+                      surfaceElev,
+                      topM,
+                      bottomM,
+                    )
+                  : generateVerticalChunks(
+                      lon,
+                      lat,
+                      surfaceElev,
+                      topM,
+                      bottomM,
+                    );
+
+                for (let ci = 0; ci < chunks.length; ci++) {
+                  const chunk = chunks[ci]!;
+                  const chunkId = `${id}:c${ci}`;
+                  const pos = Cartesian3.fromDegrees(
+                    chunk.position.lon,
+                    chunk.position.lat,
+                    chunk.position.alt,
+                  );
+                  const hpr = new HeadingPitchRoll(
+                    chunk.heading,
+                    chunk.pitch,
+                    0,
+                  );
+                  tubeInstances.push(
+                    new GeometryInstance({
+                      geometry: new CylinderGeometry({
+                        length: chunk.length,
+                        topRadius: volumeR,
+                        bottomRadius: volumeR,
+                        slices: CYLINDER_SLICES,
+                        vertexFormat,
+                      }),
+                      modelMatrix:
+                        Transforms.headingPitchRollToFixedFrame(pos, hpr),
+                      attributes: {
+                        color:
+                          ColorGeometryInstanceAttribute.fromColor(color),
+                      },
+                      id: chunkId,
                     }),
-                    modelMatrix: Transforms.headingPitchRollToFixedFrame(
-                      midPosition,
-                      hpr,
-                    ),
-                    attributes: {
-                      color: ColorGeometryInstanceAttribute.fromColor(color),
-                    },
-                    id,
-                  }),
-                );
+                  );
+                  // All chunks of the same sample share metadata so
+                  // click highlights the entire sample interval.
+                  setPrimitiveMetadata(chunkId, {
+                    ...chemduckMeta,
+                    primitiveType: 'polylineVolume',
+                  });
+                }
               }
               setPrimitiveMetadata(id, {
                 ...chemduckMeta,
