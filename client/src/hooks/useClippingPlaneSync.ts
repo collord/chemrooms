@@ -70,6 +70,13 @@ export function useClippingPlaneSync(
       worldDistance = plane.distance;
     }
 
+    console.log(
+      `[clipping] mode=${crossSectionMode} thickness=${sliceThicknessM}m` +
+        ` points=${crossSectionPoints ? 'set' : 'null'}` +
+        ` plane=${worldNormal ? 'computed' : 'null'}` +
+        ` primitivePositions=${primitiveInstancePositions.size}`,
+    );
+
     let applying = false;
     const apply = () => {
       if (applying) return;
@@ -139,6 +146,9 @@ function applyClippingToPrimitives(
   mode: string,
   thicknessM: number,
 ): void {
+  let clipped = 0;
+  let shown = 0;
+  let skipped = 0;
   const numPrimitives = viewer.scene.primitives.length;
   for (let i = 0; i < numPrimitives; i++) {
     const p = viewer.scene.primitives.get(i);
@@ -164,6 +174,7 @@ function applyClippingToPrimitives(
 
         if (worldNormal === null || worldDistance === null) {
           attrs.show = ShowGeometryInstanceAttribute.toValue(true);
+          shown++;
         } else {
           const visible = isPointVisible(
             pos,
@@ -173,10 +184,17 @@ function applyClippingToPrimitives(
             thicknessM,
           );
           attrs.show = ShowGeometryInstanceAttribute.toValue(visible);
+          if (visible) shown++;
+          else clipped++;
         }
       } catch {
-        // Primitive not yet ready (async geometry compilation)
+        skipped++;
       }
     }
+  }
+  if (worldNormal !== null) {
+    console.log(
+      `[clipping] primitives: ${shown} shown, ${clipped} clipped, ${skipped} skipped (not ready)`,
+    );
   }
 }
