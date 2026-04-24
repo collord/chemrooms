@@ -282,7 +282,7 @@ export const CrossSectionToggle: React.FC = () => {
       bbox.north - bbox.south,
     );
     const extentM = extentDeg * 111_000;
-    const raw = extentM / 50;
+    const raw = extentM / 20;
     // Round to 2 significant figures
     if (raw <= 0) return 20;
     const mag = Math.pow(10, Math.floor(Math.log10(raw)) - 1);

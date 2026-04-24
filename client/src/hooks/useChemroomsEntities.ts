@@ -40,6 +40,7 @@ import {
 } from 'cesium';
 import {useStoreWithCesium} from '@sqlrooms/cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
+import {roomStore} from '../store';
 import {makeColorFnForColumn} from '../vis/colormap';
 import {
   clearPrimitiveMetadataForLayer,
@@ -190,7 +191,7 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
       // the user moves the slider, their value wins.
       const SCHEMA_DEFAULT = 2;
       const DEG_TO_METERS = 111_000;
-      const RADIUS_FRACTION = 0.01;
+      const RADIUS_FRACTION = 0.005; // 0.5% of data extent
       const sliderValue = args.sphereRadiusMeters ?? SCHEMA_DEFAULT;
       const isAtDefault = sliderValue === SCHEMA_DEFAULT;
 
@@ -201,6 +202,11 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
           layerBbox.north - layerBbox.south,
         );
         diameter = Math.max(extentDeg * DEG_TO_METERS * RADIUS_FRACTION, 1);
+        // Push the computed diameter to the store so the slider
+        // reflects what's actually being rendered. This runs once
+        // (when the slider is still at the schema default) and then
+        // the store value drives subsequent renders.
+        roomStore.getState().chemrooms.setSphereRadiusMeters(diameter);
       } else {
         diameter = sliderValue;
       }

@@ -21,6 +21,8 @@
 import {useEffect, type RefObject} from 'react';
 import {
   Cartesian3,
+  ClippingPlane,
+  ClippingPlaneCollection,
   ColorGeometryInstanceAttribute,
   PerInstanceColorAppearance,
   PolylineColorAppearance,
@@ -82,6 +84,50 @@ export function useClippingPlaneSync(
       if (applying) return;
       applying = true;
       try {
+        // ── Globe terrain ────────────────────────────────────────
+        // The @sqlrooms/cesium enableClippingPlane only fires once
+        // (when the user picks two points). We need to update the
+        // globe's clipping planes here too so mode changes and
+        // thick-slice work on terrain.
+        if (viewer && !viewer.isDestroyed() && viewer.scene?.globe) {
+          const globe = viewer.scene.globe;
+          if (worldNormal === null || worldDistance === null) {
+            if (globe.clippingPlanes) {
+              globe.clippingPlanes.removeAll();
+            }
+          } else if (crossSectionMode === 'thick-slice') {
+            const half = sliceThicknessM / 2;
+            const negN = Cartesian3.negate(worldNormal, new Cartesian3());
+            globe.clippingPlanes = new ClippingPlaneCollection({
+              planes: [
+                new ClippingPlane(
+                  new Cartesian3(worldNormal.x, worldNormal.y, worldNormal.z),
+                  worldDistance + half,
+                ),
+                new ClippingPlane(
+                  new Cartesian3(negN.x, negN.y, negN.z),
+                  -worldDistance + half,
+                ),
+              ],
+              edgeWidth: 2.0,
+              unionClippingRegions: true,
+            });
+          } else {
+            const n =
+              crossSectionMode === 'remove-front'
+                ? Cartesian3.negate(worldNormal, new Cartesian3())
+                : worldNormal;
+            const d =
+              crossSectionMode === 'remove-front'
+                ? -worldDistance
+                : worldDistance;
+            globe.clippingPlanes = new ClippingPlaneCollection({
+              planes: [new ClippingPlane(new Cartesian3(n.x, n.y, n.z), d)],
+              edgeWidth: 2.0,
+            });
+          }
+        }
+
         // ── Tilesets ─────────────────────────────────────────────
         for (const ts of Object.values(tilesetRefs.current ?? {})) {
           applyClippingToTileset(
