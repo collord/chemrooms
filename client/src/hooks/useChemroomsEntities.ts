@@ -520,6 +520,7 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
             translucent: false,
           }),
           asynchronous: true,
+          releaseGeometryInstances: false,
         });
         viewer.scene.primitives.add(spherePrimitive);
         newPrimitives.push(spherePrimitive);
@@ -533,6 +534,7 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
             translucent: false,
           }),
           asynchronous: true,
+          releaseGeometryInstances: false,
         });
         viewer.scene.primitives.add(tubePrimitive);
         newPrimitives.push(tubePrimitive);
@@ -543,6 +545,7 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
           geometryInstances: lineInstances,
           appearance: new PolylineColorAppearance(),
           asynchronous: true,
+          releaseGeometryInstances: false,
         });
         viewer.scene.primitives.add(linePrimitive);
         newPrimitives.push(linePrimitive);
