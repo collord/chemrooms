@@ -60,7 +60,7 @@ export const LayersPanel: React.FC = () => {
   );
   const [topoVisible, setTopoVisible] = useState(true);
   const {tilesets, tilesetRefs, toggleTileset} = useTilesetManager();
-  useClippingPlaneSync(tilesetRefs);
+  useClippingPlaneSync(tilesetRefs, tilesets.length);
 
   // ESRI Wayback (historical World Imagery snapshots).
   const wayback = useWaybackImagery();

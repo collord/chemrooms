@@ -50,6 +50,10 @@ export const primitiveInstancePositions = new Map<string, Cartesian3>();
 
 export function useClippingPlaneSync(
   tilesetRefs: RefObject<Record<string, Cesium3DTileset>>,
+  /** Pass tilesets.length so the effect re-fires when a tileset
+   * loads. tilesetRefs is a ref (identity-stable), so it can't
+   * trigger re-runs on its own. */
+  tilesetCount: number = 0,
 ) {
   const viewer = useStoreWithCesium((s) => s.cesium.viewer);
   const crossSectionPoints = useChemroomsStore(
@@ -174,6 +178,7 @@ export function useClippingPlaneSync(
     sliceThicknessM,
     viewer,
     tilesetRefs,
+    tilesetCount,
   ]);
 }
 
