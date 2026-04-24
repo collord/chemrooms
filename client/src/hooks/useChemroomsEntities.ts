@@ -201,7 +201,11 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
           layerBbox.east - layerBbox.west,
           layerBbox.north - layerBbox.south,
         );
-        diameter = Math.max(extentDeg * DEG_TO_METERS * RADIUS_FRACTION, 1);
+        const rawDiam = Math.max(extentDeg * DEG_TO_METERS * RADIUS_FRACTION, 1);
+        // Round to 2 significant figures so the slider doesn't show
+        // 10 decimal places.
+        const mag = Math.pow(10, Math.floor(Math.log10(rawDiam)) - 1);
+        diameter = Math.round(rawDiam / mag) * mag;
         // Push the computed diameter to the store so the slider
         // reflects what's actually being rendered. This runs once
         // (when the slider is still at the schema default) and then

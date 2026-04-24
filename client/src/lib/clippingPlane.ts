@@ -142,14 +142,10 @@ export function applyClippingToTileset(
 
   const originMatrix: Matrix4 = (tileset as any).clippingPlanesOriginMatrix;
 
+  // Always create a fresh ClippingPlaneCollection so we don't
+  // inherit stale settings (e.g., unionClippingRegions from a
+  // previous thick-slice).
   if (mode === 'thick-slice') {
-    // Two planes: keep only the slab between them.
-    // Plane 1: clips sd < -T/2 (back overflow)
-    // Plane 2: clips sd > +T/2 (front overflow)
-    //
-    // For tilesets, we offset the center-plane distance by ±T/2
-    // and use unionClippingRegions: true (clip union = keep
-    // intersection = the slab between the planes).
     const half = thicknessM / 2;
     const p1 = transformPlaneToLocal(worldNormal, worldDistance + half, originMatrix);
     const negNormal = Cartesian3.negate(worldNormal, new Cartesian3());
@@ -164,7 +160,6 @@ export function applyClippingToTileset(
       unionClippingRegions: true,
     });
   } else {
-    // Single plane. For remove-front, flip the normal.
     const n =
       mode === 'remove-front'
         ? Cartesian3.negate(worldNormal, new Cartesian3())
@@ -172,14 +167,10 @@ export function applyClippingToTileset(
     const d = mode === 'remove-front' ? -worldDistance : worldDistance;
     const local = transformPlaneToLocal(n, d, originMatrix);
 
-    if (!tileset.clippingPlanes) {
-      tileset.clippingPlanes = new ClippingPlaneCollection({
-        planes: [new ClippingPlane(local.normal, local.distance)],
-        edgeWidth: 2.0,
-      });
-    } else {
-      tileset.clippingPlanes.add(new ClippingPlane(local.normal, local.distance));
-    }
+    tileset.clippingPlanes = new ClippingPlaneCollection({
+      planes: [new ClippingPlane(local.normal, local.distance)],
+      edgeWidth: 2.0,
+    });
   }
 }
 
