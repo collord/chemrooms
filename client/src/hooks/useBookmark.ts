@@ -67,9 +67,6 @@ export function useBookmark() {
   const setBookmarkLayers = useChemroomsStore(
     (s) => s.chemrooms.setBookmarkLayers,
   );
-  const enableClippingPlane = useStoreWithCesium(
-    (s) => s.cesium.enableClippingPlane,
-  );
   const toggleLayerVisibility = useStoreWithCesium(
     (s) => s.cesium.toggleLayerVisibility,
   );
@@ -176,29 +173,17 @@ export function useBookmark() {
       const nums = xsec.split(',').map(Number);
       if (nums.length === 4 && nums.every((n) => !isNaN(n))) {
         const [lon1, lat1, lon2, lat2] = nums;
-        const p1 = Cartesian3.fromDegrees(lon1, lat1);
-        const p2 = Cartesian3.fromDegrees(lon2, lat2);
 
-        // Replicate the clipping plane math from CrossSectionToggle
-        const dir = Cartesian3.subtract(p2, p1, new Cartesian3());
-        const midpoint = Cartesian3.midpoint(p1, p2, new Cartesian3());
-        const up = Cartesian3.normalize(midpoint, new Cartesian3());
-        const normal = Cartesian3.cross(dir, up, new Cartesian3());
-        Cartesian3.normalize(normal, normal);
-        const distance = -Cartesian3.dot(normal, p1);
-
-        enableClippingPlane(
-          {x: normal.x, y: normal.y, z: normal.z},
-          distance,
-        );
-
+        // Don't call enableClippingPlane — useClippingPlaneSync handles
+        // all clipping from crossSectionPoints. Just set the points.
         // Show subsurface layer
         const sub = layers.find((l) => l.id === 'subsurface-samples');
         if (sub && !sub.visible) {
           toggleLayerVisibility('subsurface-samples');
         }
 
-        // Store points so CrossSectionToggle can pick up 'active' state
+        // Store points so CrossSectionToggle + useClippingPlaneSync
+        // can pick up the active state.
         setCrossSectionPoints([
           [lon1, lat1],
           [lon2, lat2],
@@ -218,7 +203,6 @@ export function useBookmark() {
     setDupAgg,
     setColorBy,
     setBookmarkLayers,
-    enableClippingPlane,
     toggleLayerVisibility,
     layers,
   ]);

@@ -39,12 +39,11 @@ export const CrossSectionToggle: React.FC = () => {
   const linePointsRef = useRef<[Cartesian3, Cartesian3] | null>(null);
 
   const viewer = useStoreWithCesium((s) => s.cesium.viewer);
-  const enableClippingPlane = useStoreWithCesium(
-    (s) => s.cesium.enableClippingPlane,
-  );
-  const disableClippingPlane = useStoreWithCesium(
-    (s) => s.cesium.disableClippingPlane,
-  );
+  // NOTE: we no longer call @sqlrooms/cesium's enableClippingPlane /
+  // disableClippingPlane. Those auto-apply a single remove-back plane
+  // to new tilesets as they load, which conflicts with our mode-aware
+  // clipping in useClippingPlaneSync. Our hook manages globe, tilesets,
+  // entities, and primitives directly from crossSectionPoints + mode.
   const setSamplesVisible = useChemroomsStore(
     (s) => s.chemrooms.setSamplesVisible,
   );
@@ -141,7 +140,9 @@ export const CrossSectionToggle: React.FC = () => {
       // Distance so the plane passes through p1
       const distance = -Cartesian3.dot(normal, p1);
 
-      enableClippingPlane({x: normal.x, y: normal.y, z: normal.z}, distance);
+      // Don't call enableClippingPlane — our useClippingPlaneSync hook
+      // handles globe + tileset + entity + primitive clipping from
+      // crossSectionPoints. Setting the points here triggers the hook.
       showSubsurface(true);
 
       // Persist the two picked points (as lon/lat degrees) for bookmarking
@@ -168,7 +169,7 @@ export const CrossSectionToggle: React.FC = () => {
 
       setMode('active');
     },
-    [enableClippingPlane, showSubsurface, removePreviewLine, viewer, setCrossSectionPoints],
+    [showSubsurface, removePreviewLine, viewer, setCrossSectionPoints],
   );
 
   const cleanupHandlers = useCallback(() => {
@@ -189,13 +190,14 @@ export const CrossSectionToggle: React.FC = () => {
   const deactivate = useCallback(() => {
     cleanupHandlers();
     removePreviewLine();
-    disableClippingPlane();
+    // Setting crossSectionPoints to null triggers useClippingPlaneSync
+    // which clears clipping on globe, tilesets, entities, and primitives.
     showSubsurface(false);
     setCrossSectionPoints(null);
     firstPointRef.current = null;
     linePointsRef.current = null;
     setMode('idle');
-  }, [cleanupHandlers, removePreviewLine, disableClippingPlane, showSubsurface, setCrossSectionPoints]);
+  }, [cleanupHandlers, removePreviewLine, showSubsurface, setCrossSectionPoints]);
 
   // Set up click + mouse-move handlers when entering picking mode
   useEffect(() => {
