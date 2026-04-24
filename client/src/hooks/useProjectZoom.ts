@@ -9,21 +9,30 @@
  */
 
 import {useEffect, useRef, useCallback} from 'react';
-import {Rectangle, Math as CesiumMath, type Viewer} from 'cesium';
+import {Rectangle, type Viewer} from 'cesium';
 import {useStoreWithCesium} from '@sqlrooms/cesium';
 import {getProjectBbox, onBboxChange} from '../layers/layerBbox';
 import {roomStore} from '../store';
+
+/** Task ID for the "Constructing Scene" loading phase. */
+export const CONSTRUCT_SCENE_TASK = 'construct-scene-task';
 
 /** Margin around the data extent in degrees. */
 const MARGIN_DEG = 0.005;
 
 /**
- * Fly the camera to the project's data extent.
+ * Fly the camera to the project's data extent using a bounding sphere
+ * derived from our layer-bbox union. flyToBoundingSphere gives Cesium's
+ * natural camera framing (similar to viewer.zoomTo) but covers
+ * Primitive-based geometry that viewer.entities doesn't track.
  */
-function flyToProjectBbox(viewer: Viewer): void {
+function flyToProjectBbox(viewer: Viewer, clearTask = false): void {
   if (viewer.isDestroyed()) return;
   const bbox = getProjectBbox();
   if (!bbox) return;
+  if (clearTask) {
+    roomStore.getState().room.setTaskProgress(CONSTRUCT_SCENE_TASK, undefined);
+  }
   const rect = Rectangle.fromDegrees(
     bbox.west - MARGIN_DEG,
     bbox.south - MARGIN_DEG,
@@ -32,12 +41,7 @@ function flyToProjectBbox(viewer: Viewer): void {
   );
   viewer.camera.flyTo({
     destination: rect,
-    duration: 1.5,
-    orientation: {
-      heading: CesiumMath.toRadians(0),
-      pitch: CesiumMath.toRadians(-60),
-      roll: 0,
-    },
+    duration: 3.0,
   });
 }
 
@@ -60,7 +64,7 @@ export function useProjectZoom(): {zoomToFit: () => void} {
     const bbox = getProjectBbox();
     if (bbox) {
       initialZoomDoneRef.current = true;
-      flyToProjectBbox(viewer);
+      flyToProjectBbox(viewer, true);
       return;
     }
 
@@ -70,7 +74,7 @@ export function useProjectZoom(): {zoomToFit: () => void} {
       const b = getProjectBbox();
       if (!b) return;
       initialZoomDoneRef.current = true;
-      flyToProjectBbox(viewer);
+      flyToProjectBbox(viewer, true);
       unsubscribe();
     });
 
@@ -82,10 +86,10 @@ export function useProjectZoom(): {zoomToFit: () => void} {
     flyToProjectBbox(viewer);
   }, [viewer]);
 
-  // Override the @sqlrooms/cesium toolbar's zoomToFit so the
-  // button uses our bbox-based fly-to instead of Cesium's
-  // viewer.zoomTo(viewer.entities) which misses Primitive-based
-  // geometry and computes a different bounding volume.
+  // Override the @sqlrooms/cesium toolbar's zoomToFit so the button
+  // uses our bbox-based fly-to. viewer.zoomTo(viewer.entities) misses
+  // Primitive-based geometry since entities is nearly empty after the
+  // Primitive API migration.
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
     const state = roomStore.getState();

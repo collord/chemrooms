@@ -50,7 +50,7 @@ import {
   savePersonalLayers,
 } from '../layers/layerStorage';
 import {rehydrateGeoparquetLayers} from '../layers/registerGeoparquetLayer';
-import {useProjectZoom} from '../hooks/useProjectZoom';
+import {useProjectZoom, CONSTRUCT_SCENE_TASK} from '../hooks/useProjectZoom';
 import type {LayerConfig} from '../layers/layerSchema';
 
 const VIS_SPEC_TABLES = [
@@ -239,10 +239,18 @@ export const ChemroomsEntityLayers: React.FC = () => {
       .catch((e) => console.error('[rehydrate] failed:', e));
   }, [connector, isDataAvailable, personalLayers, setPersonalLayers]);
 
+  const setTaskProgress = useStoreWithCesium((s) => s.room.setTaskProgress);
+
   // ── Phase 1: initial setup ─────────────────────────────────────────
   useEffect(() => {
     if (!isDataAvailable || !connector || initRanRef.current) return;
     initRanRef.current = true;
+
+    // Show "Constructing Scene" progress while entities are built.
+    // Cleared by useProjectZoom when the first layer bbox registers.
+    setTaskProgress(CONSTRUCT_SCENE_TASK, {
+      message: 'Constructing scene…',
+    });
 
     // Fetch sidecar vis specs in parallel.
     loadVisSpecs(DATA_BASE_URL, VIS_SPEC_TABLES)
@@ -309,6 +317,7 @@ export const ChemroomsEntityLayers: React.FC = () => {
     setAggregationRules,
     setAvailableAnalyteNames,
     refreshTableSchemas,
+    setTaskProgress,
   ]);
 
   // ── Phase 2: terrain sampling when viewer is ready ─────────────────
