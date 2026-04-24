@@ -12,6 +12,7 @@ import {useEffect, useRef, useCallback} from 'react';
 import {Rectangle, Math as CesiumMath, type Viewer} from 'cesium';
 import {useStoreWithCesium} from '@sqlrooms/cesium';
 import {getProjectBbox, onBboxChange} from '../layers/layerBbox';
+import {roomStore} from '../store';
 
 /** Margin around the data extent in degrees. */
 const MARGIN_DEG = 0.005;
@@ -79,6 +80,20 @@ export function useProjectZoom(): {zoomToFit: () => void} {
   const zoomToFit = useCallback(() => {
     if (!viewer || viewer.isDestroyed()) return;
     flyToProjectBbox(viewer);
+  }, [viewer]);
+
+  // Override the @sqlrooms/cesium toolbar's zoomToFit so the
+  // button uses our bbox-based fly-to instead of Cesium's
+  // viewer.zoomTo(viewer.entities) which misses Primitive-based
+  // geometry and computes a different bounding volume.
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    const state = roomStore.getState();
+    if (state.cesium?.zoomToFit) {
+      (state.cesium as any).zoomToFit = () => {
+        flyToProjectBbox(viewer);
+      };
+    }
   }, [viewer]);
 
   return {zoomToFit};
