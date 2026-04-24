@@ -16,6 +16,7 @@ import {Cesium3DTileset} from 'cesium';
 import {useStoreWithCesium} from '@sqlrooms/cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
 import {applyClippingToTileset, planeFromPoints} from '../lib/clippingPlane';
+import type {CrossSectionMode} from '../slices/chemrooms-slice';
 
 export interface TilesetEntry {
   name: string;
@@ -29,6 +30,12 @@ export function useTilesetManager() {
   const viewer = useStoreWithCesium((s) => s.cesium.viewer);
   const crossSectionPoints = useChemroomsStore(
     (s) => s.chemrooms.crossSectionPoints,
+  );
+  const crossSectionMode = useChemroomsStore(
+    (s) => s.chemrooms.crossSectionMode,
+  );
+  const sliceThicknessM = useChemroomsStore(
+    (s) => s.chemrooms.sliceThicknessM,
   );
 
   const [tilesets, setTilesets] = useState<TilesetEntry[]>([]);
@@ -80,7 +87,8 @@ export function useTilesetManager() {
               viewer.scene.primitives.add(ts);
 
               // Apply current clipping plane (if any) to this freshly
-              // loaded tileset
+              // loaded tileset — mode-aware so it matches the current
+              // toggle state (front/back/thick-slice).
               if (crossSectionPoints) {
                 const [[lon1, lat1], [lon2, lat2]] = crossSectionPoints;
                 const {normal, distance} = planeFromPoints(
@@ -89,7 +97,13 @@ export function useTilesetManager() {
                   lon2,
                   lat2,
                 );
-                applyClippingToTileset(ts, normal, distance);
+                applyClippingToTileset(
+                  ts,
+                  normal,
+                  distance,
+                  crossSectionMode,
+                  sliceThicknessM,
+                );
               }
               console.log(`[tileset:${name}] loaded`);
             })
@@ -105,7 +119,7 @@ export function useTilesetManager() {
         }
       }
     },
-    [tilesets, viewer, crossSectionPoints],
+    [tilesets, viewer, crossSectionPoints, crossSectionMode, sliceThicknessM],
   );
 
   return {tilesets, tilesetRefs, toggleTileset};
