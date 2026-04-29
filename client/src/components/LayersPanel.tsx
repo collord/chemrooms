@@ -34,6 +34,7 @@ import {
   Upload,
 } from 'lucide-react';
 import {useStoreWithCesium} from '@sqlrooms/cesium';
+import {Color} from 'cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
 import {useTilesetManager} from '../hooks/useTilesetManager';
 import {useClippingPlaneSync} from '../hooks/useClippingPlaneSync';
@@ -59,18 +60,27 @@ export const LayersPanel: React.FC = () => {
     (s) => s.room.isDataAvailable,
   );
   const [topoVisible, setTopoVisible] = useState(true);
-  const [topoSaturation, setTopoSaturation] = useState(0.4);
+  const [topoWhiteBlend, setTopoWhiteBlend] = useState(0.3);
   const {tilesets, tilesetRefs, toggleTileset} = useTilesetManager();
   useClippingPlaneSync(tilesetRefs, tilesets.length);
 
   // ESRI Wayback (historical World Imagery snapshots).
   const wayback = useWaybackImagery();
 
+  // Set globe base color to white once so reducing imagery alpha blends to white.
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    viewer.scene.globe.baseColor = Color.WHITE;
+  }, [viewer]);
+
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
     const layer = viewer.scene.globe.imageryLayers.get(0);
-    if (layer) layer.saturation = topoSaturation;
-  }, [viewer, topoSaturation]);
+    if (layer) {
+      layer.saturation = 1.0;
+      layer.alpha = 1 - topoWhiteBlend;
+    }
+  }, [viewer, topoWhiteBlend]);
 
   const toggleTopo = useCallback(() => {
     const next = !topoVisible;
@@ -321,10 +331,10 @@ export const LayersPanel: React.FC = () => {
               min={0}
               max={1}
               step={0.05}
-              value={topoSaturation}
-              onChange={(e) => setTopoSaturation(Number(e.target.value))}
+              value={topoWhiteBlend}
+              onChange={(e) => setTopoWhiteBlend(Number(e.target.value))}
               className="ml-auto w-16"
-              title={`Saturation: ${Math.round(topoSaturation * 100)}%`}
+              title={`Fade to white: ${Math.round(topoWhiteBlend * 100)}%`}
             />
           </div>
           <LayerRow
