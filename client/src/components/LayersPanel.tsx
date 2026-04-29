@@ -36,7 +36,11 @@ import {
 import {useStoreWithCesium} from '@sqlrooms/cesium';
 import {Color} from 'cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
-import {useTilesetManager} from '../hooks/useTilesetManager';
+import {
+  useTilesetManager,
+  DEFAULT_TOP_COLOR,
+  DEFAULT_BOTTOM_COLOR,
+} from '../hooks/useTilesetManager';
 import {useClippingPlaneSync} from '../hooks/useClippingPlaneSync';
 import {useWaybackImagery} from '../hooks/useWaybackImagery';
 import {
@@ -61,7 +65,8 @@ export const LayersPanel: React.FC = () => {
   );
   const [topoVisible, setTopoVisible] = useState(true);
   const [topoWhiteBlend, setTopoWhiteBlend] = useState(0.3);
-  const {tilesets, tilesetRefs, toggleTileset} = useTilesetManager();
+  const {tilesets, tilesetRefs, toggleTileset, tilesetColors, setTilesetColors} =
+    useTilesetManager();
   useClippingPlaneSync(tilesetRefs, tilesets.length);
 
   // ESRI Wayback (historical World Imagery snapshots).
@@ -361,14 +366,50 @@ export const LayersPanel: React.FC = () => {
               </select>
             </div>
           )}
-          {tilesets.map((entry) => (
-            <LayerRow
-              key={entry.name}
-              label={entry.name}
-              checked={entry.visible}
-              onChange={() => toggleTileset(entry.name)}
-            />
-          ))}
+          {tilesets.map((entry) => {
+            const colors = tilesetColors[entry.name] ?? {
+              top: DEFAULT_TOP_COLOR,
+              bottom: DEFAULT_BOTTOM_COLOR,
+            };
+            return (
+              <div
+                key={entry.name}
+                className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-xs hover:bg-muted/50"
+              >
+                <input
+                  type="checkbox"
+                  checked={entry.visible}
+                  onChange={() => toggleTileset(entry.name)}
+                  className="accent-primary"
+                />
+                <span
+                  className={
+                    entry.visible ? 'flex-1 text-foreground' : 'flex-1 text-muted-foreground'
+                  }
+                >
+                  {entry.name}
+                </span>
+                <input
+                  type="color"
+                  value={colors.top}
+                  onChange={(e) =>
+                    setTilesetColors(entry.name, e.target.value, colors.bottom)
+                  }
+                  className="h-4 w-5 cursor-pointer rounded-sm border border-border p-0"
+                  title="Outside / upward-facing color"
+                />
+                <input
+                  type="color"
+                  value={colors.bottom}
+                  onChange={(e) =>
+                    setTilesetColors(entry.name, colors.top, e.target.value)
+                  }
+                  className="h-4 w-5 cursor-pointer rounded-sm border border-border p-0"
+                  title="Inside / downward-facing color"
+                />
+              </div>
+            );
+          })}
 
           {/* ── Live recipe ────────────────────────────────────────── */}
           <SectionLabel>Live recipe</SectionLabel>
