@@ -23,7 +23,7 @@
  * only owns the UI.
  */
 
-import React, {useCallback, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   BookmarkPlus,
   ChevronDown,
@@ -59,11 +59,18 @@ export const LayersPanel: React.FC = () => {
     (s) => s.room.isDataAvailable,
   );
   const [topoVisible, setTopoVisible] = useState(true);
+  const [topoSaturation, setTopoSaturation] = useState(0.4);
   const {tilesets, tilesetRefs, toggleTileset} = useTilesetManager();
   useClippingPlaneSync(tilesetRefs, tilesets.length);
 
   // ESRI Wayback (historical World Imagery snapshots).
   const wayback = useWaybackImagery();
+
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    const layer = viewer.scene.globe.imageryLayers.get(0);
+    if (layer) layer.saturation = topoSaturation;
+  }, [viewer, topoSaturation]);
 
   const toggleTopo = useCallback(() => {
     const next = !topoVisible;
@@ -299,11 +306,27 @@ export const LayersPanel: React.FC = () => {
         <div className="flex flex-col gap-2 border-t border-border px-3 py-2">
           {/* ── Site context ───────────────────────────────────────── */}
           <SectionLabel>Site context</SectionLabel>
-          <LayerRow
-            label="Topography"
-            checked={topoVisible}
-            onChange={toggleTopo}
-          />
+          <div className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-xs hover:bg-muted/50">
+            <input
+              type="checkbox"
+              checked={topoVisible}
+              onChange={toggleTopo}
+              className="accent-primary"
+            />
+            <span className={topoVisible ? 'text-foreground' : 'text-muted-foreground'}>
+              Topography
+            </span>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={topoSaturation}
+              onChange={(e) => setTopoSaturation(Number(e.target.value))}
+              className="ml-auto w-16"
+              title={`Saturation: ${Math.round(topoSaturation * 100)}%`}
+            />
+          </div>
           <LayerRow
             label="Wayback Imagery"
             checked={wayback.isActive}
