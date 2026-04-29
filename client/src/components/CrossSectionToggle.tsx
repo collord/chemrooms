@@ -24,6 +24,7 @@ import {
   CallbackProperty,
   PolylineDashMaterialProperty,
 } from 'cesium';
+import {planeFromPoints} from '../lib/clippingPlane';
 import {useChemroomsStore, type CrossSectionMode} from '../slices/chemrooms-slice';
 import {getProjectBbox} from '../layers/layerBbox';
 
@@ -66,23 +67,32 @@ export const CrossSectionToggle: React.FC = () => {
     (s) => s.chemrooms.setSliceThicknessM,
   );
 
-  // Sync mode to 'active' when restored from bookmark
+  // Sync yellow line entity whenever crossSectionPoints changes while active,
+  // and restore mode to 'active' when rehydrated from a bookmark.
   useEffect(() => {
-    if (crossSectionPoints && mode === 'idle' && viewer && !viewer.isDestroyed()) {
-      const [[lon1, lat1], [lon2, lat2]] = crossSectionPoints;
-      const p1 = Cartesian3.fromDegrees(lon1, lat1);
-      const p2 = Cartesian3.fromDegrees(lon2, lat2);
-      linePointsRef.current = [p1, p2];
+    if (!crossSectionPoints || !viewer || viewer.isDestroyed()) return;
+    // Don't overwrite the dashed preview line while the user is picking.
+    if (mode === 'picking_first' || mode === 'picking_second') return;
 
-      // Draw the fixed yellow line
-      previewEntityRef.current = viewer.entities.add({
-        polyline: {
-          positions: [p1, p2],
-          width: 3,
-          material: Color.YELLOW,
-          clampToGround: true,
-        },
-      });
+    const [[lon1, lat1], [lon2, lat2]] = crossSectionPoints;
+    const p1 = Cartesian3.fromDegrees(lon1, lat1);
+    const p2 = Cartesian3.fromDegrees(lon2, lat2);
+    linePointsRef.current = [p1, p2];
+
+    // Remove stale line entity and redraw at new position.
+    if (previewEntityRef.current) {
+      viewer.entities.remove(previewEntityRef.current);
+    }
+    previewEntityRef.current = viewer.entities.add({
+      polyline: {
+        positions: [p1, p2],
+        width: 3,
+        material: Color.YELLOW,
+        clampToGround: true,
+      },
+    });
+
+    if (mode === 'idle') {
       setMode('active');
     }
   }, [crossSectionPoints, viewer]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -153,19 +163,9 @@ export const CrossSectionToggle: React.FC = () => {
         [CesiumMath.toDegrees(c2.longitude), CesiumMath.toDegrees(c2.latitude)],
       ]);
 
-      // Replace the dynamic preview line with a fixed solid line
+      // Remove the dynamic preview line; the crossSectionPoints effect
+      // will draw the fixed solid line once state settles.
       removePreviewLine();
-      linePointsRef.current = [Cartesian3.clone(p1), Cartesian3.clone(p2)];
-      if (viewer) {
-        previewEntityRef.current = viewer.entities.add({
-          polyline: {
-            positions: [p1, p2],
-            width: 3,
-            material: Color.YELLOW,
-            clampToGround: true,
-          },
-        });
-      }
 
       setMode('active');
     },
@@ -299,6 +299,60 @@ export const CrossSectionToggle: React.FC = () => {
     }
   }, [mode, sliceThicknessM, computeDefaultThickness, setSliceThicknessM]);
 
+  // Translate the slice plane perpendicular to itself. "forward" (true)
+  // moves in the direction the camera is looking; "backward" (false) is
+  // the opposite. When the view is near top-down, the camera-left vector
+  // is used instead (left = "forward" when north-up top-down).
+  const translateSlice = useCallback(
+    (forward: boolean) => {
+      if (!crossSectionPoints || !viewer || viewer.isDestroyed()) return;
+
+      const [[lon1, lat1], [lon2, lat2]] = crossSectionPoints;
+      const {normal} = planeFromPoints(lon1, lat1, lon2, lat2);
+
+      // Determine sign relative to camera orientation.
+      const camDir = viewer.camera.direction;
+      const refDir =
+        Math.abs(camDir.z) > 0.9
+          ? Cartesian3.negate(viewer.camera.right, new Cartesian3())
+          : camDir;
+      const dotSign = Cartesian3.dot(refDir, normal) >= 0 ? 1 : -1;
+      const stepSign = forward ? dotSign : -dotSign;
+
+      // Move each endpoint along the plane normal by 50% of thickness.
+      const stepM = sliceThicknessM * 0.5;
+      const offset = Cartesian3.multiplyByScalar(
+        normal,
+        stepSign * stepM,
+        new Cartesian3(),
+      );
+
+      const p1 = Cartesian3.fromDegrees(lon1, lat1);
+      const p2 = Cartesian3.fromDegrees(lon2, lat2);
+      const newP1 = Cartesian3.add(p1, offset, new Cartesian3());
+      const newP2 = Cartesian3.add(p2, offset, new Cartesian3());
+
+      const c1 = Cartographic.fromCartesian(newP1);
+      const c2 = Cartographic.fromCartesian(newP2);
+      setCrossSectionPoints([
+        [CesiumMath.toDegrees(c1.longitude), CesiumMath.toDegrees(c1.latitude)],
+        [CesiumMath.toDegrees(c2.longitude), CesiumMath.toDegrees(c2.latitude)],
+      ]);
+    },
+    [crossSectionPoints, sliceThicknessM, viewer, setCrossSectionPoints],
+  );
+
+  // Keyboard < / > shortcuts when thick-slice mode is visible.
+  useEffect(() => {
+    if (mode !== 'active' || crossSectionMode !== 'thick-slice') return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === ',' || e.key === '<') translateSlice(false);
+      if (e.key === '.' || e.key === '>') translateSlice(true);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [mode, crossSectionMode, translateSlice]);
+
   return (
     <div className="flex flex-col gap-1.5">
       <button
@@ -353,9 +407,9 @@ export const CrossSectionToggle: React.FC = () => {
             ))}
           </div>
 
-          {/* Thickness input (only for thick-slice mode) */}
+          {/* Thickness input + translate buttons (only for thick-slice mode) */}
           {crossSectionMode === 'thick-slice' && (
-            <label className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
               <span>Thickness:</span>
               <input
                 type="number"
@@ -370,7 +424,21 @@ export const CrossSectionToggle: React.FC = () => {
                 className="w-16 rounded border bg-background px-1.5 py-0.5 text-[10px] tabular-nums"
               />
               <span>m</span>
-            </label>
+              <button
+                onClick={() => translateSlice(false)}
+                title="Move slice backward (,)"
+                className="rounded border bg-muted px-1.5 py-0.5 font-mono hover:bg-accent hover:text-accent-foreground"
+              >
+                {'<'}
+              </button>
+              <button
+                onClick={() => translateSlice(true)}
+                title="Move slice forward (.)"
+                className="rounded border bg-muted px-1.5 py-0.5 font-mono hover:bg-accent hover:text-accent-foreground"
+              >
+                {'>'}
+              </button>
+            </div>
           )}
         </div>
       )}
