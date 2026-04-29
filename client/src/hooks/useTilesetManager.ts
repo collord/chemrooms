@@ -83,6 +83,7 @@ export function useTilesetManager() {
           const fullUrl = `${BASE_URL}${entry.url}`;
           Cesium3DTileset.fromUrl(fullUrl)
             .then((ts) => {
+              ts.backFaceCulling = false;
               tilesetRefs.current[name] = ts;
               viewer.scene.primitives.add(ts);
 
