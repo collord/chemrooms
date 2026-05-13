@@ -20,6 +20,17 @@
         "east": -116.8946115445,
         "north": 42.8045223346
       }
+    },
+    {
+      "name": "NAPL_2026_initial",
+      "url": "tiles/local/NAPL_2026_initial.glb",
+      "hasFeatureMetadata": true,
+      "_extent_wgs84": {
+        "west": -122.7880,
+        "south": 45.3804,
+        "east": -122.7390,
+        "north": 45.4354
+      }
     }
   ]
 }
