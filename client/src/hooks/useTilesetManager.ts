@@ -15,10 +15,12 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {
+  BoundingSphere,
   Cartesian3,
   Cesium3DTileset,
   CustomShader,
   Model,
+  Rectangle,
   UniformType,
 } from 'cesium';
 import {useStoreWithCesium} from '@sqlrooms/cesium';
@@ -56,6 +58,27 @@ export interface TilesetEntry {
 
 /** layerBbox registry key for a tileset entry. */
 const tilesetBboxKey = (name: string) => `tileset:${name}`;
+
+/**
+ * One sub-node from a metadata-carrying GLB. Each top-level glTF
+ * scene node becomes a SubNode; the user can toggle them
+ * individually in the LayersPanel.
+ */
+export interface SubNodeInfo {
+  /** glTF node name (also the EXT_structural_metadata class name). */
+  name: string;
+  /** Feature count from the matching property table, when known. */
+  featureCount?: number;
+  /** Current visibility — drives ModelNode.show. */
+  visible: boolean;
+  /**
+   * The node's bounding sphere in ECEF, captured at ready time. Used
+   * to compute a drilled-down WGS84 bbox when only some sub-nodes are
+   * visible. May be undefined for nodes whose primitive bounds aren't
+   * exposed.
+   */
+  boundingSphere?: BoundingSphere;
+}
 
 /**
  * Reverse-lookup: loaded primitive (Cesium3DTileset OR Model) →
@@ -108,6 +131,70 @@ void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
   });
 }
 
+/**
+ * Walk a loaded Model's scene graph and produce a SubNodeInfo entry
+ * per top-level node. Uses private fields on the runtime objects
+ * (Cesium doesn't expose this through a public API), guarded with
+ * defensive optional chaining — if Cesium changes shape internally
+ * we degrade to "no sub-nodes" rather than throwing.
+ *
+ * Feature counts are sourced from the EXT_structural_metadata property
+ * tables, matched by class name (== node name in this GLB).
+ */
+function discoverSubNodes(model: Model): SubNodeInfo[] {
+  const sceneGraph = (model as unknown as {_sceneGraph?: unknown})._sceneGraph as
+    | {
+        _runtimeNodes?: Array<{
+          _name?: string;
+          show?: boolean;
+          runtimePrimitives?: Array<{boundingSphere?: BoundingSphere}>;
+        }>;
+        components?: {
+          scene?: {nodes?: Array<{name?: string}>};
+        };
+      }
+    | undefined;
+  if (!sceneGraph?._runtimeNodes) return [];
+
+  // Build a featureCount lookup by class name from the property tables.
+  const propertyTables = (
+    model as unknown as {
+      structuralMetadata?: {propertyTables?: Array<{class?: {id?: string}; count?: number}>};
+    }
+  ).structuralMetadata?.propertyTables;
+  const countByClass = new Map<string, number>();
+  if (propertyTables) {
+    for (const pt of propertyTables) {
+      const id = pt?.class?.id;
+      if (id && typeof pt.count === 'number') {
+        countByClass.set(id, pt.count);
+      }
+    }
+  }
+
+  const out: SubNodeInfo[] = [];
+  for (const runtime of sceneGraph._runtimeNodes) {
+    const name = runtime?._name;
+    if (!name) continue;
+    // Union the bounding spheres of all primitives under this node.
+    let sphere: BoundingSphere | undefined;
+    const prims = runtime.runtimePrimitives ?? [];
+    for (const p of prims) {
+      if (!p.boundingSphere) continue;
+      sphere = sphere
+        ? BoundingSphere.union(sphere, p.boundingSphere, new BoundingSphere())
+        : BoundingSphere.clone(p.boundingSphere, new BoundingSphere());
+    }
+    out.push({
+      name,
+      featureCount: countByClass.get(name),
+      visible: runtime.show ?? true,
+      boundingSphere: sphere,
+    });
+  }
+  return out;
+}
+
 export function useTilesetManager() {
   const viewer = useStoreWithCesium((s) => s.cesium.viewer);
   const crossSectionPoints = useChemroomsStore(
@@ -129,6 +216,14 @@ export function useTilesetManager() {
    * sync and the face-color shader only target Cesium3DTilesets.
    */
   const modelRefs = useRef<Record<string, Model>>({});
+
+  /**
+   * Per-tileset sub-node lists, populated when a Model's readyEvent
+   * fires. Empty arrays mean "no sub-nodes discovered yet" (either
+   * the model isn't loaded or it's a Cesium3DTileset).
+   */
+  const [subNodes, setSubNodes] = useState<Record<string, SubNodeInfo[]>>({});
+  const subNodesRef = useRef<Record<string, SubNodeInfo[]>>({});
 
   // Per-tileset face colors. A ref keeps the value always current inside
   // the toggleTileset callback without adding it to the dep array.
@@ -167,8 +262,94 @@ export function useTilesetManager() {
         setLayerBbox(tilesetBboxKey(name), null);
       }
       modelRefs.current = {};
+      subNodesRef.current = {};
     };
   }, [viewer]);
+
+  /**
+   * Recompute the WGS84 bbox contributed by a metadata tileset based
+   * on which sub-nodes are visible. Three cases:
+   *  - All sub-nodes hidden → no bbox.
+   *  - All sub-nodes visible → use the manifest's _extent_wgs84.
+   *  - Mixed → union of visible nodes' bounding-sphere extents.
+   */
+  const refreshSubNodeBbox = useCallback(
+    (entry: TilesetEntry, nodes: SubNodeInfo[]) => {
+      const key = tilesetBboxKey(entry.name);
+      const visibleNodes = nodes.filter((n) => n.visible);
+      if (visibleNodes.length === 0) {
+        setLayerBbox(key, null);
+        return;
+      }
+      if (visibleNodes.length === nodes.length && entry._extent_wgs84) {
+        setLayerBbox(key, entry._extent_wgs84);
+        return;
+      }
+
+      // Union the per-node WGS84 rectangles. Rectangle.fromBoundingSphere
+      // returns radians; convert at the end. Spheres are loose fits so the
+      // result is conservative — fine for zoom-to-fit framing.
+      let west = Infinity;
+      let south = Infinity;
+      let east = -Infinity;
+      let north = -Infinity;
+      let any = false;
+      for (const n of visibleNodes) {
+        if (!n.boundingSphere) continue;
+        const rect = Rectangle.fromBoundingSphere(n.boundingSphere);
+        west = Math.min(west, rect.west);
+        south = Math.min(south, rect.south);
+        east = Math.max(east, rect.east);
+        north = Math.max(north, rect.north);
+        any = true;
+      }
+      if (!any) {
+        // Fall back to manifest extent if node spheres weren't captured.
+        setLayerBbox(key, entry._extent_wgs84 ?? null);
+        return;
+      }
+      const RAD2DEG = 180 / Math.PI;
+      setLayerBbox(key, {
+        west: west * RAD2DEG,
+        south: south * RAD2DEG,
+        east: east * RAD2DEG,
+        north: north * RAD2DEG,
+      });
+    },
+    [],
+  );
+
+  /**
+   * Toggle visibility of one sub-node inside a metadata GLB. Mutates
+   * ModelNode.show directly (which Cesium re-reads each frame) and
+   * updates the React state used to drive the LayersPanel tree.
+   */
+  const setSubNodeVisible = useCallback(
+    (tilesetName: string, nodeName: string, visible: boolean) => {
+      const model = modelRefs.current[tilesetName];
+      if (model) {
+        try {
+          const node = model.getNode(nodeName);
+          if (node) node.show = visible;
+        } catch (e) {
+          console.warn(
+            `[tileset:${tilesetName}] getNode(${nodeName}) failed:`,
+            e,
+          );
+        }
+      }
+      const current = subNodesRef.current[tilesetName] ?? [];
+      const updated = current.map((n) =>
+        n.name === nodeName ? {...n, visible} : n,
+      );
+      subNodesRef.current = {...subNodesRef.current, [tilesetName]: updated};
+      setSubNodes(subNodesRef.current);
+
+      const entry = tilesets.find((t) => t.name === tilesetName);
+      if (entry) refreshSubNodeBbox(entry, updated);
+    },
+    [tilesets, refreshSubNodeBbox],
+  );
 
   /** Update face colors for a tileset, applying immediately if loaded. */
   const setTilesetColors = useCallback(
@@ -217,6 +398,25 @@ export function useTilesetManager() {
                 modelRefs.current[name] = model;
                 viewer.scene.primitives.add(model);
                 console.log(`[tileset:${name}] loaded (model)`);
+
+                // Discover sub-nodes once the scene graph is built.
+                // readyEvent fires after Model.fromGltfAsync resolves, so
+                // we attach a listener and wait for the actual frame
+                // where _runtimeNodes is populated.
+                const populate = () => {
+                  const discovered = discoverSubNodes(model);
+                  if (discovered.length === 0) return;
+                  subNodesRef.current = {
+                    ...subNodesRef.current,
+                    [name]: discovered,
+                  };
+                  setSubNodes(subNodesRef.current);
+                  console.log(
+                    `[tileset:${name}] discovered ${discovered.length} sub-node(s)`,
+                  );
+                };
+                if (model.ready) populate();
+                else model.readyEvent.addEventListener(populate);
               })
               .catch((err) =>
                 console.error(`[tileset:${name}] failed:`, err),
@@ -285,5 +485,13 @@ export function useTilesetManager() {
     [tilesets, viewer, crossSectionPoints, crossSectionMode, sliceThicknessM],
   );
 
-  return {tilesets, tilesetRefs, toggleTileset, tilesetColors, setTilesetColors};
+  return {
+    tilesets,
+    tilesetRefs,
+    toggleTileset,
+    tilesetColors,
+    setTilesetColors,
+    subNodes,
+    setSubNodeVisible,
+  };
 }

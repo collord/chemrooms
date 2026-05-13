@@ -65,8 +65,18 @@ export const LayersPanel: React.FC = () => {
   );
   const [topoVisible, setTopoVisible] = useState(true);
   const [topoWhiteBlend, setTopoWhiteBlend] = useState(0.3);
-  const {tilesets, tilesetRefs, toggleTileset, tilesetColors, setTilesetColors} =
-    useTilesetManager();
+  const {
+    tilesets,
+    tilesetRefs,
+    toggleTileset,
+    tilesetColors,
+    setTilesetColors,
+    subNodes,
+    setSubNodeVisible,
+  } = useTilesetManager();
+  const [expandedTilesets, setExpandedTilesets] = useState<
+    Record<string, boolean>
+  >({});
   useClippingPlaneSync(tilesetRefs, tilesets.length);
 
   // ESRI Wayback (historical World Imagery snapshots).
@@ -371,47 +381,106 @@ export const LayersPanel: React.FC = () => {
               top: DEFAULT_TOP_COLOR,
               bottom: DEFAULT_BOTTOM_COLOR,
             };
+            const nodes = subNodes[entry.name] ?? [];
+            const hasTree = nodes.length > 0;
+            const expanded = expandedTilesets[entry.name] ?? false;
             return (
-              <div
-                key={entry.name}
-                className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-xs hover:bg-muted/50"
-              >
-                <input
-                  type="checkbox"
-                  checked={entry.visible}
-                  onChange={() => toggleTileset(entry.name)}
-                  className="accent-primary"
-                />
-                <span
-                  className={
-                    entry.visible ? 'flex-1 text-foreground' : 'flex-1 text-muted-foreground'
-                  }
-                >
-                  {entry.name}
-                </span>
-                {!entry.hasFeatureMetadata && (
-                  <>
-                    <input
-                      type="color"
-                      value={colors.top}
-                      onChange={(e) =>
-                        setTilesetColors(entry.name, e.target.value, colors.bottom)
+              <React.Fragment key={entry.name}>
+                <div className="flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 text-xs hover:bg-muted/50">
+                  {hasTree ? (
+                    <button
+                      onClick={() =>
+                        setExpandedTilesets((prev) => ({
+                          ...prev,
+                          [entry.name]: !expanded,
+                        }))
                       }
-                      className="h-4 w-5 cursor-pointer rounded-sm border border-border p-0"
-                      title="Outside / upward-facing color"
-                    />
-                    <input
-                      type="color"
-                      value={colors.bottom}
-                      onChange={(e) =>
-                        setTilesetColors(entry.name, colors.top, e.target.value)
-                      }
-                      className="h-4 w-5 cursor-pointer rounded-sm border border-border p-0"
-                      title="Inside / downward-facing color"
-                    />
-                  </>
+                      className="w-3 select-none text-muted-foreground hover:text-foreground"
+                      title={expanded ? 'Collapse' : 'Expand'}
+                    >
+                      {expanded ? '▾' : '▸'}
+                    </button>
+                  ) : (
+                    <span className="w-3" />
+                  )}
+                  <input
+                    type="checkbox"
+                    checked={entry.visible}
+                    onChange={() => toggleTileset(entry.name)}
+                    className="accent-primary"
+                  />
+                  <span
+                    className={
+                      entry.visible
+                        ? 'flex-1 text-foreground'
+                        : 'flex-1 text-muted-foreground'
+                    }
+                  >
+                    {entry.name}
+                  </span>
+                  {!entry.hasFeatureMetadata && (
+                    <>
+                      <input
+                        type="color"
+                        value={colors.top}
+                        onChange={(e) =>
+                          setTilesetColors(entry.name, e.target.value, colors.bottom)
+                        }
+                        className="h-4 w-5 cursor-pointer rounded-sm border border-border p-0"
+                        title="Outside / upward-facing color"
+                      />
+                      <input
+                        type="color"
+                        value={colors.bottom}
+                        onChange={(e) =>
+                          setTilesetColors(entry.name, colors.top, e.target.value)
+                        }
+                        className="h-4 w-5 cursor-pointer rounded-sm border border-border p-0"
+                        title="Inside / downward-facing color"
+                      />
+                    </>
+                  )}
+                </div>
+                {hasTree && expanded && (
+                  <div className="ml-5 flex flex-col gap-0.5">
+                    {nodes.map((node) => (
+                      <div
+                        key={node.name}
+                        className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-[11px] hover:bg-muted/50"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={node.visible}
+                          onChange={() =>
+                            setSubNodeVisible(
+                              entry.name,
+                              node.name,
+                              !node.visible,
+                            )
+                          }
+                          className="accent-primary"
+                          disabled={!entry.visible}
+                        />
+                        <span
+                          className={
+                            node.visible && entry.visible
+                              ? 'flex-1 truncate text-foreground'
+                              : 'flex-1 truncate text-muted-foreground'
+                          }
+                          title={node.name}
+                        >
+                          {node.name}
+                        </span>
+                        {node.featureCount != null && (
+                          <span className="tabular-nums text-muted-foreground/70">
+                            {node.featureCount.toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 )}
-              </div>
+              </React.Fragment>
             );
           })}
 
