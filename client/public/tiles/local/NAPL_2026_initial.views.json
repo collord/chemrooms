@@ -1,0 +1,381 @@
+{
+  "format": "openlfview.views/1",
+  "source": {
+    "generator": "Leapfrog Works 2025.3.0 (build 2025.3.0.136)",
+    "created": "2026-04-08T12:33:17"
+  },
+  "scene": {
+    "name": "NAPL_2026_initial",
+    "description": null,
+    "bbox": {
+      "min": [
+        7609791.654,
+        616087.7691,
+        -177.70453611
+      ],
+      "max": [
+        7661932.654,
+        732836.4485,
+        45.907047
+      ]
+    },
+    "axes_labels": {
+      "x": "East (X)",
+      "y": "North (Y)",
+      "z": "Elev (Z)"
+    },
+    "display": {
+      "show_compass_ball": null,
+      "show_scale_bar": null,
+      "show_viewing_angle": null
+    },
+    "camera": {
+      "centre": [
+        7616834.411083649,
+        722897.6090246973,
+        -12.638446573579117
+      ],
+      "radius": 499.3416453070874,
+      "projection": "orthographic",
+      "rotate_axis": {
+        "up": "z",
+        "azimuth_deg": 41.13914924297042,
+        "elevation_deg": 11.701093560145814
+      }
+    }
+  },
+  "colourings": [
+    {
+      "category": "Impact_Designation_based_on_Dakota_TG_and_IGL_Residual_Saturatio",
+      "entries": [
+        {
+          "name": "Heavy",
+          "colour": [
+            1.0,
+            0.09,
+            0.878
+          ]
+        },
+        {
+          "name": "Moderate",
+          "colour": [
+            1.0,
+            0.22,
+            0.22
+          ]
+        },
+        {
+          "name": "No  NAPL",
+          "colour": [
+            0.498,
+            0.498,
+            0.498
+          ]
+        },
+        {
+          "name": "No NAPL",
+          "colour": [
+            0.498,
+            0.498,
+            0.498
+          ]
+        },
+        {
+          "name": "Slight",
+          "colour": [
+            1.0,
+            0.592,
+            0.757
+          ]
+        }
+      ]
+    },
+    {
+      "category": "Impact_Designation_for_GIS",
+      "entries": [
+        {
+          "name": "No NAPL",
+          "colour": [
+            0.498,
+            0.498,
+            0.498
+          ]
+        },
+        {
+          "name": "Slight",
+          "colour": [
+            1.0,
+            0.592,
+            0.757
+          ]
+        },
+        {
+          "name": "Trace",
+          "colour": [
+            1.0,
+            0.757,
+            0.922
+          ]
+        }
+      ]
+    },
+    {
+      "category": "Modifier",
+      "entries": [
+        {
+          "name": "Heavy",
+          "colour": [
+            1.0,
+            0.294,
+            1.0
+          ]
+        },
+        {
+          "name": "Moderate",
+          "colour": [
+            1.0,
+            0.38,
+            0.38
+          ]
+        },
+        {
+          "name": "Moderate to Heavy",
+          "colour": [
+            1.0,
+            0.192,
+            0.678
+          ]
+        },
+        {
+          "name": "Slight",
+          "colour": [
+            1.0,
+            0.529,
+            0.773
+          ]
+        },
+        {
+          "name": "Slight to Moderate",
+          "colour": [
+            1.0,
+            0.447,
+            0.447
+          ]
+        },
+        {
+          "name": "Trace",
+          "colour": [
+            1.0,
+            0.753,
+            0.796
+          ]
+        }
+      ]
+    }
+  ],
+  "shapes": [
+    {
+      "name": "dakota_core",
+      "visible": true,
+      "alpha": 1.0,
+      "colouring_name": "Impact_Designation_based_on_Dakota_TG_and_IGL_Residual_Saturatio",
+      "flat_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "flat_back_colour": null,
+      "face_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "outline_colour": null,
+      "geometry_kinds": [
+        "lines",
+        "lines"
+      ],
+      "raw_xml": "<shape>\n    <name><span foreground=\"#060\"><i>Boreholes_2026: </i></span>dakota_core</name>\n    <alpha>+1</alpha>\n    <visible>true</visible>\n    <icon><pixels idref=\"icon_lf-drillhole-table_lf-import-overlay_lf-error-overlay\" /></icon>\n    <colouring_name>Impact_Designation_based_on_Dakota_TG_and_IGL_Residual_Saturatio</colouring_name>\n    <lines class=\"drillholes\">\n      <capping>ends</capping>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>true</show-faces>\n        <line-width>+2</line-width>\n        <face-colour>0.500 0.500 0.500</face-colour>\n      </slicing>\n      <selection>\n        <groups><per-primitive><array idref=\"array_5\" /></per-primitive></groups>\n        <detail>\n          <name>Location</name>\n          <value><location /></value>\n        </detail>\n        <detail>\n          <name>id</name>\n          <value><strings><paged-stringlist idref=\"pstrings_0\" /></strings></value>\n        </detail>\n        <detail>\n          <name>holeid</name>\n          <value><strings><paged-stringlist idref=\"pstrings_2\" /></strings></value>\n        </detail>\n        <detail>\n          <name>from</name>\n          <value><strings><paged-stringlist idref=\"pstrings_4\" /></strings></value>\n        </detail>\n        <detail>\n          <name>to</name>\n          <value><strings><paged-stringlist idref=\"pstrings_6\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Depth_Comparison_b_w_Integral_Shake_Test_Results_and_Core_Photos</name>\n          <value><strings><paged-stringlist idref=\"pstrings_8\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Depth_Comparison_Results</name>\n          <value><strings><paged-stringlist idref=\"pstrings_10\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Impact_Designation_based_on_Dakota_TG_and_IGL_Residual_Saturatio</name>\n          <value><strings><paged-stringlist idref=\"pstrings_11\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Max_TG_pc_RE</name>\n          <value><strings><paged-stringlist idref=\"pstrings_12\" /></strings></value>\n        </detail>\n      </selection>\n      <cylinders><radius>+8</radius></cylinders>\n      <locations><array idref=\"array_0\" /></locations>\n      <segments><array idref=\"array_1\" /></segments>\n      <segment-colours><array idref=\"array_2\" /></segment-colours>\n      <find-primitive-enabled>true</find-primitive-enabled>\n      <lines-consectutive>true</lines-consectutive>\n    </lines>\n    <lines class=\"drillholes-trace\">\n      <capping>all</capping>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>true</show-faces>\n        <line-width>+2</line-width>\n        <face-colour>0.500 0.500 0.500</face-colour>\n      </slicing>\n      <selection>\n        <groups><per-primitive><array idref=\"array_6\" /></per-primitive></groups>\n        <detail>\n          <name>Location</name>\n          <value><location /></value>\n        </detail>\n        <detail>\n          <name>id</name>\n          <value><strings><paged-stringlist idref=\"pstrings_1\" /></strings></value>\n        </detail>\n        <detail>\n          <name>holeid</name>\n          <value><strings><paged-stringlist idref=\"pstrings_3\" /></strings></value>\n        </detail>\n        <detail>\n          <name>from</name>\n          <value><strings><paged-stringlist idref=\"pstrings_5\" /></strings></value>\n        </detail>\n        <detail>\n          <name>to</name>\n          <value><strings><paged-stringlist idref=\"pstrings_7\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Depth_Comparison_b_w_Integral_Shake_Test_Results_and_Core_Photos</name>\n          <value><strings><paged-stringlist idref=\"pstrings_9\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Depth_Comparison_Results</name>\n          <value><strings><paged-stringlist idref=\"pstrings_9\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Impact_Designation_based_on_Dakota_TG_and_IGL_Residual_Saturatio</name>\n          <value><strings><paged-stringlist idref=\"pstrings_9\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Max_TG_pc_RE</name>\n          <value><strings><paged-stringlist idref=\"pstrings_9\" /></strings></value>\n        </detail>\n      </selection>\n      <pixels><width>+1</width></pixels>\n      <locations><array idref=\"array_3\" /></locations>\n      <segments><array idref=\"array_4\" /></segments>\n      <flat>\n        <colour>0.500 0.500 0.500</colour>\n      </flat>\n      <find-primitive-enabled>true</find-primitive-enabled>\n      <lines-consectutive>false</lines-consectutive>\n    </lines>\n  </shape>\n  ",
+      "cylinder_radius_m": 8.0
+    },
+    {
+      "name": "dakota_splits",
+      "visible": true,
+      "alpha": 1.0,
+      "colouring_name": "Impact_Designation_for_GIS",
+      "flat_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "flat_back_colour": null,
+      "face_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "outline_colour": null,
+      "geometry_kinds": [
+        "lines",
+        "lines"
+      ],
+      "raw_xml": "<shape>\n    <name><span foreground=\"#060\"><i>Boreholes_2026: </i></span>dakota_splits</name>\n    <alpha>+1</alpha>\n    <visible>true</visible>\n    <icon><pixels idref=\"icon_lf-drillhole-table_lf-import-overlay_lf-error-overlay\" /></icon>\n    <colouring_name>Impact_Designation_for_GIS</colouring_name>\n    <lines class=\"drillholes\">\n      <capping>ends</capping>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>true</show-faces>\n        <line-width>+2</line-width>\n        <face-colour>0.500 0.500 0.500</face-colour>\n      </slicing>\n      <selection>\n        <groups><per-primitive><array idref=\"array_27\" /></per-primitive></groups>\n        <detail>\n          <name>Location</name>\n          <value><location /></value>\n        </detail>\n        <detail>\n          <name>id</name>\n          <value><strings><paged-stringlist idref=\"pstrings_13\" /></strings></value>\n        </detail>\n        <detail>\n          <name>holeid</name>\n          <value><strings><paged-stringlist idref=\"pstrings_15\" /></strings></value>\n        </detail>\n        <detail>\n          <name>from</name>\n          <value><strings><paged-stringlist idref=\"pstrings_17\" /></strings></value>\n        </detail>\n        <detail>\n          <name>to</name>\n          <value><strings><paged-stringlist idref=\"pstrings_19\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Corresponding_Core</name>\n          <value><strings><paged-stringlist idref=\"pstrings_21\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Dakota_Technologies_Log_ID</name>\n          <value><strings><paged-stringlist idref=\"pstrings_23\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Impact_Designation_for_GIS</name>\n          <value><strings><paged-stringlist idref=\"pstrings_24\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Internal_Only_Tau_Trend</name>\n          <value><strings><paged-stringlist idref=\"pstrings_25\" /></strings></value>\n        </detail>\n        <detail>\n          <name>TarGOST_pc_RE</name>\n          <value><strings><paged-stringlist idref=\"pstrings_26\" /></strings></value>\n        </detail>\n        <detail>\n          <name>UV_pc_RE</name>\n          <value><strings><paged-stringlist idref=\"pstrings_27\" /></strings></value>\n        </detail>\n      </selection>\n      <cylinders><radius>+9</radius></cylinders>\n      <locations><array idref=\"array_22\" /></locations>\n      <segments><array idref=\"array_23\" /></segments>\n      <segment-colours><array idref=\"array_24\" /></segment-colours>\n      <find-primitive-enabled>true</find-primitive-enabled>\n      <lines-consectutive>true</lines-consectutive>\n    </lines>\n    <lines class=\"drillholes-trace\">\n      <capping>all</capping>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>true</show-faces>\n        <line-width>+2</line-width>\n        <face-colour>0.500 0.500 0.500</face-colour>\n      </slicing>\n      <selection>\n        <groups><per-primitive><array idref=\"array_28\" /></per-primitive></groups>\n        <detail>\n          <name>Location</name>\n          <value><location /></value>\n        </detail>\n        <detail>\n          <name>id</name>\n          <value><strings><paged-stringlist idref=\"pstrings_14\" /></strings></value>\n        </detail>\n        <detail>\n          <name>holeid</name>\n          <value><strings><paged-stringlist idref=\"pstrings_16\" /></strings></value>\n        </detail>\n        <detail>\n          <name>from</name>\n          <value><strings><paged-stringlist idref=\"pstrings_18\" /></strings></value>\n        </detail>\n        <detail>\n          <name>to</name>\n          <value><strings><paged-stringlist idref=\"pstrings_20\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Corresponding_Core</name>\n          <value><strings><paged-stringlist idref=\"pstrings_22\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Dakota_Technologies_Log_ID</name>\n          <value><strings><paged-stringlist idref=\"pstrings_22\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Impact_Designation_for_GIS</name>\n          <value><strings><paged-stringlist idref=\"pstrings_22\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Internal_Only_Tau_Trend</name>\n          <value><strings><paged-stringlist idref=\"pstrings_22\" /></strings></value>\n        </detail>\n        <detail>\n          <name>TarGOST_pc_RE</name>\n          <value><strings><paged-stringlist idref=\"pstrings_22\" /></strings></value>\n        </detail>\n        <detail>\n          <name>UV_pc_RE</name>\n          <value><strings><paged-stringlist idref=\"pstrings_22\" /></strings></value>\n        </detail>\n      </selection>\n      <pixels><width>+1</width></pixels>\n      <locations><array idref=\"array_25\" /></locations>\n      <segments><array idref=\"array_26\" /></segments>\n      <flat>\n        <colour>0.500 0.500 0.500</colour>\n      </flat>\n      <find-primitive-enabled>true</find-primitive-enabled>\n      <lines-consectutive>false</lines-consectutive>\n    </lines>\n  </shape>\n  ",
+      "cylinder_radius_m": 9.0
+    },
+    {
+      "name": "merged_Total_PCBs",
+      "visible": true,
+      "alpha": 1.0,
+      "colouring_name": "Total_PCBs",
+      "flat_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "flat_back_colour": null,
+      "face_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "outline_colour": null,
+      "geometry_kinds": [
+        "lines",
+        "lines"
+      ],
+      "raw_xml": "<shape>\n    <name><span foreground=\"#060\"><i>Boreholes_2026: </i></span>merged_Total_PCBs</name>\n    <alpha>+1</alpha>\n    <visible>true</visible>\n    <icon><pixels idref=\"icon_lf-drillhole-table_lf-import-overlay_lf-error-overlay\" /></icon>\n    <colouring_name>Total_PCBs</colouring_name>\n    <lines class=\"drillholes\">\n      <capping>ends</capping>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>true</show-faces>\n        <line-width>+2</line-width>\n        <face-colour>0.500 0.500 0.500</face-colour>\n      </slicing>\n      <selection>\n        <groups><per-primitive><array idref=\"array_50\" /></per-primitive></groups>\n        <detail>\n          <name>Location</name>\n          <value><location /></value>\n        </detail>\n        <detail>\n          <name>id</name>\n          <value><strings><paged-stringlist idref=\"pstrings_28\" /></strings></value>\n        </detail>\n        <detail>\n          <name>holeid</name>\n          <value><strings><paged-stringlist idref=\"pstrings_30\" /></strings></value>\n        </detail>\n        <detail>\n          <name>from</name>\n          <value><strings><paged-stringlist idref=\"pstrings_32\" /></strings></value>\n        </detail>\n        <detail>\n          <name>to</name>\n          <value><strings><paged-stringlist idref=\"pstrings_34\" /></strings></value>\n        </detail>\n        <detail>\n          <name>CHEMICAL_NAME</name>\n          <value><strings><paged-stringlist idref=\"pstrings_36\" /></strings></value>\n        </detail>\n        <detail>\n          <name>exceeds_75</name>\n          <value><strings><paged-stringlist idref=\"pstrings_38\" /></strings></value>\n        </detail>\n        <detail>\n          <name>exceeds_200</name>\n          <value><strings><paged-stringlist idref=\"pstrings_39\" /></strings></value>\n        </detail>\n        <detail>\n          <name>QUALIFIER</name>\n          <value><strings><paged-stringlist idref=\"pstrings_40\" /></strings></value>\n        </detail>\n        <detail>\n          <name>REPORT_RESULT_UNIT</name>\n          <value><strings><paged-stringlist idref=\"pstrings_41\" /></strings></value>\n        </detail>\n        <detail>\n          <name>SAMPLE_DATE</name>\n          <value><strings><paged-stringlist idref=\"pstrings_42\" /></strings></value>\n        </detail>\n        <detail>\n          <name>SAMPLE_NAME</name>\n          <value><strings><paged-stringlist idref=\"pstrings_43\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Total_PCBs</name>\n          <value><strings><paged-stringlist idref=\"pstrings_44\" /></strings></value>\n        </detail>\n      </selection>\n      <cylinders><radius>+12</radius></cylinders>\n      <locations><array idref=\"array_45\" /></locations>\n      <segments><array idref=\"array_46\" /></segments>\n      <segment-texcoords>\n        <array idref=\"array_47\" />\n        <colourmap><array idref=\"cmap_0\" /></colourmap>\n      </segment-texcoords>\n      <find-primitive-enabled>true</find-primitive-enabled>\n      <lines-consectutive>true</lines-consectutive>\n    </lines>\n    <lines class=\"drillholes-trace\">\n      <capping>all</capping>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>true</show-faces>\n        <line-width>+2</line-width>\n        <face-colour>0.500 0.500 0.500</face-colour>\n      </slicing>\n      <selection>\n        <groups><per-primitive><array idref=\"array_51\" /></per-primitive></groups>\n        <detail>\n          <name>Location</name>\n          <value><location /></value>\n        </detail>\n        <detail>\n          <name>id</name>\n          <value><strings><paged-stringlist idref=\"pstrings_29\" /></strings></value>\n        </detail>\n        <detail>\n          <name>holeid</name>\n          <value><strings><paged-stringlist idref=\"pstrings_31\" /></strings></value>\n        </detail>\n        <detail>\n          <name>from</name>\n          <value><strings><paged-stringlist idref=\"pstrings_33\" /></strings></value>\n        </detail>\n        <detail>\n          <name>to</name>\n          <value><strings><paged-stringlist idref=\"pstrings_35\" /></strings></value>\n        </detail>\n        <detail>\n          <name>CHEMICAL_NAME</name>\n          <value><strings><paged-stringlist idref=\"pstrings_37\" /></strings></value>\n        </detail>\n        <detail>\n          <name>exceeds_75</name>\n          <value><strings><paged-stringlist idref=\"pstrings_37\" /></strings></value>\n        </detail>\n        <detail>\n          <name>exceeds_200</name>\n          <value><strings><paged-stringlist idref=\"pstrings_37\" /></strings></value>\n        </detail>\n        <detail>\n          <name>QUALIFIER</name>\n          <value><strings><paged-stringlist idref=\"pstrings_37\" /></strings></value>\n        </detail>\n        <detail>\n          <name>REPORT_RESULT_UNIT</name>\n          <value><strings><paged-stringlist idref=\"pstrings_37\" /></strings></value>\n        </detail>\n        <detail>\n          <name>SAMPLE_DATE</name>\n          <value><strings><paged-stringlist idref=\"pstrings_37\" /></strings></value>\n        </detail>\n        <detail>\n          <name>SAMPLE_NAME</name>\n          <value><strings><paged-stringlist idref=\"pstrings_37\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Total_PCBs</name>\n          <value><strings><paged-stringlist idref=\"pstrings_37\" /></strings></value>\n        </detail>\n      </selection>\n      <pixels><width>+1</width></pixels>\n      <locations><array idref=\"array_48\" /></locations>\n      <segments><array idref=\"array_49\" /></segments>\n      <flat>\n        <colour>0.500 0.500 0.500</colour>\n      </flat>\n      <find-primitive-enabled>true</find-primitive-enabled>\n      <lines-consectutive>false</lines-consectutive>\n    </lines>\n  </shape>\n  ",
+      "cylinder_radius_m": 12.0
+    },
+    {
+      "name": "merged_Total_Polynuclear_Aromatic_Hydrocarbons",
+      "visible": true,
+      "alpha": 1.0,
+      "colouring_name": "Total_PAHs",
+      "flat_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "flat_back_colour": null,
+      "face_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "outline_colour": null,
+      "geometry_kinds": [
+        "lines",
+        "lines"
+      ],
+      "raw_xml": "<shape>\n    <name><span foreground=\"#060\"><i>Boreholes_2026: </i></span>merged_Total_Polynuclear_Aromatic_Hydrocarbons</name>\n    <alpha>+1</alpha>\n    <visible>true</visible>\n    <icon><pixels idref=\"icon_lf-drillhole-table_lf-import-overlay_lf-error-overlay\" /></icon>\n    <colouring_name>Total_PAHs</colouring_name>\n    <lines class=\"drillholes\">\n      <capping>ends</capping>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>true</show-faces>\n        <line-width>+2</line-width>\n        <face-colour>0.500 0.500 0.500</face-colour>\n      </slicing>\n      <selection>\n        <groups><per-primitive><array idref=\"array_78\" /></per-primitive></groups>\n        <detail>\n          <name>Location</name>\n          <value><location /></value>\n        </detail>\n        <detail>\n          <name>id</name>\n          <value><strings><paged-stringlist idref=\"pstrings_45\" /></strings></value>\n        </detail>\n        <detail>\n          <name>holeid</name>\n          <value><strings><paged-stringlist idref=\"pstrings_47\" /></strings></value>\n        </detail>\n        <detail>\n          <name>from</name>\n          <value><strings><paged-stringlist idref=\"pstrings_49\" /></strings></value>\n        </detail>\n        <detail>\n          <name>to</name>\n          <value><strings><paged-stringlist idref=\"pstrings_51\" /></strings></value>\n        </detail>\n        <detail>\n          <name>CHEMICAL_NAME</name>\n          <value><strings><paged-stringlist idref=\"pstrings_53\" /></strings></value>\n        </detail>\n        <detail>\n          <name>exceeds_30000</name>\n          <value><strings><paged-stringlist idref=\"pstrings_55\" /></strings></value>\n        </detail>\n        <detail>\n          <name>QUALIFIER</name>\n          <value><strings><paged-stringlist idref=\"pstrings_56\" /></strings></value>\n        </detail>\n        <detail>\n          <name>REPORT_RESULT_UNIT</name>\n          <value><strings><paged-stringlist idref=\"pstrings_57\" /></strings></value>\n        </detail>\n        <detail>\n          <name>SAMPLE_DATE</name>\n          <value><strings><paged-stringlist idref=\"pstrings_58\" /></strings></value>\n        </detail>\n        <detail>\n          <name>SAMPLE_NAME</name>\n          <value><strings><paged-stringlist idref=\"pstrings_59\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Total_PAHs</name>\n          <value><strings><paged-stringlist idref=\"pstrings_60\" /></strings></value>\n        </detail>\n      </selection>\n      <cylinders><radius>+11</radius></cylinders>\n      <locations><array idref=\"array_73\" /></locations>\n      <segments><array idref=\"array_74\" /></segments>\n      <segment-texcoords>\n        <array idref=\"array_75\" />\n        <colourmap><array idref=\"cmap_0\" /></colourmap>\n      </segment-texcoords>\n      <find-primitive-enabled>true</find-primitive-enabled>\n      <lines-consectutive>true</lines-consectutive>\n    </lines>\n    <lines class=\"drillholes-trace\">\n      <capping>all</capping>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>true</show-faces>\n        <line-width>+2</line-width>\n        <face-colour>0.500 0.500 0.500</face-colour>\n      </slicing>\n      <selection>\n        <groups><per-primitive><array idref=\"array_79\" /></per-primitive></groups>\n        <detail>\n          <name>Location</name>\n          <value><location /></value>\n        </detail>\n        <detail>\n          <name>id</name>\n          <value><strings><paged-stringlist idref=\"pstrings_46\" /></strings></value>\n        </detail>\n        <detail>\n          <name>holeid</name>\n          <value><strings><paged-stringlist idref=\"pstrings_48\" /></strings></value>\n        </detail>\n        <detail>\n          <name>from</name>\n          <value><strings><paged-stringlist idref=\"pstrings_50\" /></strings></value>\n        </detail>\n        <detail>\n          <name>to</name>\n          <value><strings><paged-stringlist idref=\"pstrings_52\" /></strings></value>\n        </detail>\n        <detail>\n          <name>CHEMICAL_NAME</name>\n          <value><strings><paged-stringlist idref=\"pstrings_54\" /></strings></value>\n        </detail>\n        <detail>\n          <name>exceeds_30000</name>\n          <value><strings><paged-stringlist idref=\"pstrings_54\" /></strings></value>\n        </detail>\n        <detail>\n          <name>QUALIFIER</name>\n          <value><strings><paged-stringlist idref=\"pstrings_54\" /></strings></value>\n        </detail>\n        <detail>\n          <name>REPORT_RESULT_UNIT</name>\n          <value><strings><paged-stringlist idref=\"pstrings_54\" /></strings></value>\n        </detail>\n        <detail>\n          <name>SAMPLE_DATE</name>\n          <value><strings><paged-stringlist idref=\"pstrings_54\" /></strings></value>\n        </detail>\n        <detail>\n          <name>SAMPLE_NAME</name>\n          <value><strings><paged-stringlist idref=\"pstrings_54\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Total_PAHs</name>\n          <value><strings><paged-stringlist idref=\"pstrings_54\" /></strings></value>\n        </detail>\n      </selection>\n      <pixels><width>+1</width></pixels>\n      <locations><array idref=\"array_76\" /></locations>\n      <segments><array idref=\"array_77\" /></segments>\n      <flat>\n        <colour>0.500 0.500 0.500</colour>\n      </flat>\n      <find-primitive-enabled>true</find-primitive-enabled>\n      <lines-consectutive>false</lines-consectutive>\n    </lines>\n  </shape>\n  ",
+      "cylinder_radius_m": 11.0
+    },
+    {
+      "name": "Table_SPID_NAPL_Observations_2026",
+      "visible": true,
+      "alpha": 1.0,
+      "colouring_name": "Modifier",
+      "flat_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "flat_back_colour": null,
+      "face_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "outline_colour": null,
+      "geometry_kinds": [
+        "lines",
+        "lines"
+      ],
+      "raw_xml": "<shape>\n    <name><span foreground=\"#060\"><i>Boreholes_2026: </i></span>Table_SPID_NAPL_Observations_2026</name>\n    <alpha>+1</alpha>\n    <visible>true</visible>\n    <icon><pixels idref=\"icon_lf-drillhole-table_lf-import-overlay_lf-warning-overlay\" /></icon>\n    <colouring_name>Modifier</colouring_name>\n    <lines class=\"drillholes\">\n      <capping>ends</capping>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>true</show-faces>\n        <line-width>+2</line-width>\n        <face-colour>0.500 0.500 0.500</face-colour>\n      </slicing>\n      <selection>\n        <groups><per-primitive><array idref=\"array_105\" /></per-primitive></groups>\n        <detail>\n          <name>Location</name>\n          <value><location /></value>\n        </detail>\n        <detail>\n          <name>id</name>\n          <value><strings><paged-stringlist idref=\"pstrings_61\" /></strings></value>\n        </detail>\n        <detail>\n          <name>holeid</name>\n          <value><strings><paged-stringlist idref=\"pstrings_63\" /></strings></value>\n        </detail>\n        <detail>\n          <name>from</name>\n          <value><strings><paged-stringlist idref=\"pstrings_65\" /></strings></value>\n        </detail>\n        <detail>\n          <name>to</name>\n          <value><strings><paged-stringlist idref=\"pstrings_67\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Blebs_Layer_Sheen</name>\n          <value><strings><paged-stringlist idref=\"pstrings_69\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Collection_Type</name>\n          <value><strings><paged-stringlist idref=\"pstrings_71\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Date_Collected</name>\n          <value><strings><paged-stringlist idref=\"pstrings_73\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Modifier</name>\n          <value><strings><paged-stringlist idref=\"pstrings_75\" /></strings></value>\n        </detail>\n        <detail>\n          <name>NAPL_Observed_Y_N</name>\n          <value><strings><paged-stringlist idref=\"pstrings_77\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Shake_Test_Performed</name>\n          <value><strings><paged-stringlist idref=\"pstrings_77\" /></strings></value>\n        </detail>\n      </selection>\n      <cylinders><radius>+10</radius></cylinders>\n      <locations><array idref=\"array_100\" /></locations>\n      <segments><array idref=\"array_101\" /></segments>\n      <segment-colours><array idref=\"array_102\" /></segment-colours>\n      <find-primitive-enabled>true</find-primitive-enabled>\n      <lines-consectutive>true</lines-consectutive>\n    </lines>\n    <lines class=\"drillholes-trace\">\n      <capping>all</capping>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>true</show-faces>\n        <line-width>+2</line-width>\n        <face-colour>0.500 0.500 0.500</face-colour>\n      </slicing>\n      <selection>\n        <groups><per-primitive><array idref=\"array_106\" /></per-primitive></groups>\n        <detail>\n          <name>Location</name>\n          <value><location /></value>\n        </detail>\n        <detail>\n          <name>id</name>\n          <value><strings><paged-stringlist idref=\"pstrings_62\" /></strings></value>\n        </detail>\n        <detail>\n          <name>holeid</name>\n          <value><strings><paged-stringlist idref=\"pstrings_64\" /></strings></value>\n        </detail>\n        <detail>\n          <name>from</name>\n          <value><strings><paged-stringlist idref=\"pstrings_66\" /></strings></value>\n        </detail>\n        <detail>\n          <name>to</name>\n          <value><strings><paged-stringlist idref=\"pstrings_68\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Blebs_Layer_Sheen</name>\n          <value><strings><paged-stringlist idref=\"pstrings_70\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Collection_Type</name>\n          <value><strings><paged-stringlist idref=\"pstrings_72\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Date_Collected</name>\n          <value><strings><paged-stringlist idref=\"pstrings_74\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Modifier</name>\n          <value><strings><paged-stringlist idref=\"pstrings_76\" /></strings></value>\n        </detail>\n        <detail>\n          <name>NAPL_Observed_Y_N</name>\n          <value><strings><paged-stringlist idref=\"pstrings_78\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Shake_Test_Performed</name>\n          <value><strings><paged-stringlist idref=\"pstrings_79\" /></strings></value>\n        </detail>\n      </selection>\n      <pixels><width>+1</width></pixels>\n      <locations><array idref=\"array_103\" /></locations>\n      <segments><array idref=\"array_104\" /></segments>\n      <flat>\n        <colour>0.500 0.500 0.500</colour>\n      </flat>\n      <find-primitive-enabled>true</find-primitive-enabled>\n      <lines-consectutive>false</lines-consectutive>\n    </lines>\n  </shape>\n  ",
+      "cylinder_radius_m": 10.0
+    },
+    {
+      "name": "SPDI_Union_Focused_COCs",
+      "visible": true,
+      "alpha": 1.0,
+      "colouring_name": "Flat colour",
+      "flat_colour": [
+        0.827,
+        0.827,
+        0.282
+      ],
+      "flat_back_colour": null,
+      "face_colour": [
+        0.827,
+        0.827,
+        0.282
+      ],
+      "outline_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "geometry_kinds": [
+        "mesh"
+      ],
+      "raw_xml": "<shape>\n    <name>SPDI_Union_Focused_COCs</name>\n    <alpha>+1</alpha>\n    <visible>true</visible>\n    <icon><pixels idref=\"icon_lf-mesh-csg\" /></icon>\n    <colouring_name>Flat colour</colouring_name>\n    <mesh class=\"\">\n      <shading>smooth</shading>\n      <locations><array idref=\"array_127\" /></locations>\n      <faces><array idref=\"array_128\" /></faces>\n      <show-faces>true</show-faces>\n      <show-edges>false</show-edges>\n      <edge-width>1</edge-width>\n      <outline-colour>0.500 0.500 0.500</outline-colour>\n      <backface-cull>false</backface-cull>\n      <polygon-offset>+1 +1</polygon-offset>\n      <depth-offset>\n        <front>4</front>\n        <back>4</back>\n      </depth-offset>\n      <lighting>\n        <enabled>true</enabled>\n        <specular>+0.6</specular>\n      </lighting>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>false</show-faces>\n        <line-width>+2</line-width>\n        <face-colour>0.827 0.827 0.282</face-colour>\n      </slicing>\n      <selection>\n        <detail>\n          <name>Location</name>\n          <value><location /></value>\n        </detail>\n        <detail>\n          <name>Dip azimuth</name>\n          <value><numeric>\n            <per>group</per>\n            <array idref=\"array_130\" />\n          </numeric></value>\n        </detail>\n        <detail>\n          <name>Face dip</name>\n          <value><numeric>\n            <per>group</per>\n            <array idref=\"array_129\" />\n          </numeric></value>\n        </detail>\n        <detail>\n          <name>Volume</name>\n          <value><string>11,407,000</string></value>\n        </detail>\n        <detail>\n          <name>Area</name>\n          <value><string>4,334,700</string></value>\n        </detail>\n        <detail>\n          <name>Parts</name>\n          <value><string>73</string></value>\n        </detail>\n      </selection>\n      <flat>\n        <colour>0.827 0.827 0.282</colour>\n      </flat>\n      <find-primitive-enabled>true</find-primitive-enabled>\n    </mesh>\n  </shape>\n"
+    }
+  ],
+  "raw_scene_state_xml": "<name>NAPL_2026_initial</name>\n  \n<description />\n  \n<bbox>\n    <min>+7609791.654 +616087.7691 -177.70453611</min>\n    <max>+7661932.654 +732836.4485 +45.907047</max>\n  </bbox>\n  \n<thumbnail><pixels idref=\"thumb_0\" /></thumbnail>\n  \n<camera>\n    <centre>+7616834.411083649 +722897.6090246973 -12.638446573579117</centre>\n    <radius>+499.3416453070874</radius>\n    <scale>+1 +1 +5</scale>\n    <rotate-axis>\n      <up>z</up>\n      <azimuth>+41.13914924297042</azimuth>\n      <elevation>+11.701093560145814</elevation>\n   </rotate-axis>\n  </camera>\n  \n<axes>\n    <label-x>East (X)</label-x>\n    <label-y>North (Y)</label-y>\n    <label-z>Elev (Z)</label-z>\n  </axes>\n  \n<legend>\n    <lithologies>\n      <name>Impact_Designation_based_on_Dakota_TG_and_IGL_Residual_Saturatio</name>\n      <item><name>Heavy</name><colour>1.000 0.090 0.878</colour></item>\n      <item><name>Moderate</name><colour>1.000 0.220 0.220</colour></item>\n      <item><name>No  NAPL</name><colour>0.498 0.498 0.498</colour></item>\n      <item><name>No NAPL</name><colour>0.498 0.498 0.498</colour></item>\n      <item><name>Slight</name><colour>1.000 0.592 0.757</colour></item>\n    </lithologies>\n    <lithologies>\n      <name>Impact_Designation_for_GIS</name>\n      <item><name>No NAPL</name><colour>0.498 0.498 0.498</colour></item>\n      <item><name>Slight</name><colour>1.000 0.592 0.757</colour></item>\n      <item><name>Trace</name><colour>1.000 0.757 0.922</colour></item>\n    </lithologies>\n    <lithologies>\n      <name>Modifier</name>\n      <item><name>Heavy</name><colour>1.000 0.294 1.000</colour></item>\n      <item><name>Moderate</name><colour>1.000 0.380 0.380</colour></item>\n      <item><name>Moderate to Heavy</name><colour>1.000 0.192 0.678</colour></item>\n      <item><name>Slight</name><colour>1.000 0.529 0.773</colour></item>\n      <item><name>Slight to Moderate</name><colour>1.000 0.447 0.447</colour></item>\n      <item><name>Trace</name><colour>1.000 0.753 0.796</colour></item>\n    </lithologies>\n    <continuous-colourmap>\n      <name>Total_PAHs</name>\n      <minimum>+0.1</minimum>\n      <maximum>+100000</maximum>\n      <decimal-places>6</decimal-places>\n      <colourmap><array idref=\"cmap_0\" /></colourmap>\n    </continuous-colourmap>\n    <continuous-colourmap>\n      <name>Total_PCBs</name>\n      <minimum>+0.004835</minimum>\n      <maximum>+700</maximum>\n      <decimal-places>6</decimal-places>\n      <colourmap><array idref=\"cmap_0\" /></colourmap>\n    </continuous-colourmap>\n  </legend>\n  ",
+  "coordinate_system": {
+    "source": "EPSG:6559+6360",
+    "target": "EPSG:4978",
+    "target_is_ecef": true,
+    "target_is_geographic": false,
+    "scene_anchor_source_crs": [
+      7621091.985287214,
+      716265.6943719639,
+      -18.779375766715734
+    ],
+    "scene_anchor_target_crs": [
+      -2419230.3003765033,
+      -3758135.5494026435,
+      4534941.88948391
+    ],
+    "scene_anchor_lonlat_height": [
+      -122.77066056422439,
+      45.608920275587344,
+      -5.723965182900429
+    ],
+    "enu_to_ecef_matrix_3x3": [
+      [
+        0.840843885669296,
+        0.3867870925996137,
+        -0.37865195751626285
+      ],
+      [
+        -0.5412777105447442,
+        0.6008515694113444,
+        -0.5882141035399988
+      ],
+      [
+        0.0,
+        0.6995520970837427,
+        0.7145816002849065
+      ]
+    ],
+    "placement_matrix_4x4_column_major": [
+      0.840843885669296,
+      -0.5412777105447442,
+      0.0,
+      0.0,
+      0.3867870925996137,
+      0.6008515694113444,
+      0.6995520970837427,
+      0.0,
+      -0.37865195751626285,
+      -0.5882141035399988,
+      0.7145816002849065,
+      0.0,
+      -2419230.3003765033,
+      -3758135.5494026435,
+      4534941.88948391,
+      1.0
+    ]
+  }
+}

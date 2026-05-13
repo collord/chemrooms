@@ -21,9 +21,11 @@ import {
   Cesium3DTileset,
   CustomShader,
   Model,
+  Primitive,
   Rectangle,
   UniformType,
 } from 'cesium';
+import {buildGlbLineCylinders} from './useGlbLineCylinders';
 import {useStoreWithCesium} from '@sqlrooms/cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
 import {applyClippingToTileset, planeFromPoints} from '../lib/clippingPlane';
@@ -42,18 +44,14 @@ export interface TilesetEntry {
   name: string;
   url: string; // relative to BASE_URL
   visible: boolean;
-  /**
-   * If true, the tileset's glTF/GLB carries EXT_structural_metadata +
-   * EXT_mesh_features and should keep its embedded materials (no
-   * top/bottom face-color shader). Per-feature picking will route to
-   * the Inspector's tile-feature variant.
-   */
   hasFeatureMetadata?: boolean;
   /**
-   * Optional WGS84 footprint. When present, the tileset contributes to
-   * the project bbox / zoomToFit union while visible. Authored in the
-   * manifest so we don't depend on Cesium's loose boundingSphere.
+   * Path to a Leapfrog .views.json sidecar (relative to BASE_URL).
+   * When present, LINES primitives in the GLB are replaced with
+   * Cesium cylinder primitives built from the sidecar's
+   * cylinder_radius_m and placement_matrix_4x4_column_major.
    */
+  sidecar?: string;
   _extent_wgs84?: TilesetExtentWgs84;
 }
 
@@ -234,6 +232,8 @@ export function useTilesetManager() {
    * sync and the face-color shader only target Cesium3DTilesets.
    */
   const modelRefs = useRef<Record<string, Model>>({});
+  /** Cylinder primitives built from GLB LINES nodes, keyed by tileset name. */
+  const cylinderPrimitivesRef = useRef<Record<string, Primitive[]>>({});
 
   /**
    * Per-tileset sub-node lists, populated when a Model's readyEvent
@@ -281,6 +281,10 @@ export function useTilesetManager() {
       }
       modelRefs.current = {};
       subNodesRef.current = {};
+      for (const prims of Object.values(cylinderPrimitivesRef.current)) {
+        for (const p of prims) viewer.scene.primitives.remove(p);
+      }
+      cylinderPrimitivesRef.current = {};
     };
   }, [viewer]);
 
@@ -438,15 +442,31 @@ export function useTilesetManager() {
                 };
                 if (model.ready) populate();
                 else model.readyEvent.addEventListener(populate);
+
+                // Build cylinders for LINES nodes if a sidecar is present.
+                if (entry.sidecar) {
+                  const sidecarUrl = `${BASE_URL}${entry.sidecar}`;
+                  buildGlbLineCylinders(fullUrl, sidecarUrl, viewer, model)
+                    .then((prims) => {
+                      cylinderPrimitivesRef.current[name] = prims;
+                      console.log(`[tileset:${name}] built ${prims.length} cylinder primitive(s)`);
+                    })
+                    .catch((err) =>
+                      console.error(`[tileset:${name}] cylinder build failed:`, err),
+                    );
+                }
               })
               .catch((err) =>
                 console.error(`[tileset:${name}] failed:`, err),
               );
           } else {
             modelRefs.current[name].show = true;
+            // Re-show cylinders if they were hidden.
+            for (const p of cylinderPrimitivesRef.current[name] ?? []) p.show = true;
           }
         } else if (modelRefs.current[name]) {
           modelRefs.current[name].show = false;
+          for (const p of cylinderPrimitivesRef.current[name] ?? []) p.show = false;
         }
         return;
       }

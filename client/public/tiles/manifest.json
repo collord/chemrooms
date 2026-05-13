@@ -25,6 +25,7 @@
       "name": "NAPL_2026_initial",
       "url": "tiles/local/NAPL_2026_initial.glb",
       "hasFeatureMetadata": true,
+      "sidecar": "tiles/local/NAPL_2026_initial.views.json",
       "_extent_wgs84": {
         "west": -122.7880,
         "south": 45.3804,
