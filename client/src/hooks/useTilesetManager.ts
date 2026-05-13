@@ -212,90 +212,6 @@ function discoverSubNodes(model: Model): SubNodeInfo[] {
   return out;
 }
 
-/**
- * Fetch a GLB and strip EXT_structural_metadata + EXT_mesh_features before
- * passing it to Cesium. The property tables reference accessor indices that
- * don't exist, causing a non-recoverable RangeError inside Cesium's accessor
- * pipeline. EXT_mesh_features must also be stripped because Cesium's
- * buildRenderResources reads featuresLength off the feature table — which is
- * null when the structural metadata is absent — and throws a TypeError.
- */
-async function loadGlbSafe(url: string): Promise<ArrayBuffer> {
-  const raw = await fetch(url).then((r) => {
-    if (!r.ok) throw new Error(`HTTP ${r.status} fetching ${url}`);
-    return r.arrayBuffer();
-  });
-
-  const view = new DataView(raw);
-  const magic = view.getUint32(0, true);
-  if (magic !== 0x46546c67) return raw; // not GLB — pass through
-
-  const jsonChunkLength = view.getUint32(12, true);
-  const jsonBytes = new Uint8Array(raw, 20, jsonChunkLength);
-  let gltfJson: Record<string, unknown>;
-  try {
-    gltfJson = JSON.parse(new TextDecoder().decode(jsonBytes)) as Record<string, unknown>;
-  } catch {
-    return raw; // malformed JSON chunk — pass through
-  }
-
-  const extensions = gltfJson.extensions as Record<string, unknown> | undefined;
-  if (!extensions?.EXT_structural_metadata) return raw; // nothing to strip
-
-  const STRIP = ['EXT_structural_metadata', 'EXT_mesh_features'];
-  console.warn(`[loadGlbSafe] stripping ${STRIP.join(', ')} — malformed property table accessor indices`);
-
-  // Strip from top-level extensions, extensionsUsed, extensionsRequired.
-  const cleanedExtensions = {...extensions};
-  for (const ext of STRIP) delete cleanedExtensions[ext];
-  gltfJson = {
-    ...gltfJson,
-    extensions: cleanedExtensions,
-    extensionsUsed: ((gltfJson.extensionsUsed as string[] | undefined) ?? [])
-      .filter((e) => !STRIP.includes(e)),
-    extensionsRequired: ((gltfJson.extensionsRequired as string[] | undefined) ?? [])
-      .filter((e) => !STRIP.includes(e)),
-  };
-
-  // Strip EXT_mesh_features from every mesh primitive.
-  const meshes = gltfJson.meshes as Array<{primitives?: Array<{extensions?: Record<string, unknown>}>}> | undefined;
-  if (meshes) {
-    for (const mesh of meshes) {
-      for (const prim of mesh.primitives ?? []) {
-        if (prim.extensions) {
-          const primExts = {...prim.extensions};
-          for (const ext of STRIP) delete primExts[ext];
-          prim.extensions = primExts;
-        }
-      }
-    }
-  }
-
-  // Repack the JSON chunk (pad to 4-byte alignment with spaces per GLB spec).
-  const newJsonStr = JSON.stringify(gltfJson);
-  let jsonPadded = newJsonStr;
-  while (jsonPadded.length % 4 !== 0) jsonPadded += ' ';
-  const newJsonBytes = new TextEncoder().encode(jsonPadded);
-
-  const binOffset = 20 + jsonChunkLength;
-  const binBytes = new Uint8Array(raw, binOffset);
-  const totalLength = 12 + 8 + newJsonBytes.length + binBytes.length;
-
-  const out = new ArrayBuffer(totalLength);
-  const outView = new DataView(out);
-  const outBytes = new Uint8Array(out);
-
-  outView.setUint32(0, 0x46546c67, true); // magic 'glTF'
-  outView.setUint32(4, 2, true);           // version 2
-  outView.setUint32(8, totalLength, true);
-  outView.setUint32(12, newJsonBytes.length, true);
-  outView.setUint32(16, 0x4e4f534a, true); // chunk type 'JSON'
-  outBytes.set(newJsonBytes, 20);
-  outBytes.set(binBytes, 20 + newJsonBytes.length);
-
-  return out;
-}
-
 export function useTilesetManager() {
   const viewer = useStoreWithCesium((s) => s.cesium.viewer);
   const crossSectionPoints = useChemroomsStore(
@@ -493,16 +409,7 @@ export function useTilesetManager() {
       if (entry.hasFeatureMetadata) {
         if (next) {
           if (!modelRefs.current[name]) {
-            loadGlbSafe(fullUrl)
-              .then((buf) => {
-                // Wrap the patched ArrayBuffer in a blob URL so we can pass
-                // it to Model.fromGltfAsync, which only accepts a URL string.
-                // The blob is revoked once the promise settles.
-                const blob = new Blob([buf], {type: 'model/gltf-binary'});
-                const blobUrl = URL.createObjectURL(blob);
-                return Model.fromGltfAsync({url: blobUrl, backFaceCulling: false})
-                  .finally(() => URL.revokeObjectURL(blobUrl));
-              })
+            Model.fromGltfAsync({url: fullUrl, backFaceCulling: false})
               .then((model) => {
                 tilesetNameByInstance.set(model, name);
                 modelRefs.current[name] = model;
