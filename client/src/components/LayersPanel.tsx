@@ -389,24 +389,28 @@ export const LayersPanel: React.FC = () => {
                 >
                   {entry.name}
                 </span>
-                <input
-                  type="color"
-                  value={colors.top}
-                  onChange={(e) =>
-                    setTilesetColors(entry.name, e.target.value, colors.bottom)
-                  }
-                  className="h-4 w-5 cursor-pointer rounded-sm border border-border p-0"
-                  title="Outside / upward-facing color"
-                />
-                <input
-                  type="color"
-                  value={colors.bottom}
-                  onChange={(e) =>
-                    setTilesetColors(entry.name, colors.top, e.target.value)
-                  }
-                  className="h-4 w-5 cursor-pointer rounded-sm border border-border p-0"
-                  title="Inside / downward-facing color"
-                />
+                {!entry.hasFeatureMetadata && (
+                  <>
+                    <input
+                      type="color"
+                      value={colors.top}
+                      onChange={(e) =>
+                        setTilesetColors(entry.name, e.target.value, colors.bottom)
+                      }
+                      className="h-4 w-5 cursor-pointer rounded-sm border border-border p-0"
+                      title="Outside / upward-facing color"
+                    />
+                    <input
+                      type="color"
+                      value={colors.bottom}
+                      onChange={(e) =>
+                        setTilesetColors(entry.name, colors.top, e.target.value)
+                      }
+                      className="h-4 w-5 cursor-pointer rounded-sm border border-border p-0"
+                      title="Inside / downward-facing color"
+                    />
+                  </>
+                )}
               </div>
             );
           })}

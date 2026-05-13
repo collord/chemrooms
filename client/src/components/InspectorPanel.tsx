@@ -51,6 +51,9 @@ export const InspectorPanel: React.FC = () => {
   if (selectedEntity.kind === 'chemduck-location') {
     return <ChemduckLocationDetail entity={selectedEntity} />;
   }
+  if (selectedEntity.kind === 'tile-feature') {
+    return <TileFeatureDetail entity={selectedEntity} />;
+  }
   return <VectorFeatureDetail entity={selectedEntity} />;
 };
 
@@ -418,6 +421,51 @@ const VectorFeatureDetail: React.FC<{
         <div className="text-xs italic text-muted-foreground">
           No attribute columns are exposed for this feature. Configure the
           layer's <code>propertiesColumns</code> to pass columns through.
+        </div>
+      ) : (
+        <div className="rounded-md border">
+          <table className="w-full text-xs">
+            <tbody>
+              {entries.map(([key, value]) => (
+                <tr
+                  key={key}
+                  className="border-b last:border-b-0 hover:bg-muted/30"
+                >
+                  <td className="w-1/3 px-2 py-1 font-medium text-muted-foreground">
+                    {key}
+                  </td>
+                  <td className="px-2 py-1 font-mono text-[11px] break-all">
+                    {formatPropertyValue(value)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// 3D Tile / glTF feature variant
+// ---------------------------------------------------------------------------
+
+const TileFeatureDetail: React.FC<{
+  entity: Extract<SelectedEntity, {kind: 'tile-feature'}>;
+}> = ({entity}) => {
+  const entries = Object.entries(entity.properties);
+  return (
+    <div className="flex h-full flex-col gap-3 overflow-y-auto p-3 text-sm">
+      <SelectionHeader
+        icon={<Shapes className="h-4 w-4 text-primary" />}
+        title={`${entity.className} #${entity.featureId}`}
+        subtitle={entity.tilesetName}
+      />
+
+      {entries.length === 0 ? (
+        <div className="text-xs italic text-muted-foreground">
+          This feature exposes no properties via EXT_structural_metadata.
         </div>
       ) : (
         <div className="rounded-md border">

@@ -4,7 +4,9 @@
       "Bash(.venv/bin/python -c ':*)",
       "Bash(find /Users/collord/Documents/chemduck -name \"*.duckdb\" -exec ls -la {} \\\\;)",
       "Bash(.venv/bin/python tests/load_synthetic_data.py --database bluejacket_synth.duckdb)",
-      "Bash(pnpm test:run)"
+      "Bash(pnpm test:run)",
+      "Bash(cat /Users/collord/Documents/chemrooms/.claude/commands/*.md)",
+      "Bash(pnpm exec *)"
     ]
   }
 }

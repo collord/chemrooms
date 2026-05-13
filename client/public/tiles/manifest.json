@@ -3,6 +3,11 @@
     {
       "name": "local",
       "url": "tiles/local/tileset.json"
+    },
+    {
+      "name": "dmea23_fan",
+      "url": "tiles/local/dmea23_fan.glb",
+      "hasFeatureMetadata": true
     }
   ]
 }

@@ -26,6 +26,7 @@ import {
   ColorGeometryInstanceAttribute,
   ColorMaterialProperty,
   ConstantProperty,
+  ModelFeature,
   PerInstanceColorAppearance,
   PolylineColorAppearance,
   Primitive,
@@ -34,6 +35,7 @@ import {
   defined,
   type Viewer,
 } from 'cesium';
+import {tilesetNameByInstance} from './useTilesetManager';
 import {useSql} from '@sqlrooms/duckdb';
 import {
   useChemroomsStore,
@@ -183,10 +185,52 @@ export function useLocationClick() {
 
     handler.setInputAction((movement: {position: Cartesian2}) => {
       const picked = viewer.scene.pick(movement.position);
-      if (!defined(picked) || !picked.id) {
-        // Clicked empty space — deselect. The Cesium selection
-        // indicator is disabled elsewhere, so there's nothing to
-        // clear on that side.
+      if (!defined(picked)) {
+        setSelectedEntityInSlice(null);
+        return;
+      }
+
+      // 3D Tiles / glTF feature pick. EXT_structural_metadata +
+      // EXT_mesh_features make scene.pick return a ModelFeature
+      // carrying per-feature properties. Resolve the owning tileset
+      // (via the WeakMap populated in useTilesetManager) and the
+      // property-table class name (private field — defensive access).
+      if (picked instanceof ModelFeature) {
+        const ids = picked.getPropertyIds() ?? [];
+        const properties: Record<string, unknown> = {};
+        for (const id of ids) {
+          try {
+            properties[id] = picked.getProperty(id);
+          } catch {
+            // Skip ids that throw on access.
+          }
+        }
+        const model = (picked as unknown as {_model?: unknown})._model as
+          | {content?: {tileset?: unknown}}
+          | undefined;
+        const tileset = model?.content?.tileset as object | undefined;
+        const tilesetName =
+          (tileset && tilesetNameByInstance.get(tileset as never)) ?? 'unknown';
+        const propertyTable = (
+          picked as unknown as {
+            _featureTable?: {_propertyTable?: {class?: {id?: string; _id?: string}}};
+          }
+        )._featureTable?._propertyTable;
+        const className =
+          propertyTable?.class?.id ?? propertyTable?.class?._id ?? 'unknown';
+
+        setSelectedEntityInSlice({
+          kind: 'tile-feature',
+          tilesetName,
+          className,
+          featureId: picked.featureId,
+          properties,
+        });
+        return;
+      }
+
+      if (!picked.id) {
+        // Clicked empty space (or a primitive without metadata).
         setSelectedEntityInSlice(null);
         return;
       }

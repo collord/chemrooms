@@ -75,6 +75,10 @@ export interface AnalyteInfo {
  * - `vector-feature` → generic key/value attribute table. Triggered
  *   by clicking any geometry from a dropped geoparquet.
  *
+ * - `tile-feature` → key/value attribute table for a feature in a
+ *   3D Tiles / glTF mesh carrying EXT_structural_metadata +
+ *   EXT_mesh_features. Triggered by clicking the mesh surface.
+ *
  * Clicking empty space sets this to null.
  */
 export type SelectedEntity =
@@ -112,6 +116,21 @@ export type SelectedEntity =
        * reaches the slice — this object only contains user-visible
        * columns from the underlying parquet.
        */
+      properties: Record<string, unknown>;
+    }
+  | {
+      kind: 'tile-feature';
+      /** Manifest name of the tileset that owns this feature. */
+      tilesetName: string;
+      /**
+       * The EXT_structural_metadata class name (== property-table name)
+       * the feature belongs to. Derived from the picked feature's
+       * property-id set at click time.
+       */
+      className: string;
+      /** _FEATURE_ID_0 value — index into the property table. */
+      featureId: number;
+      /** All property values returned by Cesium3DTileFeature.getProperty. */
       properties: Record<string, unknown>;
     };
 

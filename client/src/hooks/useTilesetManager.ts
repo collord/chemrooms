@@ -24,7 +24,22 @@ export interface TilesetEntry {
   name: string;
   url: string; // relative to BASE_URL
   visible: boolean;
+  /**
+   * If true, the tileset's glTF/GLB carries EXT_structural_metadata +
+   * EXT_mesh_features and should keep its embedded materials (no
+   * top/bottom face-color shader). Per-feature picking will route to
+   * the Inspector's tile-feature variant.
+   */
+  hasFeatureMetadata?: boolean;
 }
+
+/**
+ * Reverse-lookup: Cesium3DTileset instance → manifest name. Populated
+ * when a tileset finishes loading; read by the click handler in
+ * useLocationClick so a picked Cesium3DTileFeature can be tagged with
+ * the originating tileset.
+ */
+export const tilesetNameByInstance = new WeakMap<Cesium3DTileset, string>();
 
 export interface TilesetColors {
   top: string;    // hex — outside / upward-facing surfaces
@@ -94,7 +109,10 @@ export function useTilesetManager() {
       .then((r) => (r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)))
       .then((data) => {
         const entries = (data.tilesets ?? []).map(
-          (t: {name: string; url: string}) => ({...t, visible: false}),
+          (t: {name: string; url: string; hasFeatureMetadata?: boolean}) => ({
+            ...t,
+            visible: false,
+          }),
         );
         setTilesets(entries);
       })
@@ -146,13 +164,22 @@ export function useTilesetManager() {
             .then((ts) => {
               ts.backFaceCulling = false;
 
-              // Apply face color shader with current or default colors.
-              const colors = tilesetColorsRef.current[name] ?? {
-                top: DEFAULT_TOP_COLOR,
-                bottom: DEFAULT_BOTTOM_COLOR,
-              };
-              ts.customShader = buildFaceColorShader(colors.top, colors.bottom);
+              // Tilesets that carry their own per-feature materials
+              // (EXT_structural_metadata + EXT_mesh_features) opt out of
+              // the top/bottom face-color shader so the embedded look
+              // is preserved and per-feature picking stays clean.
+              if (!entry.hasFeatureMetadata) {
+                const colors = tilesetColorsRef.current[name] ?? {
+                  top: DEFAULT_TOP_COLOR,
+                  bottom: DEFAULT_BOTTOM_COLOR,
+                };
+                ts.customShader = buildFaceColorShader(
+                  colors.top,
+                  colors.bottom,
+                );
+              }
 
+              tilesetNameByInstance.set(ts, name);
               tilesetRefs.current[name] = ts;
               viewer.scene.primitives.add(ts);
 
