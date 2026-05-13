@@ -213,16 +213,12 @@ function discoverSubNodes(model: Model): SubNodeInfo[] {
 }
 
 /**
- * Fetch a GLB and strip the entire EXT_structural_metadata extension before
- * passing it to Cesium. The extension's property tables in this file reference
- * accessor indices that don't exist (the accessor array has 43 entries but
- * indices up to 176 are referenced), causing Cesium's glTF loader to throw a
- * non-recoverable RangeError that aborts the entire model load. There is no
- * try-catch hook inside Cesium's accessor pipeline — the only control point is
- * here, before the bytes reach Cesium.
- *
- * EXT_mesh_features on the primitives is left intact so featureId picks still
- * work for selection highlighting; we just lose the property table values.
+ * Fetch a GLB and strip EXT_structural_metadata + EXT_mesh_features before
+ * passing it to Cesium. The property tables reference accessor indices that
+ * don't exist, causing a non-recoverable RangeError inside Cesium's accessor
+ * pipeline. EXT_mesh_features must also be stripped because Cesium's
+ * buildRenderResources reads featuresLength off the feature table — which is
+ * null when the structural metadata is absent — and throws a TypeError.
  */
 async function loadGlbSafe(url: string): Promise<ArrayBuffer> {
   const raw = await fetch(url).then((r) => {
@@ -246,25 +242,34 @@ async function loadGlbSafe(url: string): Promise<ArrayBuffer> {
   const extensions = gltfJson.extensions as Record<string, unknown> | undefined;
   if (!extensions?.EXT_structural_metadata) return raw; // nothing to strip
 
-  console.warn(
-    '[loadGlbSafe] stripping EXT_structural_metadata — property table ' +
-      'accessor indices are out of range and would cause a non-recoverable ' +
-      'RangeError in Cesium\'s glTF loader',
-  );
+  const STRIP = ['EXT_structural_metadata', 'EXT_mesh_features'];
+  console.warn(`[loadGlbSafe] stripping ${STRIP.join(', ')} — malformed property table accessor indices`);
 
-  // Remove the extension from the top-level extensions object.
+  // Strip from top-level extensions, extensionsUsed, extensionsRequired.
   const cleanedExtensions = {...extensions};
-  delete cleanedExtensions.EXT_structural_metadata;
+  for (const ext of STRIP) delete cleanedExtensions[ext];
   gltfJson = {
     ...gltfJson,
     extensions: cleanedExtensions,
-    // Also remove it from extensionsUsed / extensionsRequired so Cesium
-    // doesn't warn about an unsupported required extension.
     extensionsUsed: ((gltfJson.extensionsUsed as string[] | undefined) ?? [])
-      .filter((e) => e !== 'EXT_structural_metadata'),
+      .filter((e) => !STRIP.includes(e)),
     extensionsRequired: ((gltfJson.extensionsRequired as string[] | undefined) ?? [])
-      .filter((e) => e !== 'EXT_structural_metadata'),
+      .filter((e) => !STRIP.includes(e)),
   };
+
+  // Strip EXT_mesh_features from every mesh primitive.
+  const meshes = gltfJson.meshes as Array<{primitives?: Array<{extensions?: Record<string, unknown>}>}> | undefined;
+  if (meshes) {
+    for (const mesh of meshes) {
+      for (const prim of mesh.primitives ?? []) {
+        if (prim.extensions) {
+          const primExts = {...prim.extensions};
+          for (const ext of STRIP) delete primExts[ext];
+          prim.extensions = primExts;
+        }
+      }
+    }
+  }
 
   // Repack the JSON chunk (pad to 4-byte alignment with spaces per GLB spec).
   const newJsonStr = JSON.stringify(gltfJson);
