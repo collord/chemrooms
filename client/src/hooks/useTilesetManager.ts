@@ -14,7 +14,13 @@
  */
 
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {Cartesian3, Cesium3DTileset, CustomShader, UniformType} from 'cesium';
+import {
+  Cartesian3,
+  Cesium3DTileset,
+  CustomShader,
+  Model,
+  UniformType,
+} from 'cesium';
 import {useStoreWithCesium} from '@sqlrooms/cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
 import {applyClippingToTileset, planeFromPoints} from '../lib/clippingPlane';
@@ -52,12 +58,15 @@ export interface TilesetEntry {
 const tilesetBboxKey = (name: string) => `tileset:${name}`;
 
 /**
- * Reverse-lookup: Cesium3DTileset instance → manifest name. Populated
- * when a tileset finishes loading; read by the click handler in
- * useLocationClick so a picked Cesium3DTileFeature can be tagged with
- * the originating tileset.
+ * Reverse-lookup: loaded primitive (Cesium3DTileset OR Model) →
+ * manifest name. Populated when a primitive finishes loading; read by
+ * the click handler in useLocationClick so a picked ModelFeature can
+ * be tagged with the originating tileset name.
+ *
+ * A single WeakMap covers both kinds so the picker doesn't need to
+ * know which loader was used.
  */
-export const tilesetNameByInstance = new WeakMap<Cesium3DTileset, string>();
+export const tilesetNameByInstance = new WeakMap<object, string>();
 
 export interface TilesetColors {
   top: string;    // hex — outside / upward-facing surfaces
@@ -113,6 +122,13 @@ export function useTilesetManager() {
 
   const [tilesets, setTilesets] = useState<TilesetEntry[]>([]);
   const tilesetRefs = useRef<Record<string, Cesium3DTileset>>({});
+  /**
+   * Models loaded directly from a .glb (manifest entries with
+   * hasFeatureMetadata=true). Kept separate from tilesetRefs because
+   * Model and Cesium3DTileset have different APIs — clipping plane
+   * sync and the face-color shader only target Cesium3DTilesets.
+   */
+  const modelRefs = useRef<Record<string, Model>>({});
 
   // Per-tileset face colors. A ref keeps the value always current inside
   // the toggleTileset callback without adding it to the dep array.
@@ -137,7 +153,7 @@ export function useTilesetManager() {
       .catch((e) => console.warn('[tilesets] no manifest:', e));
   }, []);
 
-  // Clean up tilesets on unmount
+  // Clean up tilesets + models on unmount
   useEffect(() => {
     return () => {
       if (!viewer || viewer.isDestroyed()) return;
@@ -146,6 +162,11 @@ export function useTilesetManager() {
         setLayerBbox(tilesetBboxKey(name), null);
       }
       tilesetRefs.current = {};
+      for (const name of Object.keys(modelRefs.current)) {
+        viewer.scene.primitives.remove(modelRefs.current[name]);
+        setLayerBbox(tilesetBboxKey(name), null);
+      }
+      modelRefs.current = {};
     };
   }, [viewer]);
 
@@ -182,27 +203,49 @@ export function useTilesetManager() {
         setLayerBbox(tilesetBboxKey(name), next ? entry._extent_wgs84 : null);
       }
 
+      const fullUrl = `${BASE_URL}${entry.url}`;
+
+      // Metadata-carrying GLBs load as a Model — Cesium3DTileset.fromUrl
+      // only accepts a tileset.json. Models support EXT_structural_metadata
+      // and EXT_mesh_features natively and yield ModelFeature picks.
+      if (entry.hasFeatureMetadata) {
+        if (next) {
+          if (!modelRefs.current[name]) {
+            Model.fromGltfAsync({url: fullUrl, backFaceCulling: false})
+              .then((model) => {
+                tilesetNameByInstance.set(model, name);
+                modelRefs.current[name] = model;
+                viewer.scene.primitives.add(model);
+                console.log(`[tileset:${name}] loaded (model)`);
+              })
+              .catch((err) =>
+                console.error(`[tileset:${name}] failed:`, err),
+              );
+          } else {
+            modelRefs.current[name].show = true;
+          }
+        } else if (modelRefs.current[name]) {
+          modelRefs.current[name].show = false;
+        }
+        return;
+      }
+
+      // Default path: Cesium3DTileset for tileset.json roots. Gets the
+      // top/bottom face-color shader and participates in clipping sync.
       if (next) {
         if (!tilesetRefs.current[name]) {
-          const fullUrl = `${BASE_URL}${entry.url}`;
           Cesium3DTileset.fromUrl(fullUrl)
             .then((ts) => {
               ts.backFaceCulling = false;
 
-              // Tilesets that carry their own per-feature materials
-              // (EXT_structural_metadata + EXT_mesh_features) opt out of
-              // the top/bottom face-color shader so the embedded look
-              // is preserved and per-feature picking stays clean.
-              if (!entry.hasFeatureMetadata) {
-                const colors = tilesetColorsRef.current[name] ?? {
-                  top: DEFAULT_TOP_COLOR,
-                  bottom: DEFAULT_BOTTOM_COLOR,
-                };
-                ts.customShader = buildFaceColorShader(
-                  colors.top,
-                  colors.bottom,
-                );
-              }
+              const colors = tilesetColorsRef.current[name] ?? {
+                top: DEFAULT_TOP_COLOR,
+                bottom: DEFAULT_BOTTOM_COLOR,
+              };
+              ts.customShader = buildFaceColorShader(
+                colors.top,
+                colors.bottom,
+              );
 
               tilesetNameByInstance.set(ts, name);
               tilesetRefs.current[name] = ts;
@@ -235,10 +278,8 @@ export function useTilesetManager() {
         } else {
           tilesetRefs.current[name].show = true;
         }
-      } else {
-        if (tilesetRefs.current[name]) {
-          tilesetRefs.current[name].show = false;
-        }
+      } else if (tilesetRefs.current[name]) {
+        tilesetRefs.current[name].show = false;
       }
     },
     [tilesets, viewer, crossSectionPoints, crossSectionMode, sliceThicknessM],

@@ -205,12 +205,18 @@ export function useLocationClick() {
             // Skip ids that throw on access.
           }
         }
+        // The owning primitive lives at picked._model. For models
+        // loaded directly via Model.fromGltfAsync, the model itself is
+        // what we registered in tilesetNameByInstance. For 3D Tiles
+        // tilesets the registered object is model.content.tileset
+        // (one level up from the per-tile model).
         const model = (picked as unknown as {_model?: unknown})._model as
-          | {content?: {tileset?: unknown}}
+          | (object & {content?: {tileset?: object}})
           | undefined;
-        const tileset = model?.content?.tileset as object | undefined;
+        const ownerPrimitive = model?.content?.tileset ?? model;
         const tilesetName =
-          (tileset && tilesetNameByInstance.get(tileset as never)) ?? 'unknown';
+          (ownerPrimitive && tilesetNameByInstance.get(ownerPrimitive)) ??
+          'unknown';
         const propertyTable = (
           picked as unknown as {
             _featureTable?: {_propertyTable?: {class?: {id?: string; _id?: string}}};
