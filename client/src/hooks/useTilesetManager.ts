@@ -144,17 +144,30 @@ void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
 function discoverSubNodes(model: Model): SubNodeInfo[] {
   const sceneGraph = (model as unknown as {_sceneGraph?: unknown})._sceneGraph as
     | {
-        _runtimeNodes?: Array<{
-          _name?: string;
-          show?: boolean;
-          runtimePrimitives?: Array<{boundingSphere?: BoundingSphere}>;
-        }>;
+        _runtimeNodes?: Array<
+          | {
+              _name?: string;
+              show?: boolean;
+              runtimePrimitives?: Array<{boundingSphere?: BoundingSphere}>;
+            }
+          | undefined
+        >;
         components?: {
           scene?: {nodes?: Array<{name?: string}>};
+          nodes?: Array<{name?: string}>;
         };
       }
     | undefined;
-  if (!sceneGraph?._runtimeNodes) return [];
+  if (!sceneGraph) {
+    console.warn('[discoverSubNodes] no _sceneGraph on model');
+    return [];
+  }
+  const runtimeNodes = sceneGraph._runtimeNodes ?? [];
+  console.log(
+    `[discoverSubNodes] runtimeNodes=${runtimeNodes.length} ` +
+      `componentsNodes=${sceneGraph.components?.nodes?.length ?? 0} ` +
+      `sceneNodes=${sceneGraph.components?.scene?.nodes?.length ?? 0}`,
+  );
 
   // Build a featureCount lookup by class name from the property tables.
   const propertyTables = (
@@ -173,12 +186,16 @@ function discoverSubNodes(model: Model): SubNodeInfo[] {
   }
 
   const out: SubNodeInfo[] = [];
-  for (const runtime of sceneGraph._runtimeNodes) {
-    const name = runtime?._name;
+  const staticNodes = sceneGraph.components?.nodes ?? [];
+  for (let i = 0; i < runtimeNodes.length; i++) {
+    const runtime = runtimeNodes[i];
+    // Prefer the runtime node's name; fall back to the static glTF
+    // components.nodes[i].name (always present after parsing) so we
+    // still get the list even if runtime population is partial.
+    const name = runtime?._name ?? staticNodes[i]?.name;
     if (!name) continue;
-    // Union the bounding spheres of all primitives under this node.
     let sphere: BoundingSphere | undefined;
-    const prims = runtime.runtimePrimitives ?? [];
+    const prims = runtime?.runtimePrimitives ?? [];
     for (const p of prims) {
       if (!p.boundingSphere) continue;
       sphere = sphere
@@ -188,7 +205,7 @@ function discoverSubNodes(model: Model): SubNodeInfo[] {
     out.push({
       name,
       featureCount: countByClass.get(name),
-      visible: runtime.show ?? true,
+      visible: runtime?.show ?? true,
       boundingSphere: sphere,
     });
   }
@@ -405,15 +422,18 @@ export function useTilesetManager() {
                 // where _runtimeNodes is populated.
                 const populate = () => {
                   const discovered = discoverSubNodes(model);
+                  console.log(
+                    `[tileset:${name}] discovered ${discovered.length} sub-node(s)` +
+                      (discovered.length > 0
+                        ? `: ${discovered.map((n) => n.name).join(', ')}`
+                        : ''),
+                  );
                   if (discovered.length === 0) return;
                   subNodesRef.current = {
                     ...subNodesRef.current,
                     [name]: discovered,
                   };
                   setSubNodes(subNodesRef.current);
-                  console.log(
-                    `[tileset:${name}] discovered ${discovered.length} sub-node(s)`,
-                  );
                 };
                 if (model.ready) populate();
                 else model.readyEvent.addEventListener(populate);
