@@ -15,6 +15,7 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {
+  Axis,
   BoundingSphere,
   Cartesian3,
   Cesium3DTileset,
@@ -409,7 +410,7 @@ export function useTilesetManager() {
       if (entry.hasFeatureMetadata) {
         if (next) {
           if (!modelRefs.current[name]) {
-            Model.fromGltfAsync({url: fullUrl, backFaceCulling: false})
+            Model.fromGltfAsync({url: fullUrl, backFaceCulling: false, upAxis: Axis.Z, forwardAxis: Axis.X})
               .then((model) => {
                 tilesetNameByInstance.set(model, name);
                 modelRefs.current[name] = model;
