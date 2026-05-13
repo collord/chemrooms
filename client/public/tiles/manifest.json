@@ -2,12 +2,24 @@
   "tilesets": [
     {
       "name": "local",
-      "url": "tiles/local/tileset.json"
+      "url": "tiles/local/tileset.json",
+      "_extent_wgs84": {
+        "west": -116.15856651177894,
+        "south": 41.684768197220784,
+        "east": -116.10023327322108,
+        "north": 41.72032369477922
+      }
     },
     {
       "name": "dmea23_fan",
       "url": "tiles/local/dmea23_fan.glb",
-      "hasFeatureMetadata": true
+      "hasFeatureMetadata": true,
+      "_extent_wgs84": {
+        "west": -116.9861231731,
+        "south": 42.7096807502,
+        "east": -116.8946115445,
+        "north": 42.8045223346
+      }
     }
   ]
 }

@@ -19,6 +19,15 @@ import {useStoreWithCesium} from '@sqlrooms/cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
 import {applyClippingToTileset, planeFromPoints} from '../lib/clippingPlane';
 import type {CrossSectionMode} from '../slices/chemrooms-slice';
+import {setLayerBbox} from '../layers/layerBbox';
+
+/** WGS84 rectangle in degrees, optionally on a manifest entry. */
+export interface TilesetExtentWgs84 {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+}
 
 export interface TilesetEntry {
   name: string;
@@ -31,7 +40,16 @@ export interface TilesetEntry {
    * the Inspector's tile-feature variant.
    */
   hasFeatureMetadata?: boolean;
+  /**
+   * Optional WGS84 footprint. When present, the tileset contributes to
+   * the project bbox / zoomToFit union while visible. Authored in the
+   * manifest so we don't depend on Cesium's loose boundingSphere.
+   */
+  _extent_wgs84?: TilesetExtentWgs84;
 }
+
+/** layerBbox registry key for a tileset entry. */
+const tilesetBboxKey = (name: string) => `tileset:${name}`;
 
 /**
  * Reverse-lookup: Cesium3DTileset instance → manifest name. Populated
@@ -123,8 +141,9 @@ export function useTilesetManager() {
   useEffect(() => {
     return () => {
       if (!viewer || viewer.isDestroyed()) return;
-      for (const ts of Object.values(tilesetRefs.current)) {
-        viewer.scene.primitives.remove(ts);
+      for (const name of Object.keys(tilesetRefs.current)) {
+        viewer.scene.primitives.remove(tilesetRefs.current[name]);
+        setLayerBbox(tilesetBboxKey(name), null);
       }
       tilesetRefs.current = {};
     };
@@ -156,6 +175,12 @@ export function useTilesetManager() {
       setTilesets((prev) =>
         prev.map((t) => (t.name === name ? {...t, visible: next} : t)),
       );
+
+      // Tilesets contribute their authored WGS84 extent to the project
+      // bbox while visible, so zoomToFit frames them alongside data.
+      if (entry._extent_wgs84) {
+        setLayerBbox(tilesetBboxKey(name), next ? entry._extent_wgs84 : null);
+      }
 
       if (next) {
         if (!tilesetRefs.current[name]) {
