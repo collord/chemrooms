@@ -22,7 +22,6 @@ import {
   PerInstanceColorAppearance,
   Primitive,
   Transforms,
-  VertexFormat,
 } from 'cesium';
 import type {Model, Viewer} from 'cesium';
 
@@ -135,7 +134,7 @@ export async function buildGlbLineCylinders(
     const positions = readVec3Accessor(raw, binOffset, gltf.accessors, gltf.bufferViews, prim.attributes.POSITION);
     const indices = readIndexAccessor(raw, binOffset, gltf.accessors, gltf.bufferViews, prim.indices);
 
-    const vertexFormat = VertexFormat.POSITION_ONLY;
+    const vertexFormat = PerInstanceColorAppearance.VERTEX_FORMAT;
     const instances: GeometryInstance[] = [];
     const segCount = Math.floor(indices.length / 2);
 
