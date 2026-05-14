@@ -10,6 +10,7 @@
 
 import {
   Cartesian3,
+  Cartesian4,
   Color,
   ColorGeometryInstanceAttribute,
   CylinderGeometry,
@@ -169,11 +170,14 @@ export async function buildGlbLineCylinders(
       Cartesian3.normalize(ecefDir, ecefDir);
 
       // Convert ECEF direction to ENU components at midpoint, then to HPR.
-      const enu = Transforms.eastNorthUpToFixedFrame(mid);
-      // ENU columns: east=col0, north=col1, up=col2
-      const east  = new Cartesian3(enu[0], enu[1], enu[2]);
-      const north = new Cartesian3(enu[4], enu[5], enu[6]);
-      const up    = new Cartesian3(enu[8], enu[9], enu[10]);
+      const enuMat = Transforms.eastNorthUpToFixedFrame(mid);
+      // Extract column vectors (east=col0, north=col1, up=col2) as Cartesian3.
+      const enuEast4  = Matrix4.getColumn(enuMat, 0, new Cartesian4());
+      const enuNorth4 = Matrix4.getColumn(enuMat, 1, new Cartesian4());
+      const enuUp4    = Matrix4.getColumn(enuMat, 2, new Cartesian4());
+      const east  = new Cartesian3(enuEast4.x,  enuEast4.y,  enuEast4.z);
+      const north = new Cartesian3(enuNorth4.x, enuNorth4.y, enuNorth4.z);
+      const up    = new Cartesian3(enuUp4.x,    enuUp4.y,    enuUp4.z);
 
       const dE   = Cartesian3.dot(ecefDir, east);
       const dN   = Cartesian3.dot(ecefDir, north);

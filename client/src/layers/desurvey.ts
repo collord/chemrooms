@@ -319,21 +319,15 @@ export function offsetToGeo(
 
 /**
  * Convert a local tangent vector (dN, dE, dTVD per unit MD) into
- * (heading, pitch) for Cesium's HeadingPitchRoll.
+ * (heading, pitch) for Cesium's HeadingPitchRoll + CylinderGeometry.
  *
- * - heading: radians clockwise from north (atan2(dE, dN))
- * - pitch: radians from horizontal, negative = downward
- *   For CylinderGeometry whose axis is local "up", the pitch
- *   is actually the tilt from vertical:
- *   pitch = -(π/2 - acos(dTVD / |tangent|))
- *   which simplifies to: pitch = asin(dTVD / |tangent|) - π/2
+ * Cesium's HPR uses heading=0 → model +X = East (not compass North).
+ * CylinderGeometry axis is local +Z. At pitch=0 the axis is ENU up
+ * (vertical). pitch=-π/2 tips the axis into the horizontal plane
+ * along the heading direction.
  *
- * For a vertical segment (dN≈0, dE≈0, dTVD≈1): heading=0, pitch=0
- * (cylinder axis = up = vertical). Correct.
- *
- * For a horizontal segment heading north (dN≈1, dE≈0, dTVD≈0):
- * heading=0, pitch=-π/2. The cylinder tilts 90° from vertical
- * toward north.
+ * For a vertical segment (dTVD≈1): heading=0, pitch=0 → axis=up ✓
+ * For a North-pointing horizontal segment (dN≈1): heading=-π/2, pitch=-π/2 → axis=North ✓
  */
 export function tangentToHPR(
   tangentN: number,
@@ -343,8 +337,9 @@ export function tangentToHPR(
   const mag = Math.sqrt(tangentN ** 2 + tangentE ** 2 + tangentTVD ** 2);
   if (mag < 1e-10) return {heading: 0, pitch: 0};
 
-  // Heading: direction in the horizontal plane
-  const heading = Math.atan2(tangentE, tangentN);
+  // Heading in Cesium's HPR convention: 0 = East, clockwise.
+  // atan2(E, N) gives compass heading (0=North); subtract π/2 to convert.
+  const heading = Math.atan2(tangentE, tangentN) - Math.PI / 2;
 
   // Pitch: angle from vertical. CylinderGeometry axis = up.
   // When tangent is purely vertical (TVD component dominates),
