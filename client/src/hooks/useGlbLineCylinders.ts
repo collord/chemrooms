@@ -1,15 +1,11 @@
 /**
  * Build Cesium cylinder primitives from LINES primitives in a Leapfrog GLB.
  *
- * Leapfrog exports borehole intervals as glTF LINES primitives. The sidecar
- * .views.json carries per-shape cylinder_radius_m and a
- * placement_matrix_4x4_column_major that transforms local scene coordinates
- * to ECEF. We read the vertex positions and index buffer directly from the
- * GLB binary, apply the placement matrix, and build one CylinderGeometry
- * instance per segment, batched into a single Primitive per shape.
- *
- * The Model's LINES nodes are hidden after the cylinders are added so we
- * don't render both.
+ * Leapfrog exports borehole intervals as glTF LINES primitives. Duplicate
+ * node names exist (drillholes + drillholes-trace); we process only the
+ * first occurrence of each name. The sidecar .views.json carries per-shape
+ * cylinder_radius_m and a placement_matrix_4x4_column_major that transforms
+ * local scene coordinates to ECEF.
  */
 
 import {
@@ -18,12 +14,15 @@ import {
   ColorGeometryInstanceAttribute,
   CylinderGeometry,
   GeometryInstance,
+  HeadingPitchRoll,
+  Matrix3,
   Matrix4,
   PerInstanceColorAppearance,
   Primitive,
   Transforms,
 } from 'cesium';
 import type {Model, Viewer} from 'cesium';
+import {tangentToHPR} from '../layers/desurvey';
 
 interface SidecarShape {
   name: string;
@@ -41,7 +40,6 @@ interface Sidecar {
 
 const CYLINDER_SLICES = 8;
 
-/** Read a float32 vec3 accessor from a GLB ArrayBuffer. */
 function readVec3Accessor(
   raw: ArrayBuffer,
   binOffset: number,
@@ -55,7 +53,6 @@ function readVec3Accessor(
   return new Float32Array(raw, off, a.count * 3);
 }
 
-/** Read a uint16 or uint32 index accessor from a GLB ArrayBuffer. */
 function readIndexAccessor(
   raw: ArrayBuffer,
   binOffset: number,
@@ -70,11 +67,6 @@ function readIndexAccessor(
   return new Uint32Array(raw, off, a.count);
 }
 
-/**
- * Parse a GLB ArrayBuffer and build Cesium cylinder Primitives for each
- * LINES node that has a matching sidecar shape with cylinder_radius_m.
- * Returns the primitives added (caller is responsible for cleanup).
- */
 export async function buildGlbLineCylinders(
   glbUrl: string,
   sidecarUrl: string,
@@ -86,39 +78,49 @@ export async function buildGlbLineCylinders(
     fetch(sidecarUrl).then((r) => r.json() as Promise<Sidecar>),
   ]);
 
-  // Parse GLB JSON chunk.
   const jsonChunkLen = new DataView(raw).getUint32(12, true);
-  const gltf = JSON.parse(new TextDecoder().decode(new Uint8Array(raw, 20, jsonChunkLen))) as {
+  const gltf = JSON.parse(
+    new TextDecoder().decode(new Uint8Array(raw, 20, jsonChunkLen)),
+  ) as {
     accessors: Array<{count: number; bufferView: number; byteOffset?: number; componentType: number; type: string}>;
     bufferViews: Array<{byteOffset?: number}>;
     meshes: Array<{primitives: Array<{mode?: number; attributes: {POSITION: number}; indices?: number}>}>;
-    nodes: Array<{name?: string; mesh?: number; translation?: [number, number, number]}>;
+    nodes: Array<{name?: string; mesh?: number}>;
   };
 
-  const binOffset = 20 + jsonChunkLen + 8; // skip JSON chunk header + BIN chunk header
+  const binOffset = 20 + jsonChunkLen + 8;
 
-  // Build placement Matrix4 from sidecar (column-major).
   const rawMat = sidecar.coordinate_system?.placement_matrix_4x4_column_major;
   const placementMatrix = rawMat
     ? Matrix4.fromColumnMajorArray(rawMat)
     : Matrix4.IDENTITY.clone();
 
-  // Index sidecar shapes by name for quick lookup.
+  // Extract the 3×3 rotation part for transforming direction vectors
+  // (directions are unaffected by translation).
+  const placementRotation = Matrix4.getMatrix3(placementMatrix, new Matrix3());
+
   const shapeByName = new Map<string, SidecarShape>();
   for (const s of sidecar.shapes) shapeByName.set(s.name, s);
 
   const added: Primitive[] = [];
+  // Track which node names we've already processed to skip duplicates.
+  const processedNames = new Set<string>();
 
   for (const node of gltf.nodes) {
     if (node.mesh == null || !node.name) continue;
-    const mesh = gltf.meshes[node.mesh];
 
-    // Only process the first (drillholes) primitive — skip the trace primitive.
+    // Skip duplicate node names — Leapfrog emits drillholes + drillholes-trace
+    // as separate nodes with the same name. We only want the first (drillholes).
+    if (processedNames.has(node.name)) continue;
+
+    const mesh = gltf.meshes[node.mesh];
     const prim = mesh.primitives[0];
     if ((prim.mode ?? 4) !== 1) continue; // 1 = LINES
 
     const shape = shapeByName.get(node.name);
     if (!shape?.cylinder_radius_m) continue;
+
+    processedNames.add(node.name);
 
     const radius = shape.cylinder_radius_m;
     const colour = shape.flat_colour
@@ -134,41 +136,52 @@ export async function buildGlbLineCylinders(
     const positions = readVec3Accessor(raw, binOffset, gltf.accessors, gltf.bufferViews, prim.attributes.POSITION);
     const indices = readIndexAccessor(raw, binOffset, gltf.accessors, gltf.bufferViews, prim.indices);
 
-    const vertexFormat = PerInstanceColorAppearance.VERTEX_FORMAT;
     const instances: GeometryInstance[] = [];
     const segCount = Math.floor(indices.length / 2);
 
-    const pA = new Cartesian3();
-    const pB = new Cartesian3();
+    const localA = new Cartesian3();
+    const localB = new Cartesian3();
+    const ecefA = new Cartesian3();
+    const ecefB = new Cartesian3();
     const mid = new Cartesian3();
-    const scratch = new Cartesian3();
+    const localDir = new Cartesian3();
+    const ecefDir = new Cartesian3();
 
     for (let si = 0; si < segCount; si++) {
       const iA = indices[si * 2];
       const iB = indices[si * 2 + 1];
 
-      // Vertex positions in local scene space.
-      Cartesian3.fromArray(positions as unknown as number[], iA * 3, pA);
-      Cartesian3.fromArray(positions as unknown as number[], iB * 3, pB);
+      Cartesian3.fromArray(positions as unknown as number[], iA * 3, localA);
+      Cartesian3.fromArray(positions as unknown as number[], iB * 3, localB);
 
-      // Transform to ECEF via placement matrix.
-      Matrix4.multiplyByPoint(placementMatrix, pA, pA);
-      Matrix4.multiplyByPoint(placementMatrix, pB, pB);
+      // Transform points to ECEF.
+      Matrix4.multiplyByPoint(placementMatrix, localA, ecefA);
+      Matrix4.multiplyByPoint(placementMatrix, localB, ecefB);
 
-      const length = Cartesian3.distance(pA, pB);
-      if (length < 0.01) continue; // degenerate
+      const length = Cartesian3.distance(ecefA, ecefB);
+      if (length < 0.01) continue;
 
-      Cartesian3.midpoint(pA, pB, mid);
+      Cartesian3.midpoint(ecefA, ecefB, mid);
 
-      // Axis direction from A to B.
-      Cartesian3.subtract(pB, pA, scratch);
-      Cartesian3.normalize(scratch, scratch);
+      // Segment direction in local space → rotate to ECEF (no translation).
+      Cartesian3.subtract(localB, localA, localDir);
+      Cartesian3.normalize(localDir, localDir);
+      Matrix3.multiplyByVector(placementRotation, localDir, ecefDir);
+      Cartesian3.normalize(ecefDir, ecefDir);
 
-      // Build a modelMatrix oriented along the segment axis.
-      // Cesium cylinders are built along the local Z axis, so we need
-      // headingPitchRoll relative to ENU at the midpoint.
-      // Simpler: use a direct rotation matrix from world Z to segment direction.
-      const modelMatrix = buildSegmentMatrix(mid, scratch, length);
+      // Convert ECEF direction to ENU components at midpoint, then to HPR.
+      const enu = Transforms.eastNorthUpToFixedFrame(mid);
+      // ENU columns: east=col0, north=col1, up=col2
+      const east  = new Cartesian3(enu[0], enu[1], enu[2]);
+      const north = new Cartesian3(enu[4], enu[5], enu[6]);
+      const up    = new Cartesian3(enu[8], enu[9], enu[10]);
+
+      const dE   = Cartesian3.dot(ecefDir, east);
+      const dN   = Cartesian3.dot(ecefDir, north);
+      const dTVD = -Cartesian3.dot(ecefDir, up); // TVD positive = downward
+
+      const {heading, pitch} = tangentToHPR(dN, dE, dTVD);
+      const hpr = new HeadingPitchRoll(heading, pitch, 0);
 
       instances.push(
         new GeometryInstance({
@@ -177,9 +190,9 @@ export async function buildGlbLineCylinders(
             topRadius: radius,
             bottomRadius: radius,
             slices: CYLINDER_SLICES,
-            vertexFormat,
+            vertexFormat: PerInstanceColorAppearance.VERTEX_FORMAT,
           }),
-          modelMatrix,
+          modelMatrix: Transforms.headingPitchRollToFixedFrame(mid, hpr),
           attributes: {
             color: ColorGeometryInstanceAttribute.fromColor(colour),
           },
@@ -189,12 +202,11 @@ export async function buildGlbLineCylinders(
 
     if (instances.length === 0) continue;
 
-    // Hide the corresponding Model node so we don't render both.
     try {
       const modelNode = model.getNode(node.name);
       if (modelNode) modelNode.show = false;
     } catch {
-      // Node may not be accessible yet — not critical.
+      // Not critical if node isn't accessible yet.
     }
 
     const primitive = new Primitive({
@@ -211,49 +223,4 @@ export async function buildGlbLineCylinders(
   }
 
   return added;
-}
-
-/**
- * Build a modelMatrix that places a cylinder (Cesium local Z-axis) along
- * `direction` in ECEF, centred at `midpoint`.
- *
- * Cesium's CylinderGeometry is built along +Z in local space. We want it
- * along `direction` in world space. Strategy: use ENU frame at midpoint as
- * the reference, then rotate the local Z onto the segment direction.
- */
-function buildSegmentMatrix(
-  midpoint: Cartesian3,
-  direction: Cartesian3,
-  _length: number,
-): Matrix4 {
-  // ENU frame at midpoint (east, north, up columns → local X, Y, Z).
-  const enu = Transforms.eastNorthUpToFixedFrame(midpoint);
-
-  // We need the rotation R such that R * [0,0,1]^T = direction_local,
-  // where direction_local = enu^-1 * direction_world.
-  // Easier: just construct the 3×3 rotation from the segment axis directly.
-  //
-  // Local cylinder Z = direction (world). Pick an arbitrary perpendicular
-  // for X (use ENU 'east' if not parallel, else 'north').
-  const worldZ = direction; // already normalised
-
-  // Extract ENU east (first column of enu matrix) as a candidate 'up' for cross.
-  const east = new Cartesian3(enu[0], enu[1], enu[2]);
-  let worldX = new Cartesian3();
-  Cartesian3.cross(worldZ, east, worldX);
-  if (Cartesian3.magnitude(worldX) < 1e-6) {
-    const north = new Cartesian3(enu[4], enu[5], enu[6]);
-    Cartesian3.cross(worldZ, north, worldX);
-  }
-  Cartesian3.normalize(worldX, worldX);
-  const worldY = Cartesian3.cross(worldZ, worldX, new Cartesian3());
-  Cartesian3.normalize(worldY, worldY);
-
-  // Build column-major Matrix4: [X | Y | Z | T]
-  return new Matrix4(
-    worldX.x, worldY.x, worldZ.x, midpoint.x,
-    worldX.y, worldY.y, worldZ.y, midpoint.y,
-    worldX.z, worldY.z, worldZ.z, midpoint.z,
-    0,         0,         0,        1,
-  );
 }

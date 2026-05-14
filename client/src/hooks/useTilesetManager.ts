@@ -185,14 +185,16 @@ function discoverSubNodes(model: Model): SubNodeInfo[] {
   }
 
   const out: SubNodeInfo[] = [];
+  const seenNames = new Set<string>();
   const staticNodes = sceneGraph.components?.nodes ?? [];
   for (let i = 0; i < runtimeNodes.length; i++) {
     const runtime = runtimeNodes[i];
-    // Prefer the runtime node's name; fall back to the static glTF
-    // components.nodes[i].name (always present after parsing) so we
-    // still get the list even if runtime population is partial.
     const name = runtime?._name ?? staticNodes[i]?.name;
     if (!name) continue;
+    // Leapfrog emits duplicate node names (drillholes + drillholes-trace).
+    // Show only the first occurrence in the tree.
+    if (seenNames.has(name)) continue;
+    seenNames.add(name);
     let sphere: BoundingSphere | undefined;
     const prims = runtime?.runtimePrimitives ?? [];
     for (const p of prims) {
