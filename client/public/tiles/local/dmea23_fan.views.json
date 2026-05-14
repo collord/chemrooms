@@ -1,0 +1,760 @@
+{
+  "format": "openlfview.views/1",
+  "source": {
+    "generator": "Leapfrog Geo 5.0.1 (build 19.3.1.36202)",
+    "created": "2019-10-20T16:54:52"
+  },
+  "scene": {
+    "name": "MB5_az152_fan",
+    "description": null,
+    "bbox": {
+      "min": [
+        2299945.0,
+        385566.8,
+        3982.3735289113242
+      ],
+      "max": [
+        2315493.89,
+        415931.0,
+        7805.50912608
+      ]
+    },
+    "axes_labels": {
+      "x": "East (X)",
+      "y": "North (Y)",
+      "z": "Elev (Z)"
+    },
+    "display": {
+      "show_compass_ball": true,
+      "show_scale_bar": true,
+      "show_viewing_angle": true
+    },
+    "camera": {
+      "centre": [
+        2311289.5937959654,
+        393880.9861228533,
+        6751.181610123879
+      ],
+      "radius": 368.5529347644277,
+      "projection": "orthographic",
+      "rotate_axis": {
+        "up": "z",
+        "azimuth_deg": 46.32612966601178,
+        "elevation_deg": 18.321428571428573
+      }
+    }
+  },
+  "colourings": [
+    {
+      "category": "Lith1",
+      "entries": [
+        {
+          "name": "AP",
+          "colour": [
+            1.0,
+            1.0,
+            0.567
+          ]
+        },
+        {
+          "name": "APL",
+          "colour": [
+            1.0,
+            1.0,
+            0.1
+          ]
+        },
+        {
+          "name": "BXA",
+          "colour": [
+            1.0,
+            0.647,
+            0.0
+          ]
+        },
+        {
+          "name": "DA",
+          "colour": [
+            0.333,
+            1.0,
+            0.667
+          ]
+        },
+        {
+          "name": "Dk",
+          "colour": [
+            0.535,
+            1.0,
+            0.535
+          ]
+        },
+        {
+          "name": "FLT",
+          "colour": [
+            0.567,
+            1.0,
+            0.783
+          ]
+        },
+        {
+          "name": "GD",
+          "colour": [
+            1.0,
+            0.567,
+            0.567
+          ]
+        },
+        {
+          "name": "GG",
+          "colour": [
+            1.0,
+            0.647,
+            0.0
+          ]
+        },
+        {
+          "name": "GOS",
+          "colour": [
+            1.0,
+            0.333,
+            0.667
+          ]
+        },
+        {
+          "name": "HFL",
+          "colour": [
+            0.783,
+            1.0,
+            0.567
+          ]
+        },
+        {
+          "name": "Hgbt",
+          "colour": [
+            0.567,
+            0.567,
+            1.0
+          ]
+        },
+        {
+          "name": "Hgbt-Mbl",
+          "colour": [
+            1.0,
+            0.333,
+            0.333
+          ]
+        },
+        {
+          "name": "Hgbt-Scht",
+          "colour": [
+            0.333,
+            1.0,
+            0.333
+          ]
+        },
+        {
+          "name": "LG",
+          "colour": [
+            0.333,
+            0.333,
+            1.0
+          ]
+        },
+        {
+          "name": "M$",
+          "colour": [
+            1.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "MB",
+          "colour": [
+            0.003,
+            0.976,
+            1.0
+          ]
+        },
+        {
+          "name": "MBL",
+          "colour": [
+            0.022,
+            0.994,
+            0.994
+          ]
+        },
+        {
+          "name": "MS",
+          "colour": [
+            1.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "MSF",
+          "colour": [
+            1.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "MSS",
+          "colour": [
+            1.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "NR",
+          "colour": [
+            0.55,
+            1.0,
+            0.1
+          ]
+        },
+        {
+          "name": "PP",
+          "colour": [
+            0.333,
+            0.667,
+            1.0
+          ]
+        },
+        {
+          "name": "QZ",
+          "colour": [
+            1.0,
+            0.1,
+            1.0
+          ]
+        },
+        {
+          "name": "QZT",
+          "colour": [
+            0.1,
+            0.1,
+            1.0
+          ]
+        },
+        {
+          "name": "RY",
+          "colour": [
+            0.976,
+            0.879,
+            0.896
+          ]
+        },
+        {
+          "name": "SC",
+          "colour": [
+            0.498,
+            0.498,
+            0.498
+          ]
+        },
+        {
+          "name": "Scht",
+          "colour": [
+            0.498,
+            0.498,
+            0.498
+          ]
+        },
+        {
+          "name": "SK",
+          "colour": [
+            0.565,
+            0.565,
+            1.0
+          ]
+        },
+        {
+          "name": "SKH",
+          "colour": [
+            0.502,
+            0.0,
+            0.502
+          ]
+        },
+        {
+          "name": "SKN",
+          "colour": [
+            0.83,
+            0.176,
+            0.83
+          ]
+        },
+        {
+          "name": "SMS",
+          "colour": [
+            1.0,
+            0.783,
+            0.567
+          ]
+        },
+        {
+          "name": "SS",
+          "colour": [
+            0.567,
+            1.0,
+            0.567
+          ]
+        },
+        {
+          "name": "TC",
+          "colour": [
+            1.0,
+            1.0,
+            0.333
+          ]
+        },
+        {
+          "name": "Tf",
+          "colour": [
+            1.0,
+            0.55,
+            0.1
+          ]
+        },
+        {
+          "name": "TIR",
+          "colour": [
+            0.1,
+            1.0,
+            0.1
+          ]
+        },
+        {
+          "name": "VUG",
+          "colour": [
+            1.0,
+            0.667,
+            0.333
+          ]
+        }
+      ]
+    }
+  ],
+  "shapes": [
+    {
+      "name": "Lithology_Master",
+      "visible": true,
+      "alpha": 1.0,
+      "colouring_name": "Lith1",
+      "flat_colour": null,
+      "flat_back_colour": null,
+      "face_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "outline_colour": null,
+      "geometry_kinds": [
+        "lines"
+      ],
+      "raw_xml": "<shape>\n    <name>Lithology_Master</name>\n    <alpha>+1</alpha>\n    <visible>true</visible>\n    <icon><pixels idref=\"icon_lf-drillhole-table_lf-error-overlay\" /></icon>\n    <colouring_name>Lith1</colouring_name>\n    <lines class=\"drillholes\">\n      <capping>ends</capping>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>true</show-faces>\n        <line-width>+2</line-width>\n        <face-colour>0.500 0.500 0.500</face-colour>\n      </slicing>\n      <selection>\n        <groups><per-primitive><array idref=\"array_3\" /></per-primitive></groups>\n        <detail>\n          <name>Location</name>\n          <value><location /></value>\n        </detail>\n        <detail>\n          <name>id</name>\n          <value><strings><paged-stringlist idref=\"pstrings_0\" /></strings></value>\n        </detail>\n        <detail>\n          <name>holeid</name>\n          <value><strings><paged-stringlist idref=\"pstrings_1\" /></strings></value>\n        </detail>\n        <detail>\n          <name>from</name>\n          <value><strings><paged-stringlist idref=\"pstrings_2\" /></strings></value>\n        </detail>\n        <detail>\n          <name>to</name>\n          <value><strings><paged-stringlist idref=\"pstrings_3\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Lith_From_m</name>\n          <value><strings><paged-stringlist idref=\"pstrings_4\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Lith_To_m</name>\n          <value><strings><paged-stringlist idref=\"pstrings_5\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Lith_Interval</name>\n          <value><strings><paged-stringlist idref=\"pstrings_6\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Lith1</name>\n          <value><strings><paged-stringlist idref=\"pstrings_7\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Lith1_pc</name>\n          <value><strings><paged-stringlist idref=\"pstrings_8\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Lith1_Texture</name>\n          <value><strings><paged-stringlist idref=\"pstrings_9\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Lith1_Mod</name>\n          <value><strings><paged-stringlist idref=\"pstrings_10\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Lith2</name>\n          <value><strings><paged-stringlist idref=\"pstrings_11\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Lith2_pc</name>\n          <value><strings><paged-stringlist idref=\"pstrings_12\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Lith2_Texture</name>\n          <value><strings><paged-stringlist idref=\"pstrings_13\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Lith2_Mod</name>\n          <value><strings><paged-stringlist idref=\"pstrings_10\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Lith_Total_pc</name>\n          <value><strings><paged-stringlist idref=\"pstrings_14\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Contact</name>\n          <value><strings><paged-stringlist idref=\"pstrings_15\" /></strings></value>\n        </detail>\n        <detail>\n          <name>VERSION</name>\n          <value><strings><paged-stringlist idref=\"pstrings_16\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Comments</name>\n          <value><strings><paged-stringlist idref=\"pstrings_17\" /></strings></value>\n        </detail>\n      </selection>\n      <cylinders><radius>+2</radius></cylinders>\n      <locations><array idref=\"array_0\" /></locations>\n      <segments><array idref=\"array_1\" /></segments>\n      <segment-colours><array idref=\"array_2\" /></segment-colours>\n      <find-primitive-enabled>true</find-primitive-enabled>\n      <lines-consectutive>true</lines-consectutive>\n    </lines>\n  </shape>\n  ",
+      "cylinder_radius_m": 2.0
+    },
+    {
+      "name": "11_1_mb3",
+      "visible": true,
+      "alpha": 1.0,
+      "colouring_name": "Flat colour",
+      "flat_colour": [
+        0.949,
+        0.333,
+        0.333
+      ],
+      "flat_back_colour": [
+        0.322,
+        0.624,
+        0.922
+      ],
+      "face_colour": [
+        0.949,
+        0.333,
+        0.333
+      ],
+      "outline_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "geometry_kinds": [
+        "mesh"
+      ],
+      "raw_xml": "<shape>\n    <name>11_1_mb3</name>\n    <alpha>+1</alpha>\n    <visible>true</visible>\n    <icon><pixels idref=\"icon_lf-mesh\" /></icon>\n    <colouring_name>Flat colour</colouring_name>\n    <mesh class=\"\">\n      <shading>smooth</shading>\n      <locations><array idref=\"array_23\" /></locations>\n      <faces><array idref=\"array_24\" /></faces>\n      <show-faces>true</show-faces>\n      <show-edges>false</show-edges>\n      <edge-width>2</edge-width>\n      <outline-colour>0.500 0.500 0.500</outline-colour>\n      <backface-cull>false</backface-cull>\n      <polygon-offset>+1 +1</polygon-offset>\n      <depth-offset>\n        <front>4</front>\n        <back>4</back>\n      </depth-offset>\n      <lighting>\n        <enabled>true</enabled>\n        <specular>+0.6</specular>\n      </lighting>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>false</show-faces>\n        <line-width>+3</line-width>\n        <face-colour>0.949 0.333 0.333</face-colour>\n      </slicing>\n      <selection>\n        <detail>\n          <name>Location</name>\n          <value><location /></value>\n        </detail>\n        <detail>\n          <name>Face dip</name>\n          <value><numeric>\n            <per>group</per>\n            <array idref=\"array_25\" />\n          </numeric></value>\n        </detail>\n        <detail>\n          <name>Volume</name>\n          <value><string>15,785</string></value>\n        </detail>\n        <detail>\n          <name>Area</name>\n          <value><string>4862.1</string></value>\n        </detail>\n        <detail>\n          <name>Parts</name>\n          <value><string>1</string></value>\n        </detail>\n      </selection>\n      <flat>\n        <colour>0.949 0.333 0.333</colour>\n        <back-colour>0.322 0.624 0.922</back-colour>\n      </flat>\n      <find-primitive-enabled>true</find-primitive-enabled>\n    </mesh>\n  </shape>\n  "
+    },
+    {
+      "name": "11_1_MB4",
+      "visible": true,
+      "alpha": 1.0,
+      "colouring_name": "Flat colour",
+      "flat_colour": [
+        0.949,
+        0.333,
+        0.333
+      ],
+      "flat_back_colour": [
+        0.322,
+        0.624,
+        0.922
+      ],
+      "face_colour": [
+        0.949,
+        0.333,
+        0.333
+      ],
+      "outline_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "geometry_kinds": [
+        "mesh"
+      ],
+      "raw_xml": "<shape>\n    <name>11_1_MB4</name>\n    <alpha>+1</alpha>\n    <visible>true</visible>\n    <icon><pixels idref=\"icon_lf-mesh\" /></icon>\n    <colouring_name>Flat colour</colouring_name>\n    <mesh class=\"\">\n      <shading>smooth</shading>\n      <locations><array idref=\"array_26\" /></locations>\n      <faces><array idref=\"array_27\" /></faces>\n      <show-faces>true</show-faces>\n      <show-edges>false</show-edges>\n      <edge-width>2</edge-width>\n      <outline-colour>0.500 0.500 0.500</outline-colour>\n      <backface-cull>false</backface-cull>\n      <polygon-offset>+1 +1</polygon-offset>\n      <depth-offset>\n        <front>4</front>\n        <back>4</back>\n      </depth-offset>\n      <lighting>\n        <enabled>true</enabled>\n        <specular>+0.6</specular>\n      </lighting>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>false</show-faces>\n        <line-width>+3</line-width>\n        <face-colour>0.949 0.333 0.333</face-colour>\n      </slicing>\n      <selection>\n        <detail>\n          <name>Location</name>\n          <value><location /></value>\n        </detail>\n        <detail>\n          <name>Face dip</name>\n          <value><numeric>\n            <per>group</per>\n            <array idref=\"array_28\" />\n          </numeric></value>\n        </detail>\n        <detail>\n          <name>Volume</name>\n          <value><string>15,260</string></value>\n        </detail>\n        <detail>\n          <name>Area</name>\n          <value><string>4857.5</string></value>\n        </detail>\n        <detail>\n          <name>Parts</name>\n          <value><string>1</string></value>\n        </detail>\n      </selection>\n      <flat>\n        <colour>0.949 0.333 0.333</colour>\n        <back-colour>0.322 0.624 0.922</back-colour>\n      </flat>\n      <find-primitive-enabled>true</find-primitive-enabled>\n    </mesh>\n  </shape>\n  "
+    },
+    {
+      "name": "11_1_MB5_aux",
+      "visible": true,
+      "alpha": 1.0,
+      "colouring_name": "Flat colour",
+      "flat_colour": [
+        0.949,
+        0.333,
+        0.333
+      ],
+      "flat_back_colour": [
+        0.322,
+        0.624,
+        0.922
+      ],
+      "face_colour": [
+        0.949,
+        0.333,
+        0.333
+      ],
+      "outline_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "geometry_kinds": [
+        "mesh"
+      ],
+      "raw_xml": "<shape>\n    <name>11_1_MB5_aux</name>\n    <alpha>+1</alpha>\n    <visible>true</visible>\n    <icon><pixels idref=\"icon_lf-mesh\" /></icon>\n    <colouring_name>Flat colour</colouring_name>\n    <mesh class=\"\">\n      <shading>smooth</shading>\n      <locations><array idref=\"array_29\" /></locations>\n      <faces><array idref=\"array_30\" /></faces>\n      <show-faces>true</show-faces>\n      <show-edges>false</show-edges>\n      <edge-width>2</edge-width>\n      <outline-colour>0.500 0.500 0.500</outline-colour>\n      <backface-cull>false</backface-cull>\n      <polygon-offset>+1 +1</polygon-offset>\n      <depth-offset>\n        <front>4</front>\n        <back>4</back>\n      </depth-offset>\n      <lighting>\n        <enabled>true</enabled>\n        <specular>+0.6</specular>\n      </lighting>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>false</show-faces>\n        <line-width>+3</line-width>\n        <face-colour>0.949 0.333 0.333</face-colour>\n      </slicing>\n      <selection>\n        <detail>\n          <name>Location</name>\n          <value><location /></value>\n        </detail>\n        <detail>\n          <name>Face dip</name>\n          <value><numeric>\n            <per>group</per>\n            <array idref=\"array_31\" />\n          </numeric></value>\n        </detail>\n        <detail>\n          <name>Volume</name>\n          <value><string>8,275</string></value>\n        </detail>\n        <detail>\n          <name>Area</name>\n          <value><string>2864.3</string></value>\n        </detail>\n        <detail>\n          <name>Parts</name>\n          <value><string>1</string></value>\n        </detail>\n      </selection>\n      <flat>\n        <colour>0.949 0.333 0.333</colour>\n        <back-colour>0.322 0.624 0.922</back-colour>\n      </flat>\n      <find-primitive-enabled>true</find-primitive-enabled>\n    </mesh>\n  </shape>\n  "
+    },
+    {
+      "name": "11_1_xform",
+      "visible": true,
+      "alpha": 1.0,
+      "colouring_name": "Flat colour",
+      "flat_colour": [
+        0.949,
+        0.333,
+        0.333
+      ],
+      "flat_back_colour": [
+        0.322,
+        0.624,
+        0.922
+      ],
+      "face_colour": [
+        0.949,
+        0.333,
+        0.333
+      ],
+      "outline_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "geometry_kinds": [
+        "mesh"
+      ],
+      "raw_xml": "<shape>\n    <name>11_1_xform</name>\n    <alpha>+1</alpha>\n    <visible>true</visible>\n    <icon><pixels idref=\"icon_lf-mesh\" /></icon>\n    <colouring_name>Flat colour</colouring_name>\n    <mesh class=\"\">\n      <shading>smooth</shading>\n      <locations><array idref=\"array_32\" /></locations>\n      <faces><array idref=\"array_33\" /></faces>\n      <show-faces>true</show-faces>\n      <show-edges>false</show-edges>\n      <edge-width>2</edge-width>\n      <outline-colour>0.500 0.500 0.500</outline-colour>\n      <backface-cull>false</backface-cull>\n      <polygon-offset>+1 +1</polygon-offset>\n      <depth-offset>\n        <front>4</front>\n        <back>4</back>\n      </depth-offset>\n      <lighting>\n        <enabled>true</enabled>\n        <specular>+0.6</specular>\n      </lighting>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>false</show-faces>\n        <line-width>+3</line-width>\n        <face-colour>0.949 0.333 0.333</face-colour>\n      </slicing>\n      <selection>\n        <detail>\n          <name>Location</name>\n          <value><location /></value>\n        </detail>\n        <detail>\n          <name>Face dip</name>\n          <value><numeric>\n            <per>group</per>\n            <array idref=\"array_34\" />\n          </numeric></value>\n        </detail>\n        <detail>\n          <name>Volume</name>\n          <value><string>9775.6</string></value>\n        </detail>\n        <detail>\n          <name>Area</name>\n          <value><string>2,976</string></value>\n        </detail>\n        <detail>\n          <name>Parts</name>\n          <value><string>1</string></value>\n        </detail>\n      </selection>\n      <flat>\n        <colour>0.949 0.333 0.333</colour>\n        <back-colour>0.322 0.624 0.922</back-colour>\n      </flat>\n      <find-primitive-enabled>true</find-primitive-enabled>\n    </mesh>\n  </shape>\n  "
+    },
+    {
+      "name": "11_8_alimak_heel",
+      "visible": true,
+      "alpha": 1.0,
+      "colouring_name": "Flat colour",
+      "flat_colour": [
+        0.118,
+        0.565,
+        1.0
+      ],
+      "flat_back_colour": [
+        0.322,
+        0.624,
+        0.922
+      ],
+      "face_colour": [
+        0.118,
+        0.565,
+        1.0
+      ],
+      "outline_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "geometry_kinds": [
+        "mesh"
+      ],
+      "raw_xml": "<shape>\n    <name>11_8_alimak_heel</name>\n    <alpha>+1</alpha>\n    <visible>true</visible>\n    <icon><pixels idref=\"icon_lf-mesh\" /></icon>\n    <colouring_name>Flat colour</colouring_name>\n    <mesh class=\"\">\n      <shading>smooth</shading>\n      <locations><array idref=\"array_35\" /></locations>\n      <faces><array idref=\"array_36\" /></faces>\n      <show-faces>true</show-faces>\n      <show-edges>false</show-edges>\n      <edge-width>2</edge-width>\n      <outline-colour>0.500 0.500 0.500</outline-colour>\n      <backface-cull>false</backface-cull>\n      <polygon-offset>+1 +1</polygon-offset>\n      <depth-offset>\n        <front>4</front>\n        <back>4</back>\n      </depth-offset>\n      <lighting>\n        <enabled>true</enabled>\n        <specular>+0.6</specular>\n      </lighting>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>false</show-faces>\n        <line-width>+3</line-width>\n        <face-colour>0.118 0.565 1.000</face-colour>\n      </slicing>\n      <selection>\n        <detail>\n          <name>Location</name>\n          <value><location /></value>\n        </detail>\n        <detail>\n          <name>Face dip</name>\n          <value><numeric>\n            <per>group</per>\n            <array idref=\"array_37\" />\n          </numeric></value>\n        </detail>\n        <detail>\n          <name>Volume</name>\n          <value><string>-18,234</string></value>\n        </detail>\n        <detail>\n          <name>Area</name>\n          <value><string>5360.9</string></value>\n        </detail>\n        <detail>\n          <name>Parts</name>\n          <value><string>1</string></value>\n        </detail>\n      </selection>\n      <flat>\n        <colour>0.118 0.565 1.000</colour>\n        <back-colour>0.322 0.624 0.922</back-colour>\n      </flat>\n      <find-primitive-enabled>true</find-primitive-enabled>\n    </mesh>\n  </shape>\n  "
+    },
+    {
+      "name": "11_8_MB6",
+      "visible": true,
+      "alpha": 1.0,
+      "colouring_name": "Flat colour",
+      "flat_colour": [
+        0.949,
+        0.333,
+        0.333
+      ],
+      "flat_back_colour": [
+        0.322,
+        0.624,
+        0.922
+      ],
+      "face_colour": [
+        0.949,
+        0.333,
+        0.333
+      ],
+      "outline_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "geometry_kinds": [
+        "mesh"
+      ],
+      "raw_xml": "<shape>\n    <name>11_8_MB6</name>\n    <alpha>+1</alpha>\n    <visible>true</visible>\n    <icon><pixels idref=\"icon_lf-mesh\" /></icon>\n    <colouring_name>Flat colour</colouring_name>\n    <mesh class=\"\">\n      <shading>smooth</shading>\n      <locations><array idref=\"array_38\" /></locations>\n      <faces><array idref=\"array_39\" /></faces>\n      <show-faces>true</show-faces>\n      <show-edges>false</show-edges>\n      <edge-width>2</edge-width>\n      <outline-colour>0.500 0.500 0.500</outline-colour>\n      <backface-cull>false</backface-cull>\n      <polygon-offset>+1 +1</polygon-offset>\n      <depth-offset>\n        <front>4</front>\n        <back>4</back>\n      </depth-offset>\n      <lighting>\n        <enabled>true</enabled>\n        <specular>+0.6</specular>\n      </lighting>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>false</show-faces>\n        <line-width>+3</line-width>\n        <face-colour>0.949 0.333 0.333</face-colour>\n      </slicing>\n      <selection>\n        <detail>\n          <name>Location</name>\n          <value><location /></value>\n        </detail>\n        <detail>\n          <name>Face dip</name>\n          <value><numeric>\n            <per>group</per>\n            <array idref=\"array_40\" />\n          </numeric></value>\n        </detail>\n        <detail>\n          <name>Volume</name>\n          <value><string>27,103</string></value>\n        </detail>\n        <detail>\n          <name>Area</name>\n          <value><string>7981.1</string></value>\n        </detail>\n        <detail>\n          <name>Parts</name>\n          <value><string>1</string></value>\n        </detail>\n      </selection>\n      <flat>\n        <colour>0.949 0.333 0.333</colour>\n        <back-colour>0.322 0.624 0.922</back-colour>\n      </flat>\n      <find-primitive-enabled>true</find-primitive-enabled>\n    </mesh>\n  </shape>\n  "
+    },
+    {
+      "name": "lidar_2ft_toldxf_wireframesTR",
+      "visible": true,
+      "alpha": 1.0,
+      "colouring_name": "Flat colour",
+      "flat_colour": [
+        0.0,
+        0.502,
+        0.0
+      ],
+      "flat_back_colour": [
+        0.0,
+        0.502,
+        0.0
+      ],
+      "face_colour": [
+        0.0,
+        0.502,
+        0.0
+      ],
+      "outline_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "geometry_kinds": [
+        "mesh"
+      ],
+      "raw_xml": "<shape>\n    <name>lidar_2ft_toldxf_wireframesTR</name>\n    <alpha>+1</alpha>\n    <visible>true</visible>\n    <icon><pixels idref=\"icon_lf-mesh\" /></icon>\n    <colouring_name>Flat colour</colouring_name>\n    <mesh class=\"\">\n      <shading>flat</shading>\n      <locations><array idref=\"array_41\" /></locations>\n      <faces><array idref=\"array_42\" /></faces>\n      <show-faces>false</show-faces>\n      <show-edges>false</show-edges>\n      <edge-width>2</edge-width>\n      <outline-colour>0.500 0.500 0.500</outline-colour>\n      <backface-cull>false</backface-cull>\n      <polygon-offset>+1 +1</polygon-offset>\n      <depth-offset>\n        <front>4</front>\n        <back>4</back>\n      </depth-offset>\n      <lighting>\n        <enabled>true</enabled>\n        <specular>+0.6</specular>\n      </lighting>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>false</show-faces>\n        <line-width>+3</line-width>\n        <face-colour>0.000 0.502 0.000</face-colour>\n      </slicing>\n      <selection>\n        <detail>\n          <name>Location</name>\n          <value><location /></value>\n        </detail>\n        <detail>\n          <name>Face dip</name>\n          <value><numeric>\n            <per>group</per>\n            <array idref=\"array_43\" />\n          </numeric></value>\n        </detail>\n        <detail>\n          <name>Volume</name>\n          <value><string>Mesh is not closed</string></value>\n        </detail>\n        <detail>\n          <name>Area</name>\n          <value><string>102,170,000</string></value>\n        </detail>\n        <detail>\n          <name>Parts</name>\n          <value><string>320,525</string></value>\n        </detail>\n      </selection>\n      <flat>\n        <colour>0.000 0.502 0.000</colour>\n        <back-colour>0.000 0.502 0.000</back-colour>\n      </flat>\n      <find-primitive-enabled>true</find-primitive-enabled>\n    </mesh>\n  </shape>\n  "
+    },
+    {
+      "name": "workings_LAXEY_TUBE_SP",
+      "visible": true,
+      "alpha": 0.5422535211267606,
+      "colouring_name": "Flat colour",
+      "flat_colour": [
+        0.118,
+        0.914,
+        1.0
+      ],
+      "flat_back_colour": [
+        0.185,
+        0.809,
+        0.943
+      ],
+      "face_colour": [
+        0.118,
+        0.914,
+        1.0
+      ],
+      "outline_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "geometry_kinds": [
+        "mesh"
+      ],
+      "raw_xml": "<shape>\n    <name>workings_LAXEY_TUBE_SP</name>\n    <alpha>+0.5422535211267606</alpha>\n    <visible>true</visible>\n    <icon><pixels idref=\"icon_lf-mesh-warning\" /></icon>\n    <colouring_name>Flat colour</colouring_name>\n    <mesh class=\"\">\n      <shading>smooth</shading>\n      <locations><array idref=\"array_44\" /></locations>\n      <faces><array idref=\"array_45\" /></faces>\n      <show-faces>true</show-faces>\n      <show-edges>false</show-edges>\n      <edge-width>2</edge-width>\n      <outline-colour>0.500 0.500 0.500</outline-colour>\n      <backface-cull>false</backface-cull>\n      <polygon-offset>+1 +1</polygon-offset>\n      <depth-offset>\n        <front>4</front>\n        <back>4</back>\n      </depth-offset>\n      <lighting>\n        <enabled>true</enabled>\n        <specular>+0.6</specular>\n      </lighting>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>false</show-faces>\n        <line-width>+3</line-width>\n        <face-colour>0.118 0.914 1.000</face-colour>\n      </slicing>\n      <selection>\n        <detail>\n          <name>Location</name>\n          <value><location /></value>\n        </detail>\n        <detail>\n          <name>Face dip</name>\n          <value><numeric>\n            <per>group</per>\n            <array idref=\"array_46\" />\n          </numeric></value>\n        </detail>\n        <detail>\n          <name>self intersections</name>\n          <value><numeric>\n            <per>vertex</per>\n            <array idref=\"array_47\" />\n          </numeric></value>\n        </detail>\n        <detail>\n          <name>Volume</name>\n          <value><string>147,350</string></value>\n        </detail>\n        <detail>\n          <name>Area</name>\n          <value><string>90,310</string></value>\n        </detail>\n        <detail>\n          <name>Parts</name>\n          <value><string>16</string></value>\n        </detail>\n      </selection>\n      <flat>\n        <colour>0.118 0.914 1.000</colour>\n        <back-colour>0.185 0.809 0.943</back-colour>\n      </flat>\n      <find-primitive-enabled>true</find-primitive-enabled>\n    </mesh>\n  </shape>\n  "
+    },
+    {
+      "name": "dmea23_fan",
+      "visible": true,
+      "alpha": 1.0,
+      "colouring_name": "Flat colour",
+      "flat_colour": [
+        1.0,
+        1.0,
+        0.0
+      ],
+      "flat_back_colour": null,
+      "face_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "outline_colour": null,
+      "geometry_kinds": [
+        "lines",
+        "points",
+        "strings"
+      ],
+      "raw_xml": "<shape>\n    <name>dmea23_fan</name>\n    <alpha>+1</alpha>\n    <visible>true</visible>\n    <icon><pixels idref=\"icon_lf-planned-holes\" /></icon>\n    <colouring_name>Flat colour</colouring_name>\n    <lines class=\"planneddrillholesgroup\">\n      <capping>ends</capping>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>true</show-faces>\n        <line-width>+2</line-width>\n        <face-colour>0.500 0.500 0.500</face-colour>\n      </slicing>\n      <selection>\n        <groups><per-primitive><array idref=\"array_51\" /></per-primitive></groups>\n        <detail>\n          <name>Name</name>\n          <value><strings><paged-stringlist idref=\"pstrings_18\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Collar</name>\n          <value><strings><paged-stringlist idref=\"pstrings_20\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Azimuth</name>\n          <value><strings><paged-stringlist idref=\"pstrings_22\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Dip</name>\n          <value><strings><paged-stringlist idref=\"pstrings_24\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Lift Rate</name>\n          <value><strings><paged-stringlist idref=\"pstrings_26\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Drift Rate</name>\n          <value><strings><paged-stringlist idref=\"pstrings_26\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Extension</name>\n          <value><strings><paged-stringlist idref=\"pstrings_28\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Total Depth</name>\n          <value><strings><paged-stringlist idref=\"pstrings_30\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Target</name>\n          <value><strings><paged-stringlist idref=\"pstrings_32\" /></strings></value>\n        </detail>\n      </selection>\n      <cylinders><radius>+4</radius></cylinders>\n      <locations><array idref=\"array_48\" /></locations>\n      <segments><array idref=\"array_49\" /></segments>\n      <flat>\n        <colour>1.000 1.000 0.000</colour>\n      </flat>\n      <find-primitive-enabled>true</find-primitive-enabled>\n      <lines-consectutive>false</lines-consectutive>\n    </lines>\n    <points class=\"planneddrillholesgroup\">\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>false</show-faces>\n        <line-width>+2</line-width>\n        <face-colour>0.500 0.500 0.500</face-colour>\n      </slicing>\n      <selection>\n        <detail>\n          <name>Name</name>\n          <value><strings><paged-stringlist idref=\"pstrings_19\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Collar</name>\n          <value><strings><paged-stringlist idref=\"pstrings_21\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Azimuth</name>\n          <value><strings><paged-stringlist idref=\"pstrings_23\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Dip</name>\n          <value><strings><paged-stringlist idref=\"pstrings_25\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Lift Rate</name>\n          <value><strings><paged-stringlist idref=\"pstrings_27\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Drift Rate</name>\n          <value><strings><paged-stringlist idref=\"pstrings_27\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Extension</name>\n          <value><strings><paged-stringlist idref=\"pstrings_29\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Total Depth</name>\n          <value><strings><paged-stringlist idref=\"pstrings_31\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Target</name>\n          <value><strings><paged-stringlist idref=\"pstrings_33\" /></strings></value>\n        </detail>\n      </selection>\n      <spheres>\n        <radius>+8</radius>\n      </spheres>\n      <locations><array idref=\"array_48\" /></locations>\n      <flat>\n        <colour>1.000 1.000 0.000</colour>\n      </flat>\n    </points>\n    <strings class=\"planneddrillholesgroup-strings\">\n      <alignment>+0 +1</alignment>\n      <offset>+3 +0</offset>\n      <zoffset>+0</zoffset>\n      <eye-offset>+8 +0 +0</eye-offset>\n      <locations><array idref=\"array_50\" /></locations>\n      <stringvalues><stringlist idref=\"stringlist_0\" /></stringvalues>\n      <flat>\n        <colour>1.000 1.000 0.000</colour>\n      </flat>\n    </strings>\n  </shape>\n  ",
+      "cylinder_radius_m": 4.0
+    },
+    {
+      "name": "DMEAX_JDC",
+      "visible": true,
+      "alpha": 1.0,
+      "colouring_name": "Flat colour",
+      "flat_colour": [
+        1.0,
+        0.647,
+        0.0
+      ],
+      "flat_back_colour": null,
+      "face_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "outline_colour": null,
+      "geometry_kinds": [
+        "lines",
+        "points",
+        "strings"
+      ],
+      "raw_xml": "<shape>\n    <name>DMEAX_JDC</name>\n    <alpha>+1</alpha>\n    <visible>true</visible>\n    <icon><pixels idref=\"icon_lf-planned-holes\" /></icon>\n    <colouring_name>Flat colour</colouring_name>\n    <lines class=\"planneddrillholesgroup\">\n      <capping>ends</capping>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>true</show-faces>\n        <line-width>+2</line-width>\n        <face-colour>0.500 0.500 0.500</face-colour>\n      </slicing>\n      <selection>\n        <groups><per-primitive><array idref=\"array_70\" /></per-primitive></groups>\n        <detail>\n          <name>Name</name>\n          <value><strings><paged-stringlist idref=\"pstrings_34\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Collar</name>\n          <value><strings><paged-stringlist idref=\"pstrings_36\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Azimuth</name>\n          <value><strings><paged-stringlist idref=\"pstrings_38\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Dip</name>\n          <value><strings><paged-stringlist idref=\"pstrings_40\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Lift Rate</name>\n          <value><strings><paged-stringlist idref=\"pstrings_42\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Drift Rate</name>\n          <value><strings><paged-stringlist idref=\"pstrings_44\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Extension</name>\n          <value><strings><paged-stringlist idref=\"pstrings_46\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Total Depth</name>\n          <value><strings><paged-stringlist idref=\"pstrings_47\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Target</name>\n          <value><strings><paged-stringlist idref=\"pstrings_49\" /></strings></value>\n        </detail>\n      </selection>\n      <cylinders><radius>+1</radius></cylinders>\n      <locations><array idref=\"array_66\" /></locations>\n      <segments><array idref=\"array_67\" /></segments>\n      <flat>\n        <colour>1.000 0.647 0.000</colour>\n      </flat>\n      <find-primitive-enabled>true</find-primitive-enabled>\n      <lines-consectutive>false</lines-consectutive>\n    </lines>\n    <points class=\"planneddrillholesgroup\">\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>false</show-faces>\n        <line-width>+2</line-width>\n        <face-colour>0.500 0.500 0.500</face-colour>\n      </slicing>\n      <selection>\n        <detail>\n          <name>Name</name>\n          <value><strings><paged-stringlist idref=\"pstrings_35\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Collar</name>\n          <value><strings><paged-stringlist idref=\"pstrings_37\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Azimuth</name>\n          <value><strings><paged-stringlist idref=\"pstrings_39\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Dip</name>\n          <value><strings><paged-stringlist idref=\"pstrings_41\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Lift Rate</name>\n          <value><strings><paged-stringlist idref=\"pstrings_43\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Drift Rate</name>\n          <value><strings><paged-stringlist idref=\"pstrings_45\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Extension</name>\n          <value><strings><paged-stringlist idref=\"pstrings_28\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Total Depth</name>\n          <value><strings><paged-stringlist idref=\"pstrings_48\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Target</name>\n          <value><strings><paged-stringlist idref=\"pstrings_50\" /></strings></value>\n        </detail>\n      </selection>\n      <spheres>\n        <radius>+2</radius>\n      </spheres>\n      <locations><array idref=\"array_68\" /></locations>\n      <flat>\n        <colour>1.000 0.647 0.000</colour>\n      </flat>\n    </points>\n    <strings class=\"planneddrillholesgroup-strings\">\n      <alignment>+0 +1</alignment>\n      <offset>+3 +0</offset>\n      <zoffset>+0</zoffset>\n      <eye-offset>+2 +0 +0</eye-offset>\n      <locations><array idref=\"array_69\" /></locations>\n      <stringvalues><stringlist idref=\"stringlist_1\" /></stringvalues>\n      <flat>\n        <colour>1.000 0.647 0.000</colour>\n      </flat>\n    </strings>\n  </shape>\n  ",
+      "cylinder_radius_m": 1.0
+    },
+    {
+      "name": "MUCK BAY 4",
+      "visible": true,
+      "alpha": 1.0,
+      "colouring_name": "Flat colour",
+      "flat_colour": [
+        0.0,
+        1.0,
+        0.964
+      ],
+      "flat_back_colour": null,
+      "face_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "outline_colour": null,
+      "geometry_kinds": [
+        "lines",
+        "points"
+      ],
+      "raw_xml": "<shape>\n    <name>MUCK BAY 4</name>\n    <alpha>+1</alpha>\n    <visible>true</visible>\n    <icon><pixels idref=\"icon_lf-planned-holes\" /></icon>\n    <colouring_name>Flat colour</colouring_name>\n    <lines class=\"planneddrillholesgroup\">\n      <capping>ends</capping>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>true</show-faces>\n        <line-width>+2</line-width>\n        <face-colour>0.500 0.500 0.500</face-colour>\n      </slicing>\n      <selection>\n        <groups><per-primitive><array idref=\"array_81\" /></per-primitive></groups>\n        <detail>\n          <name>Name</name>\n          <value><strings><paged-stringlist idref=\"pstrings_51\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Collar</name>\n          <value><strings><paged-stringlist idref=\"pstrings_53\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Azimuth</name>\n          <value><strings><paged-stringlist idref=\"pstrings_55\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Dip</name>\n          <value><strings><paged-stringlist idref=\"pstrings_57\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Lift Rate</name>\n          <value><strings><paged-stringlist idref=\"pstrings_59\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Drift Rate</name>\n          <value><strings><paged-stringlist idref=\"pstrings_59\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Extension</name>\n          <value><strings><paged-stringlist idref=\"pstrings_61\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Total Depth</name>\n          <value><strings><paged-stringlist idref=\"pstrings_63\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Target</name>\n          <value><strings><paged-stringlist idref=\"pstrings_65\" /></strings></value>\n        </detail>\n      </selection>\n      <cylinders><radius>+2</radius></cylinders>\n      <locations><array idref=\"array_79\" /></locations>\n      <segments><array idref=\"array_80\" /></segments>\n      <flat>\n        <colour>0.000 1.000 0.964</colour>\n      </flat>\n      <find-primitive-enabled>true</find-primitive-enabled>\n      <lines-consectutive>false</lines-consectutive>\n    </lines>\n    <points class=\"planneddrillholesgroup\">\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>false</show-faces>\n        <line-width>+2</line-width>\n        <face-colour>0.500 0.500 0.500</face-colour>\n      </slicing>\n      <selection>\n        <detail>\n          <name>Name</name>\n          <value><strings><paged-stringlist idref=\"pstrings_52\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Collar</name>\n          <value><strings><paged-stringlist idref=\"pstrings_54\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Azimuth</name>\n          <value><strings><paged-stringlist idref=\"pstrings_56\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Dip</name>\n          <value><strings><paged-stringlist idref=\"pstrings_58\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Lift Rate</name>\n          <value><strings><paged-stringlist idref=\"pstrings_60\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Drift Rate</name>\n          <value><strings><paged-stringlist idref=\"pstrings_60\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Extension</name>\n          <value><strings><paged-stringlist idref=\"pstrings_62\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Total Depth</name>\n          <value><strings><paged-stringlist idref=\"pstrings_64\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Target</name>\n          <value><strings><paged-stringlist idref=\"pstrings_66\" /></strings></value>\n        </detail>\n      </selection>\n      <spheres>\n        <radius>+4</radius>\n      </spheres>\n      <locations><array idref=\"array_79\" /></locations>\n      <flat>\n        <colour>0.000 1.000 0.964</colour>\n      </flat>\n    </points>\n  </shape>\n  ",
+      "cylinder_radius_m": 2.0
+    },
+    {
+      "name": "targhelpers",
+      "visible": true,
+      "alpha": 1.0,
+      "colouring_name": "Flat colour",
+      "flat_colour": [
+        0.7,
+        0.233,
+        0.573
+      ],
+      "flat_back_colour": null,
+      "face_colour": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "outline_colour": null,
+      "geometry_kinds": [
+        "lines",
+        "points",
+        "lines",
+        "strings"
+      ],
+      "raw_xml": "<shape>\n    <name>targhelpers</name>\n    <alpha>+1</alpha>\n    <visible>true</visible>\n    <icon><pixels idref=\"icon_lf-planned-holes\" /></icon>\n    <colouring_name>Flat colour</colouring_name>\n    <lines class=\"planneddrillholesgroup\">\n      <capping>ends</capping>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>true</show-faces>\n        <line-width>+2</line-width>\n        <face-colour>0.500 0.500 0.500</face-colour>\n      </slicing>\n      <selection>\n        <groups><per-primitive><array idref=\"array_99\" /></per-primitive></groups>\n        <detail>\n          <name>Name</name>\n          <value><strings><paged-stringlist idref=\"pstrings_67\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Collar</name>\n          <value><strings><paged-stringlist idref=\"pstrings_70\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Azimuth</name>\n          <value><strings><paged-stringlist idref=\"pstrings_73\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Dip</name>\n          <value><strings><paged-stringlist idref=\"pstrings_76\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Lift Rate</name>\n          <value><strings><paged-stringlist idref=\"pstrings_79\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Drift Rate</name>\n          <value><strings><paged-stringlist idref=\"pstrings_79\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Extension</name>\n          <value><strings><paged-stringlist idref=\"pstrings_46\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Total Depth</name>\n          <value><strings><paged-stringlist idref=\"pstrings_80\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Target</name>\n          <value><strings><paged-stringlist idref=\"pstrings_83\" /></strings></value>\n        </detail>\n      </selection>\n      <cylinders><radius>+3</radius></cylinders>\n      <locations><array idref=\"array_95\" /></locations>\n      <segments><array idref=\"array_96\" /></segments>\n      <flat>\n        <colour>0.700 0.233 0.573</colour>\n      </flat>\n      <find-primitive-enabled>true</find-primitive-enabled>\n      <lines-consectutive>false</lines-consectutive>\n    </lines>\n    <points class=\"planneddrillholesgroup\">\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>false</show-faces>\n        <line-width>+2</line-width>\n        <face-colour>0.500 0.500 0.500</face-colour>\n      </slicing>\n      <selection>\n        <detail>\n          <name>Name</name>\n          <value><strings><paged-stringlist idref=\"pstrings_69\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Collar</name>\n          <value><strings><paged-stringlist idref=\"pstrings_72\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Azimuth</name>\n          <value><strings><paged-stringlist idref=\"pstrings_75\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Dip</name>\n          <value><strings><paged-stringlist idref=\"pstrings_78\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Lift Rate</name>\n          <value><strings><paged-stringlist idref=\"pstrings_26\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Drift Rate</name>\n          <value><strings><paged-stringlist idref=\"pstrings_26\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Extension</name>\n          <value><strings><paged-stringlist idref=\"pstrings_28\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Total Depth</name>\n          <value><strings><paged-stringlist idref=\"pstrings_82\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Target</name>\n          <value><strings><paged-stringlist idref=\"pstrings_85\" /></strings></value>\n        </detail>\n      </selection>\n      <spheres>\n        <radius>+6</radius>\n      </spheres>\n      <locations><array idref=\"array_95\" /></locations>\n      <flat>\n        <colour>0.700 0.233 0.573</colour>\n      </flat>\n    </points>\n    <lines class=\"planneddrillholesgroup-trace\">\n      <capping>all</capping>\n      <slicing>\n        <show-edges>true</show-edges>\n        <show-faces>true</show-faces>\n        <line-width>+2</line-width>\n        <face-colour>0.500 0.500 0.500</face-colour>\n      </slicing>\n      <selection>\n        <groups><per-primitive><array idref=\"array_99\" /></per-primitive></groups>\n        <detail>\n          <name>Name</name>\n          <value><strings><paged-stringlist idref=\"pstrings_68\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Collar</name>\n          <value><strings><paged-stringlist idref=\"pstrings_71\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Azimuth</name>\n          <value><strings><paged-stringlist idref=\"pstrings_74\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Dip</name>\n          <value><strings><paged-stringlist idref=\"pstrings_77\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Lift Rate</name>\n          <value><strings><paged-stringlist idref=\"pstrings_79\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Drift Rate</name>\n          <value><strings><paged-stringlist idref=\"pstrings_79\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Extension</name>\n          <value><strings><paged-stringlist idref=\"pstrings_46\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Total Depth</name>\n          <value><strings><paged-stringlist idref=\"pstrings_81\" /></strings></value>\n        </detail>\n        <detail>\n          <name>Target</name>\n          <value><strings><paged-stringlist idref=\"pstrings_84\" /></strings></value>\n        </detail>\n      </selection>\n      <pixels><width>+1</width></pixels>\n      <locations><array idref=\"array_97\" /></locations>\n      <segments><array idref=\"array_96\" /></segments>\n      <flat>\n        <colour>0.500 0.500 0.500</colour>\n      </flat>\n      <find-primitive-enabled>true</find-primitive-enabled>\n      <lines-consectutive>false</lines-consectutive>\n    </lines>\n    <strings class=\"planneddrillholesgroup-strings\">\n      <alignment>+0 +1</alignment>\n      <offset>+3 +0</offset>\n      <zoffset>+0</zoffset>\n      <eye-offset>+6 +0 +0</eye-offset>\n      <locations><array idref=\"array_98\" /></locations>\n      <stringvalues><stringlist idref=\"stringlist_2\" /></stringvalues>\n      <flat>\n        <colour>0.700 0.233 0.573</colour>\n      </flat>\n    </strings>\n  </shape>\n",
+      "cylinder_radius_m": 3.0
+    }
+  ],
+  "raw_scene_state_xml": "<name>MB5_az152_fan</name>\n  \n<description />\n  \n<bbox>\n    <min>+2299945 +385566.8 +3982.3735289113242</min>\n    <max>+2315493.89 +415931 +7805.50912608</max>\n  </bbox>\n  \n<thumbnail><pixels idref=\"thumb_0\" /></thumbnail>\n  \n<show-compass-ball>true</show-compass-ball>\n  \n<show-scale-bar>true</show-scale-bar>\n  \n<show-viewing-angle>true</show-viewing-angle>\n  \n<camera>\n    <centre>+2311289.5937959654 +393880.9861228533 +6751.181610123879</centre>\n    <radius>+368.5529347644277</radius>\n    <orthographic />\n    <rotate-axis>\n      <up>z</up>\n      <azimuth>+46.32612966601178</azimuth>\n      <elevation>+18.321428571428573</elevation>\n   </rotate-axis>\n  </camera>\n  \n<axes>\n    <show-box>true</show-box>\n    <show-ticks>true</show-ticks>\n    <show-grid>false</show-grid>\n    <label-x>East (X)</label-x>\n    <label-y>North (Y)</label-y>\n    <label-z>Elev (Z)</label-z>\n  </axes>\n  \n<grid>\n    <pixel-spacing>200</pixel-spacing>\n  </grid>\n  \n<legend>\n    <lithologies>\n      <name>Lith1</name>\n      <item><name>AP</name><colour>1.000 1.000 0.567</colour></item>\n      <item><name>APL</name><colour>1.000 1.000 0.100</colour></item>\n      <item><name>BXA</name><colour>1.000 0.647 0.000</colour></item>\n      <item><name>DA</name><colour>0.333 1.000 0.667</colour></item>\n      <item><name>Dk</name><colour>0.535 1.000 0.535</colour></item>\n      <item><name>FLT</name><colour>0.567 1.000 0.783</colour></item>\n      <item><name>GD</name><colour>1.000 0.567 0.567</colour></item>\n      <item><name>GG</name><colour>1.000 0.647 0.000</colour></item>\n      <item><name>GOS</name><colour>1.000 0.333 0.667</colour></item>\n      <item><name>HFL</name><colour>0.783 1.000 0.567</colour></item>\n      <item><name>Hgbt</name><colour>0.567 0.567 1.000</colour></item>\n      <item><name>Hgbt-Mbl</name><colour>1.000 0.333 0.333</colour></item>\n      <item><name>Hgbt-Scht</name><colour>0.333 1.000 0.333</colour></item>\n      <item><name>LG</name><colour>0.333 0.333 1.000</colour></item>\n      <item><name>M$</name><colour>1.000 0.000 0.000</colour></item>\n      <item><name>MB</name><colour>0.003 0.976 1.000</colour></item>\n      <item><name>MBL</name><colour>0.022 0.994 0.994</colour></item>\n      <item><name>MS</name><colour>1.000 0.000 0.000</colour></item>\n      <item><name>MSF</name><colour>1.000 0.000 0.000</colour></item>\n      <item><name>MSS</name><colour>1.000 0.000 0.000</colour></item>\n      <item><name>NR</name><colour>0.550 1.000 0.100</colour></item>\n      <item><name>PP</name><colour>0.333 0.667 1.000</colour></item>\n      <item><name>QZ</name><colour>1.000 0.100 1.000</colour></item>\n      <item><name>QZT</name><colour>0.100 0.100 1.000</colour></item>\n      <item><name>RY</name><colour>0.976 0.879 0.896</colour></item>\n      <item><name>SC</name><colour>0.498 0.498 0.498</colour></item>\n      <item><name>Scht</name><colour>0.498 0.498 0.498</colour></item>\n      <item><name>SK</name><colour>0.565 0.565 1.000</colour></item>\n      <item><name>SKH</name><colour>0.502 0.000 0.502</colour></item>\n      <item><name>SKN</name><colour>0.830 0.176 0.830</colour></item>\n      <item><name>SMS</name><colour>1.000 0.783 0.567</colour></item>\n      <item><name>SS</name><colour>0.567 1.000 0.567</colour></item>\n      <item><name>TC</name><colour>1.000 1.000 0.333</colour></item>\n      <item><name>Tf</name><colour>1.000 0.550 0.100</colour></item>\n      <item><name>TIR</name><colour>0.100 1.000 0.100</colour></item>\n      <item><name>VUG</name><colour>1.000 0.667 0.333</colour></item>\n    </lithologies>\n  </legend>\n  ",
+  "coordinate_system": {
+    "source": "EPSG:2243+6360",
+    "target": "EPSG:4978",
+    "target_is_ecef": true,
+    "target_is_geographic": false,
+    "scene_anchor_source_crs": [
+      2310120.1314951926,
+      395339.7225439606,
+      7075.722311168617
+    ],
+    "scene_anchor_target_crs": [
+      -2124706.4629378985,
+      -4184218.4158540345,
+      4308252.161215563
+    ],
+    "scene_anchor_lonlat_height": [
+      -116.92102860953335,
+      42.745579630821524,
+      2156.6844738516957
+    ],
+    "enu_to_ecef_matrix_3x3": [
+      [
+        0.8916314176488797,
+        0.3073095217374007,
+        -0.3324970269205111
+      ],
+      [
+        -0.45276198500034104,
+        0.6051895556635821,
+        -0.654791712420268
+      ],
+      [
+        0.0,
+        0.7343748767252636,
+        0.6787440905339464
+      ]
+    ],
+    "placement_matrix_4x4_column_major": [
+      0.8916314176488797,
+      -0.45276198500034104,
+      0.0,
+      0.0,
+      0.3073095217374007,
+      0.6051895556635821,
+      0.7343748767252636,
+      0.0,
+      -0.3324970269205111,
+      -0.654791712420268,
+      0.6787440905339464,
+      0.0,
+      -2124706.4629378985,
+      -4184218.4158540345,
+      4308252.161215563,
+      1.0
+    ]
+  }
+}

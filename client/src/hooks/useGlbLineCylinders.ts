@@ -72,7 +72,7 @@ export async function buildGlbLineCylinders(
   sidecarUrl: string,
   viewer: Viewer,
   model: Model,
-): Promise<Primitive[]> {
+): Promise<Record<string, Primitive>> {
   const [raw, sidecar] = await Promise.all([
     fetch(glbUrl).then((r) => r.arrayBuffer()),
     fetch(sidecarUrl).then((r) => r.json() as Promise<Sidecar>),
@@ -102,8 +102,7 @@ export async function buildGlbLineCylinders(
   const shapeByName = new Map<string, SidecarShape>();
   for (const s of sidecar.shapes) shapeByName.set(s.name, s);
 
-  const added: Primitive[] = [];
-  // Track which node names we've already processed to skip duplicates.
+  const added: Record<string, Primitive> = {};
   const processedNames = new Set<string>();
 
   for (const node of gltf.nodes) {
@@ -219,7 +218,7 @@ export async function buildGlbLineCylinders(
       releaseGeometryInstances: false,
     });
     viewer.scene.primitives.add(primitive);
-    added.push(primitive);
+    added[node.name] = primitive;
   }
 
   return added;

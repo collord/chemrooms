@@ -14,6 +14,7 @@
       "name": "dmea23_fan",
       "url": "tiles/local/dmea23_fan.glb",
       "hasFeatureMetadata": true,
+      "sidecar": "tiles/local/dmea23_fan.views.json",
       "_extent_wgs84": {
         "west": -116.9861231731,
         "south": 42.7096807502,

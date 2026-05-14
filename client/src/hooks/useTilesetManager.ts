@@ -15,7 +15,6 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {
-  Axis,
   BoundingSphere,
   Cartesian3,
   Cesium3DTileset,
@@ -234,8 +233,12 @@ export function useTilesetManager() {
    * sync and the face-color shader only target Cesium3DTilesets.
    */
   const modelRefs = useRef<Record<string, Model>>({});
-  /** Cylinder primitives built from GLB LINES nodes, keyed by tileset name. */
-  const cylinderPrimitivesRef = useRef<Record<string, Primitive[]>>({});
+  /**
+   * Cylinder primitives built from GLB LINES nodes.
+   * Outer key: tileset name. Inner key: node name.
+   * Allows setSubNodeVisible to show/hide the cylinder for a specific node.
+   */
+  const cylinderPrimitivesRef = useRef<Record<string, Record<string, Primitive>>>({});
 
   /**
    * Per-tileset sub-node lists, populated when a Model's readyEvent
@@ -283,8 +286,8 @@ export function useTilesetManager() {
       }
       modelRefs.current = {};
       subNodesRef.current = {};
-      for (const prims of Object.values(cylinderPrimitivesRef.current)) {
-        for (const p of prims) viewer.scene.primitives.remove(p);
+      for (const nodeMap of Object.values(cylinderPrimitivesRef.current)) {
+        for (const p of Object.values(nodeMap)) viewer.scene.primitives.remove(p);
       }
       cylinderPrimitivesRef.current = {};
     };
@@ -362,6 +365,9 @@ export function useTilesetManager() {
           );
         }
       }
+      // Also toggle the cylinder primitive for this node, if one exists.
+      const cyl = cylinderPrimitivesRef.current[tilesetName]?.[nodeName];
+      if (cyl) cyl.show = visible;
       const current = subNodesRef.current[tilesetName] ?? [];
       const updated = current.map((n) =>
         n.name === nodeName ? {...n, visible} : n,
@@ -416,7 +422,7 @@ export function useTilesetManager() {
       if (entry.hasFeatureMetadata) {
         if (next) {
           if (!modelRefs.current[name]) {
-            Model.fromGltfAsync({url: fullUrl, backFaceCulling: false, upAxis: Axis.Z, forwardAxis: Axis.X})
+            Model.fromGltfAsync({url: fullUrl, backFaceCulling: false})
               .then((model) => {
                 tilesetNameByInstance.set(model, name);
                 modelRefs.current[name] = model;
@@ -449,9 +455,9 @@ export function useTilesetManager() {
                 if (entry.sidecar) {
                   const sidecarUrl = `${BASE_URL}${entry.sidecar}`;
                   buildGlbLineCylinders(fullUrl, sidecarUrl, viewer, model)
-                    .then((prims) => {
-                      cylinderPrimitivesRef.current[name] = prims;
-                      console.log(`[tileset:${name}] built ${prims.length} cylinder primitive(s)`);
+                    .then((nodeMap) => {
+                      cylinderPrimitivesRef.current[name] = nodeMap;
+                      console.log(`[tileset:${name}] built ${Object.keys(nodeMap).length} cylinder primitive(s)`);
                     })
                     .catch((err) =>
                       console.error(`[tileset:${name}] cylinder build failed:`, err),
@@ -463,12 +469,11 @@ export function useTilesetManager() {
               );
           } else {
             modelRefs.current[name].show = true;
-            // Re-show cylinders if they were hidden.
-            for (const p of cylinderPrimitivesRef.current[name] ?? []) p.show = true;
+            for (const p of Object.values(cylinderPrimitivesRef.current[name] ?? {})) p.show = true;
           }
         } else if (modelRefs.current[name]) {
           modelRefs.current[name].show = false;
-          for (const p of cylinderPrimitivesRef.current[name] ?? []) p.show = false;
+          for (const p of Object.values(cylinderPrimitivesRef.current[name] ?? {})) p.show = false;
         }
         return;
       }
