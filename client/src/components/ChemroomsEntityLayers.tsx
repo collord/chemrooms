@@ -26,7 +26,7 @@
 
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {Cartographic, sampleTerrainMostDetailed} from 'cesium';
-import {useStoreWithCesium} from '@sqlrooms/cesium';
+import {useStoreWithCesium} from '../cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
 import {
   initEntityLayers,

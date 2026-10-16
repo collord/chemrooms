@@ -9,7 +9,7 @@ import {
   useBaseRoomShellStore,
   type RoomShellSliceState,
 } from '@sqlrooms/room-shell';
-import type {CesiumSliceState} from '@sqlrooms/cesium';
+import type {CesiumSliceState} from '../cesium';
 import type {MosaicSliceState} from '@sqlrooms/mosaic/dist/MosaicSlice';
 import type {SqlEditorSliceState} from '@sqlrooms/sql-editor';
 import type {StateCreator} from 'zustand';

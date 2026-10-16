@@ -23,16 +23,14 @@ import {
   Cartesian3,
   ClippingPlane,
   ClippingPlaneCollection,
-  ColorGeometryInstanceAttribute,
   PerInstanceColorAppearance,
   PolylineColorAppearance,
   Primitive,
   ShowGeometryInstanceAttribute,
   type Cesium3DTileset,
 } from 'cesium';
-import {useStoreWithCesium} from '@sqlrooms/cesium';
+import {useStoreWithCesium} from '../cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
-import {getPrimitiveMetadata} from '../layers/entityMetadata';
 import {
   applyClippingToEntities,
   applyClippingToTileset,

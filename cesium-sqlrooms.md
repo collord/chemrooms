@@ -2,6 +2,12 @@
 
 > A detailed implementation guide for an AI coding assistant to generate a `@sqlrooms/cesium` feature package that integrates CesiumJS (via Resium) into the SQLRooms framework, including full clock/datetime support.
 
+> **Status (2026-10-15):** historical. This guide produced the `@sqlrooms/cesium`
+> package proposed upstream in sqlrooms/sqlrooms#530. That package was not
+> adopted by the monorepo; the reviewed code now lives in chemrooms at
+> `client/src/cesium`, and chemrooms depends on published `@sqlrooms/*`
+> packages only. Kept for the design rationale.
+
 ---
 
 ## Table of Contents

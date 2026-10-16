@@ -10,7 +10,7 @@
 
 import React, {useState, useEffect, useRef, useCallback} from 'react';
 import {Scissors, X} from 'lucide-react';
-import {useStoreWithCesium} from '@sqlrooms/cesium';
+import {useStoreWithCesium} from '../cesium';
 import {
   Cartesian3,
   Cartographic,
@@ -146,9 +146,6 @@ export const CrossSectionToggle: React.FC = () => {
       // Plane normal = cross(dir, up), perpendicular to both
       const normal = Cartesian3.cross(dir, up, new Cartesian3());
       Cartesian3.normalize(normal, normal);
-
-      // Distance so the plane passes through p1
-      const distance = -Cartesian3.dot(normal, p1);
 
       // Don't call enableClippingPlane — our useClippingPlaneSync hook
       // handles globe + tileset + entity + primitive clipping from

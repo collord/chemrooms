@@ -10,7 +10,7 @@
 
 import {useEffect, useRef, useCallback} from 'react';
 import {Rectangle, type Viewer} from 'cesium';
-import {useStoreWithCesium} from '@sqlrooms/cesium';
+import {useStoreWithCesium} from '../cesium';
 import {getProjectBbox, onBboxChange} from '../layers/layerBbox';
 import {roomStore} from '../store';
 
@@ -93,11 +93,9 @@ export function useProjectZoom(): {zoomToFit: () => void} {
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
     const state = roomStore.getState();
-    if (state.cesium?.zoomToFit) {
-      (state.cesium as any).zoomToFit = () => {
-        flyToProjectBbox(viewer);
-      };
-    }
+    (state.cesium as any).zoomToFit = () => {
+      flyToProjectBbox(viewer);
+    };
   }, [viewer]);
 
   return {zoomToFit};

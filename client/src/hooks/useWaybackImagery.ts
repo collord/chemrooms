@@ -32,7 +32,7 @@ import {
   UrlTemplateImageryProvider,
 } from 'cesium';
 import {getWaybackItems, type WaybackItem} from '@esri/wayback-core';
-import {useStoreWithCesium} from '@sqlrooms/cesium';
+import {useStoreWithCesium} from '../cesium';
 
 export function useWaybackImagery() {
   const viewer = useStoreWithCesium((s) => s.cesium.viewer);

@@ -33,7 +33,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
-import {useStoreWithCesium} from '@sqlrooms/cesium';
+import {useStoreWithCesium} from '../cesium';
 import {Color} from 'cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
 import {

@@ -420,7 +420,7 @@ export const LayerConfig = z.object({
   // ── Visual ────────────────────────────────────────────────────────
 
   /** How to render the data. */
-  visual: VisualEncoding.default({}),
+  visual: VisualEncoding.prefault({}),
 
   /** Whether the layer is currently visible on the map. */
   visible: z.boolean().default(true),

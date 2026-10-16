@@ -41,7 +41,7 @@ import {
   HeightReference,
   PolygonHierarchy,
 } from 'cesium';
-import {useStoreWithCesium} from '@sqlrooms/cesium';
+import {useStoreWithCesium} from '../cesium';
 import {geoJsonToVectorPieces, type ResolvedDrapeMode} from '../layers/vectorGeometry';
 import {
   setEntityMetadata,

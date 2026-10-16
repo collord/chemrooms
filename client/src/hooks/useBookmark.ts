@@ -20,7 +20,7 @@
 import {useEffect, useRef} from 'react';
 import {Cartesian3, Cartographic, Math as CesiumMath} from 'cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
-import {useStoreWithCesium} from '@sqlrooms/cesium';
+import {useStoreWithCesium} from '../cesium';
 import {
   deserializeLayerFromUrl,
   serializeLayerForUrl,

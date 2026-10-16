@@ -374,7 +374,7 @@ const ClickedValueCard: React.FC<{rowData: Record<string, unknown>}> = ({
 
   return (
     <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
-      {analyte && (
+      {analyte != null && analyte !== '' && (
         <div className="text-xs font-medium text-muted-foreground">
           {String(analyte)}
           {matrix ? ` — ${String(matrix)}` : ''}

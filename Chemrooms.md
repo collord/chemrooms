@@ -8,7 +8,7 @@
 
 Chemrooms is a browser-based analytical workbench that loads a ChemDuck-structured DuckDB database (initially as a full `.duckdb` transfer via URL, later via streaming Arrow) and provides:
 
-1. **Spatial overview** — A Cesium 3D globe (via the `@sqlrooms/cesium` fork at `collord/sqlrooms`) showing all sampling locations as interactive point features.
+1. **Spatial overview** — A Cesium 3D globe (via the Cesium slice vendored at `client/src/cesium`) showing all sampling locations as interactive point features.
 2. **Location inspector** — Click a location on the map to open a detail panel with analyte selection and a time-series chart (via `@sqlrooms/mosaic`).
 3. **Choropleth mapping** — Select an analyte from a global menu to re-symbolize all map points by concentration using a color ramp, with toggleable raw-value vs. exceedance-ratio modes.
 4. **Multi-analyte overlay** — Support 2–4 analytes on one time-series chart with dual y-axes when units differ.
@@ -573,7 +573,7 @@ ORDER BY r.analyte_group, r.analyte
 
 #### 1.1 Project Scaffolding
 - [ ] Initialize the `chemrooms` repo with client (Vite + React + TypeScript) and server (FastAPI) directories.
-- [ ] Client depends on forked `@sqlrooms/cesium`, `@sqlrooms/room-shell`, `@sqlrooms/duckdb`, `@sqlrooms/mosaic`, `@sqlrooms/ui`, `@sqlrooms/sql-editor`.
+- [x] Client depends on published `@sqlrooms/*` 0.29.0 from npm; the Cesium slice is vendored at `client/src/cesium` (no fork).
 - [ ] Configure Vite with `vite-plugin-cesium`, Tailwind CSS, Cesium Ion token via `.env`.
 - [ ] Server: FastAPI app that serves a static `.duckdb` file at a known URL.
 
@@ -785,11 +785,11 @@ WHERE r.analyte = '{analyte}'
 
 | Layer | Technology | Package |
 |-------|-----------|---------|
-| Framework | SQLRooms (forked: `collord/sqlrooms`) | `@sqlrooms/room-shell`, `@sqlrooms/room-store` |
+| Framework | SQLRooms 0.29.0 (npm) | `@sqlrooms/room-shell`, `@sqlrooms/room-store` |
 | State | Zustand | via SQLRooms `createRoomStore` |
 | Schema validation | Zod | via SQLRooms config persistence |
 | Database | DuckDB-WASM + spatial extension | `@sqlrooms/duckdb` |
-| 3D Globe | CesiumJS + Resium | `@sqlrooms/cesium` (fork) |
+| 3D Globe | CesiumJS + Resium | `client/src/cesium` (vendored slice, formerly `@sqlrooms/cesium`) |
 | Charts | Mosaic / VgPlot | `@sqlrooms/mosaic` |
 | UI components | Tailwind + Shadcn/ui | `@sqlrooms/ui` |
 | SQL editor | Monaco | `@sqlrooms/sql-editor` |
@@ -855,4 +855,4 @@ For a fresh clone, setup is:
 cd chemrooms/client
 pnpm install          # installs npm deps + creates @sqlrooms symlinks
 pnpm dev              # starts Vite dev server
-The only requirement is that the sqlrooms fork lives at ../../sqlrooms relative to the client dir (i.e., /Users/collord/Documents/sqlrooms). If it moves, update the link: paths in package.json or run SQLROOMS_DIR=/new/path pnpm link-sqlrooms.
+No sqlrooms checkout is needed. All `@sqlrooms/*` packages install from npm, and the Cesium slice lives in `client/src/cesium` (see its `index.ts` for provenance).

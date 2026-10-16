@@ -25,10 +25,9 @@ import {
   UniformType,
 } from 'cesium';
 import {buildGlbLineCylinders} from './useGlbLineCylinders';
-import {useStoreWithCesium} from '@sqlrooms/cesium';
+import {useStoreWithCesium} from '../cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
 import {applyClippingToTileset, planeFromPoints} from '../lib/clippingPlane';
-import type {CrossSectionMode} from '../slices/chemrooms-slice';
 import {setLayerBbox} from '../layers/layerBbox';
 
 /** WGS84 rectangle in degrees, optionally on a manifest entry. */

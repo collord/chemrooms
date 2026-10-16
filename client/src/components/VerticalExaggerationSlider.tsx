@@ -15,7 +15,7 @@
 
 import React, {useState, useCallback, useEffect, useRef} from 'react';
 import {Cartographic, Cartesian3, Ellipsoid} from 'cesium';
-import {useStoreWithCesium} from '@sqlrooms/cesium';
+import {useStoreWithCesium} from '../cesium';
 
 const DEBOUNCE_MS = 250;
 

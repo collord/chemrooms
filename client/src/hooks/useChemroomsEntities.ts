@@ -38,7 +38,7 @@ import {
   ShowGeometryInstanceAttribute,
   Transforms,
 } from 'cesium';
-import {useStoreWithCesium} from '@sqlrooms/cesium';
+import {useStoreWithCesium} from '../cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
 import {roomStore} from '../store';
 import {makeColorFnForColumn} from '../vis/colormap';

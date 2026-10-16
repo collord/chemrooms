@@ -11,14 +11,13 @@ import {
   createRoomShellSlice,
   type RoomShellSliceState,
   MAIN_VIEW,
-  LayoutTypes,
 } from '@sqlrooms/room-shell';
 import {
   createCesiumSlice,
   type CesiumSliceState,
   createDefaultCesiumConfig,
   CesiumPanel,
-} from '@sqlrooms/cesium';
+} from './cesium';
 import {createMosaicSlice} from '@sqlrooms/mosaic';
 import type {MosaicSliceState} from '@sqlrooms/mosaic/dist/MosaicSlice';
 import {createWasmDuckDbConnector} from '@sqlrooms/duckdb';
@@ -144,24 +143,34 @@ export const {roomStore, useRoomStore} = createRoomStore<RoomState>(
         ],
       },
       layout: {
+        // SQLRooms 0.29 layout tree: split nodes with sized children.
+        // Sizes match the old splitPercentage values (22 | 75 of rest | 60).
         config: {
-          type: LayoutTypes.enum.mosaic,
-          nodes: {
-            direction: 'row',
-            first: 'sidebar',
-            second: {
+          type: 'split',
+          id: 'root',
+          direction: 'row',
+          children: [
+            {type: 'panel', id: 'sidebar', defaultSize: '22%'},
+            {
+              type: 'split',
+              id: 'content',
               direction: 'row',
-              first: {
-                direction: 'column',
-                first: MAIN_VIEW,
-                second: 'timeseries',
-                splitPercentage: 60,
-              },
-              second: 'inspector',
-              splitPercentage: 75,
+              defaultSize: '78%',
+              children: [
+                {
+                  type: 'split',
+                  id: 'map-and-chart',
+                  direction: 'column',
+                  defaultSize: '75%',
+                  children: [
+                    {type: 'panel', id: MAIN_VIEW, defaultSize: '60%'},
+                    {type: 'panel', id: 'timeseries', defaultSize: '40%'},
+                  ],
+                },
+                {type: 'panel', id: 'inspector', defaultSize: '25%'},
+              ],
             },
-            splitPercentage: 22,
-          },
+          ],
         },
         panels: {
           sidebar: {
