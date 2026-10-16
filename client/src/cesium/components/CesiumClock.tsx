@@ -75,7 +75,7 @@ export const CesiumClock: React.FC<CesiumClockProps> = ({className}) => {
   return (
     <div
       className={cn(
-        'bg-background/80 flex items-center gap-3 rounded-lg p-3 shadow-lg backdrop-blur',
+        'bg-background/80 flex items-center gap-3 rounded-lg p-3 shadow-lg backdrop-blur-sm',
         className,
       )}
     >

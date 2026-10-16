@@ -1,10 +1,11 @@
 import {defineConfig} from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import cesium from 'vite-plugin-cesium';
 
 export default defineConfig({
   base: process.env.GITHUB_ACTIONS ? '/chemrooms/' : '/',
-  plugins: [react(), cesium({rebuildCesium: true})],
+  plugins: [react(), tailwindcss(), cesium({rebuildCesium: true})],
   define: {
     CESIUM_BASE_URL: JSON.stringify(
       process.env.GITHUB_ACTIONS ? '/chemrooms/cesium' : '/cesium',

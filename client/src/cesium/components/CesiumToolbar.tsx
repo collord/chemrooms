@@ -34,7 +34,7 @@ export const CesiumToolbar: React.FC<CesiumToolbarProps> = ({className}) => {
   return (
     <div
       className={cn(
-        'bg-background/80 flex flex-col gap-2 rounded-lg p-2 shadow-lg backdrop-blur',
+        'bg-background/80 flex flex-col gap-2 rounded-lg p-2 shadow-lg backdrop-blur-sm',
         className,
       )}
     >
