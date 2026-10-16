@@ -1,9 +1,102 @@
 # ARII parquet as a chemrooms data source — design brief
 
-Status: **design decided, not planned.** Written 2026-10-15 for an agent who
-will turn it into an implementation plan. Decisions marked **Decided** are
-not to be reopened without new evidence. Items under *Open questions* are
-the planner's to resolve, mostly by measuring.
+Status: **implemented 2026-10-16**, on chemrooms branch
+`sqlrooms-029-tailwind4-arii` and chemduck branch `arii-hybrid`; not yet
+merged. Written 2026-10-15 as a design brief; sections 1 to 12 are the brief
+as written, with the open questions answered in place. Section 0 says what
+was built and what was measured.
+
+## 0. Implementation status (2026-10-16)
+
+### What exists
+
+| Piece | Where |
+|---|---|
+| Publisher, results-view generator, bootstrap SQL, consumer opener | chemduck `tools/arii_hybrid.py` |
+| Shared results SELECT (loader and view), text-date parsing | chemduck `tools/load_data.py` `results_select_sql`, mapping `source.date_formats` |
+| Parity gate on any manifest | chemduck `tools/check_arii_parity.py` |
+| Tests: parity, refusals, typed columns, bootstrap | chemduck `tests/test_arii_hybrid.py` |
+| One-command publish for chemrooms (sidecars + catalogs + vis specs) | chemrooms `server/publish_arii.py` |
+| ChemDuck SQL sync, replacing the hand copy | chemrooms `server/sync_chemduck.py` |
+| Browser side: manifest check, range-read registration, results view | chemrooms `client/src/setup/ariiSource.ts` |
+| Catalog views (materialized for ARII) | chemrooms `client/src/sql/chemrooms_catalogs.sql` |
+| Freshness and refusal display | chemrooms `client/src/components/SourceBadge.tsx` |
+
+To open an ARII export:
+
+```
+python server/publish_arii.py <manifest.json> <out_dir> --x LONGITUDE --y LATITUDE
+VITE_DATA_URL=<url of out_dir> VITE_ARII_MANIFEST_URL=<url of manifest.json> pnpm dev
+```
+
+### Measured on the test facility, 2026-10-16
+
+Development workstation (Windows 11). Browser numbers are Chrome
+(SwiftShader WebGL) against a local Range-capable server that counts the
+bytes it sends, so they include no network latency; expect blob storage to
+be slower in time, not in bytes.
+
+| | |
+|---|---|
+| Full conversion with the chemduck loader | 274.6 s |
+| `publish` (sidecars) / `publish_arii.py` (sidecars + vis specs) | 17 s / 37 s |
+| Sidecar folder | about 1 MB |
+| Parity: tables, `v_analyte_summary`, 1,080 `aggregate_results` recipes over the 8 most-measured analytes | identical |
+| Browser: open, until the 526-analyte picker is filled | 19.6 s; partitions 0.73 MiB in 47 requests (footers); sidecars 1.0 MiB |
+| Browser: first Arsenic map, 5,610 rows | 13.3 s; 9.14 MiB in 174 range requests |
+| Browser: select a station, inspector + time series of 2 analytes | 15.3 s; 4.81 MiB in 74 requests |
+
+### Found while building it
+
+- **DuckDB-WASM 1.32 downloads a registered HTTP file whole by default.**
+  With default filesystem settings the first footer read fetched each
+  partition in one plain GET (43 MiB for WS/N). `filesystem:
+  {reliableHeadRequests: false, allowFullHTTPReads: true,
+  forceFullHTTPReads: false}` on the connector turns on range reads: one
+  partition's footer plus one analyte went from 26.6 MiB in 1 request to
+  0.18 MiB in 8. Set in `client/src/store.ts`.
+- **The chemduck ARII loader dropped every sample on real data.** Dates are
+  text in the export; a plain cast read them as NULL. Fixed with the
+  plugin's date formats, in its order (all 67,064 distinct dates
+  parse).
+- **A NULL in a view is INTEGER.** The hybrid `meas_basis` column broke
+  `COALESCE(meas_basis, '')`; parity could not see it because every value
+  is NULL. The shared SELECT now casts every column; a test compares the
+  view's types with the table's.
+- **One entity per sample does not scale.** With no analyte selected,
+  the test facility's 104,540 drawable samples made 105,245 Cesium entities and kept
+  the main thread busy for minutes. Above 20,000 samples the layer now draws
+  one entity per sampling point (3,888 at the test facility); the demo's 9,940 samples
+  are drawn as before.
+- **The catalog queries scanned every result.** The analyte list and the
+  location inspector grouped `results` through `samples`, which pushes no
+  filter into the results scan. They now read `analyte_catalog` and
+  `location_analytes`, views for a ChemDuck project and materialized
+  sidecars for ARII.
+- **Running the app found two SQLRooms 0.29 regressions** (panels need a
+  `panel` field; resium 1.20.0's bundled JSX runtime), fixed on the same
+  branch before this work.
+
+### Still open
+
+- **Q3 is the user's decision**, with the counts below.
+- **Q5** (merging the feature-service location list) and **Q6** (a QC
+  fixture: field duplicates and blanks excluded by default) are not done.
+- **The moisture lookup** in ChemDuck's `v_results_denormalized` filters
+  `UPPER(analyte) IN (...)`, which blocks row-group pruning, so every query
+  reads the analyte column of every row group (1.18 MiB at the test facility). A
+  chemduck change, affecting every consumer.
+- **Matrix filters prune nothing** (Q2). Exposing the Hive `matrix` key on
+  the view and a redundant predicate in ChemDuck's views would let them;
+  also a chemduck change.
+- **Row-group size drives bytes.** A one-analyte map reads whole 50,000-row
+  row groups of about 15 columns. Smaller row groups in the export
+  pipeline would cut that; measure before changing the shared skill.
+- **The time series has its own copy of the non-detect rules**, in
+  TypeScript (`TimeSeriesPanel.tsx`), the kind of copy section 2 rejects.
+- **Not tested against real blob storage.** The local server honours
+  Range; Azure does, but CORS must expose `Content-Range` and
+  `Content-Length`.
 
 ## 1. What this is for
 
@@ -312,8 +405,14 @@ Scope the plan across these. The order is a suggestion.
      hive_partitioning=true)`. Running it directly through the connector
      works. So does `createTableFromQuery(..., {view: true})`.
 
-  **Still to verify in the browser.** Confirm that the HTTP protocol
-  issues range requests against the real host. The host must honour
+  **Verified 2026-10-16, with one correction:** registered HTTP files are
+  read by range requests only once the connector sets
+  `filesystem: {reliableHeadRequests: false, allowFullHTTPReads: true,
+  forceFullHTTPReads: false}`; with DuckDB-WASM 1.32's defaults each file
+  is downloaded whole (see section 0).
+
+  **Originally still to verify in the browser.** Confirm that the HTTP
+  protocol issues range requests against the real host. The host must honour
   `Range` and expose `Content-Range` and `Content-Length` through CORS.
   Put a SAS token on each URL, never in the view text. The comment in
   `initEntityLayers.ts` says `read_json('https://...')` fails without
@@ -329,6 +428,25 @@ Scope the plan across these. The order is a suggestion.
   and with bytes fetched in WASM. Possible fixes: add `matrix` to the view
   and a redundant predicate in the views; keep raw fraction codes for EQuIS
   sources; or partition-map in the catalog.
+
+  **Measured 2026-10-16** (native DuckDB 1.5 with httpfs against the
+  counting server, the test facility):
+
+  | Query | MiB | Requests | Files read |
+  |---|---|---|---|
+  | `results` where analyte = 'Arsenic', count | 2.27 | 49 | 10 |
+  | same, 15 columns | 4.65 | 75 | 10 |
+  | moisture lookup inside `v_results_denormalized` | 1.18 | 105 | 10 |
+  | `aggregate_results('Arsenic', ...)` | 6.18 | 189 | 10 |
+  | same, matrix 'WS' | 6.01 | 180 | 10 |
+  | same, `p_fraction := 'Total'` | 4.15 | 156 | 10 |
+
+  Analyte filters prune row groups. Matrix filters prune nothing, because
+  matrix is filtered on `samples`. The fraction filter reads less but still
+  opens every file, since the T/D-to-Total/Dissolved CASE sits between the
+  filter and the column. The moisture lookup's `UPPER()` defeats pruning on
+  every query. The browser reads more than native DuckDB for the same map
+  (9.14 MiB against 6.18). The fixes listed above remain open (section 0).
 - **Q3. Which limit does ½ DL use?** The plugin's limit ladder starts with
   `REPORT_METHOD_DETECTION_LIMIT`; ChemDuck's `detection_limit` is
   `COALESCE(reporting_limit, method_detection_limit, quantitation_limit)`.
@@ -337,7 +455,21 @@ Scope the plan across these. The order is a suggestion.
   chemrooms can therefore plot different values for a non-detect. This is a
   domain decision for the user. The plan should surface it with counts from
   the test facility, not pick silently.
-- **Q4. Where does the publisher live?** Recommended: chemrooms or chemduck
+
+  **Counted 2026-10-16 on the test facility; the decision is still the user's.** The
+  ladders agree far more than feared. All 1,836,971 detects get the same
+  value. Of 1,615,175 non-detects, the 1,563,331 both ladders can value get
+  the same value at ½ DL. They diverge on 51,844 non-detects (3.2%), all
+  surface water (WS), in 7 field parameters (Color 34,135, Chlorophyll a
+  9,044, settleable solids 5,875, Turbidity 1,563, Salinity 1,039, ...),
+  that carry only a quantitation limit: the plugin's ladder has no
+  quantitation limit, so QGIS plots nothing, while ChemDuck plots half the
+  quantitation limit. Chemrooms keeps ChemDuck's behaviour until decided.
+- **Q4. Resolved: chemduck owns the generic publisher**
+  (`tools/arii_hybrid.py`, beside the loader it shares a mapping and a
+  SELECT with); chemrooms wraps it (`server/publish_arii.py`) to add its
+  catalogs and vis specs. The shared export skill is unchanged.
+  *As written:* Recommended: chemrooms or chemduck
   owns it, reading the manifest as an input. Folding it into the shared
   `equis-parquet-export` skill's `publish_manifest.py` is possible later,
   but that skill is shared beyond these repositories.
