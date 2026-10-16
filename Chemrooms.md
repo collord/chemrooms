@@ -2,6 +2,8 @@
 
 > An SQLRooms-based web application for spatial exploration and time-series analysis of environmental chemistry data stored in ChemDuck format.
 
+> **Note (2026-10-16):** this is the original specification and plan. Much of it predates the code, and parts are out of date: the SQL in section 8, the file structure in section 10, and the single-source data loading. For setup and current usage, including EQuIS ARII sources, see [README.md](README.md).
+
 ---
 
 ## 1. Product Overview
@@ -849,10 +851,4 @@ client/
 
 ## How to do setup
 
-For a fresh clone, setup is:
-
-
-cd chemrooms/client
-pnpm install          # installs npm deps + creates @sqlrooms symlinks
-pnpm dev              # starts Vite dev server
-No sqlrooms checkout is needed. All `@sqlrooms/*` packages install from npm, and the Cesium slice lives in `client/src/cesium` (see its `index.ts` for provenance).
+See [README.md](README.md).
