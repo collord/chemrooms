@@ -8,8 +8,10 @@ import {useSql} from '@sqlrooms/duckdb';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
 
 export function useAvailableFilters() {
-  const resultsTable = useChemroomsStore((s) =>
-    s.db.findTableByName('results'),
+  // analyte_catalog exists once init has loaded the ChemDuck schema and
+  // chemrooms' catalogs (a view, or an ARII sidecar table).
+  const hasSchema = useChemroomsStore(
+    (s) => s.chemrooms.aggregationRules && Object.keys(s.chemrooms.aggregationRules).length > 0,
   );
   const samplesTable = useChemroomsStore((s) =>
     s.db.findTableByName('samples'),
@@ -18,7 +20,7 @@ export function useAvailableFilters() {
     s.db.findTableByName('screening_levels'),
   );
 
-  const tablesReady = Boolean(resultsTable && samplesTable);
+  const tablesReady = Boolean(samplesTable);
 
   const setAvailableMatrices = useChemroomsStore(
     (s) => s.chemrooms.setAvailableMatrices,
@@ -50,22 +52,15 @@ export function useAvailableFilters() {
     max_result: number;
     units: string;
   }>({
+    // From analyte_catalog rather than grouping `results`: for an ARII
+    // project that would scan every remote partition.
     query: `
-      SELECT
-        r.analyte,
-        COALESCE(r.analyte_group, 'Other') AS analyte_group,
-        COALESCE(r.cas_number, '') AS cas_number,
-        COUNT(*)::INT AS result_count,
-        SUM(CASE WHEN r.detected THEN 1 ELSE 0 END)::INT AS detect_count,
-        MIN(r.result) AS min_result,
-        MAX(r.result) AS max_result,
-        COALESCE(r.units, '') AS units
-      FROM results r
-      JOIN samples s ON r.sample_id = s.sample_id
-      GROUP BY r.analyte, r.analyte_group, r.cas_number, r.units
-      ORDER BY COALESCE(r.analyte_group, 'Other'), r.analyte
+      SELECT analyte, analyte_group, cas_number, result_count, detect_count,
+             min_result, max_result, units
+      FROM analyte_catalog
+      ORDER BY analyte_group, analyte
     `,
-    enabled: tablesReady,
+    enabled: tablesReady && hasSchema,
   });
 
   // Screening levels

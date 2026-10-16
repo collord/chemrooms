@@ -12,6 +12,7 @@
     "tiles-manifest": "node ./scripts/build-tiles-manifest.mjs"
   },
   "dependencies": {
+    "@duckdb/duckdb-wasm": "1.32.0",
     "@esri/wayback-core": "^1.0.10",
     "@sqlrooms/data-table": "^0.29.0",
     "@sqlrooms/duckdb": "^0.29.0",

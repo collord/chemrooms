@@ -36,6 +36,7 @@ function makeLayer(overrides: Partial<LayerConfig> = {}): LayerConfig {
     query: {
       analyte: 'Benzene',
       matrix: 'groundwater',
+      fraction: null,
       startDate: null,
       endDate: null,
       eventAgg: 'most_recent',
@@ -555,5 +556,27 @@ describe('isHashedId', () => {
   it('returns false for a layer with a hex-shaped but mismatched id', async () => {
     const layer = makeLayer({id: '0123456789abcdef'});
     expect(await isHashedId(layer)).toBe(false);
+  });
+});
+
+describe('fraction in the recipe hash', () => {
+  // Layers frozen before `fraction` existed have no such key. Their ids
+  // must not change, or saved layers and bookmarks stop matching.
+  it('a null fraction hashes like a recipe without the field', async () => {
+    const withNull = makeLayer();
+    const legacyQuery = {...withNull.query!} as Record<string, unknown>;
+    delete legacyQuery.fraction;
+    const legacy = {...withNull, query: legacyQuery} as unknown as LayerConfig;
+    expect(await computeLayerHash(withNull)).toBe(await computeLayerHash(legacy));
+  });
+
+  it('a fraction filter is part of the recipe, so it changes the id', async () => {
+    const base = makeLayer();
+    const dissolved = makeLayer({query: {...base.query!, fraction: 'Dissolved'}});
+    const total = makeLayer({query: {...base.query!, fraction: 'Total'}});
+    const ids = new Set(
+      await Promise.all([base, dissolved, total].map((l) => computeLayerHash(l))),
+    );
+    expect(ids.size).toBe(3);
   });
 });

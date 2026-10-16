@@ -139,6 +139,10 @@ export const ChemroomsEntityLayers: React.FC = () => {
   const eventAgg = useChemroomsStore((s) => s.chemrooms.config.eventAgg);
   const dupAgg = useChemroomsStore((s) => s.chemrooms.config.dupAgg);
   const ndMethod = useChemroomsStore((s) => s.chemrooms.config.ndMethod);
+  const fractionFilter = useChemroomsStore(
+    (s) => s.chemrooms.config.fractionFilter,
+  );
+  const setSourceInfo = useChemroomsStore((s) => s.chemrooms.setSourceInfo);
   const matrixFilter = useChemroomsStore(
     (s) => s.chemrooms.config.matrixFilter,
   );
@@ -160,6 +164,7 @@ export const ChemroomsEntityLayers: React.FC = () => {
 
   const [elevationColumns, setElevationColumns] = useState<string[]>([]);
   const [hasChemduckSchema, setHasChemduckSchema] = useState(false);
+  const [groupSamples, setGroupSamples] = useState(false);
   const [locationsSql, setLocationsSql] = useState<string | null>(null);
   const [samplesSql, setSamplesSql] = useState<string | null>(null);
 
@@ -275,7 +280,12 @@ export const ChemroomsEntityLayers: React.FC = () => {
           locationsSql: locSql,
           samplesSql: sampSql,
           locationsNeedingTerrain,
+          source,
+          sourceError,
+          groupSamples: group,
         } = result;
+        setGroupSamples(group);
+        setSourceInfo(source, sourceError);
         console.log(
           `[init] hasGeoid=${hasGeoid} hasChemduckSchema=${hasSchema} elevationColumns=[${elevCols.join(
             ',',
@@ -374,6 +384,8 @@ export const ChemroomsEntityLayers: React.FC = () => {
       dupAgg,
       ndMethod,
       matrixFilter,
+      fractionFilter,
+      groupSamples,
     });
     setSamplesSql((prev) => (prev === newSql ? prev : newSql));
   }, [
@@ -384,6 +396,8 @@ export const ChemroomsEntityLayers: React.FC = () => {
     dupAgg,
     ndMethod,
     matrixFilter,
+    fractionFilter,
+    groupSamples,
   ]);
 
   // ── Auto color-by when analyte is selected ─────────────────────────

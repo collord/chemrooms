@@ -1,0 +1,14 @@
+{
+ "chemduck": {
+  "commit": "206b7d11a5ea227ad570ec080f58c2745e39e3d4",
+  "dirty": false
+ },
+ "files": [
+  "00_bootstrap.sql",
+  "02_macros.sql",
+  "03_views.sql",
+  "08_aggregate_results.sql"
+ ],
+ "aggregation_rules": 13,
+ "generated": "2026-10-16T07:01:43+00:00"
+}

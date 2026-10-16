@@ -74,6 +74,7 @@ export function buildLayerSql(
         dupAgg: layer.query.dupAgg,
         ndMethod: layer.query.ndMethod,
         matrixFilter: layer.query.matrix,
+        fractionFilter: layer.query.fraction ?? null,
       });
     }
 

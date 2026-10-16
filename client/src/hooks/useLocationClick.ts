@@ -379,22 +379,25 @@ export function useLocationDetail(): {
         COALESCE(l.loc_desc, '') AS loc_desc,
         COALESCE(l.region, '') AS region,
         COUNT(DISTINCT s.sample_id)::INT AS sample_count,
-        COUNT(DISTINCT r.analyte)::INT AS analyte_count,
+        (SELECT COUNT(DISTINCT la.analyte) FROM location_analytes la
+          WHERE la.location_id = l.location_id)::INT AS analyte_count,
         MIN(s.sample_date)::VARCHAR AS first_date,
         MAX(s.sample_date)::VARCHAR AS last_date,
         LIST(DISTINCT s.matrix ORDER BY s.matrix) AS matrices
       FROM locations l
       JOIN samples s ON s.location_id = l.location_id
-      JOIN results r ON r.sample_id = s.sample_id
       WHERE l.location_id = '${selectedLocationId}'
       GROUP BY l.location_id, l.loc_type, l.loc_desc, l.region
     `,
     enabled: Boolean(selectedLocationId) && Boolean(locationsTable),
   });
 
-  const matrixClause = matrixFilter ? `AND s.matrix = '${matrixFilter}'` : '';
+  // Per-location counts come from location_analytes (a view, or an ARII
+  // sidecar): joining `results` through `samples` pushes no filter into
+  // the results scan, so over remote partitions it read every row.
+  const matrixClause = matrixFilter ? `AND la.matrix = '${matrixFilter}'` : '';
   const fractionClause = fractionFilter
-    ? `AND r.fraction = '${fractionFilter}'`
+    ? `AND la.fraction = '${fractionFilter}'`
     : '';
 
   const {data: analytesData, isLoading: analytesLoading} = useSql<{
@@ -409,21 +412,20 @@ export function useLocationDetail(): {
   }>({
     query: `
       SELECT
-        r.analyte,
-        COALESCE(r.analyte_group, 'Other') AS analyte_group,
-        COALESCE(r.cas_number, '') AS cas_number,
-        COUNT(*)::INT AS result_count,
-        SUM(CASE WHEN r.detected THEN 1 ELSE 0 END)::INT AS detect_count,
-        MIN(r.result) AS min_result,
-        MAX(r.result) AS max_result,
-        COALESCE(r.units, '') AS units
-      FROM results r
-      JOIN samples s ON r.sample_id = s.sample_id
-      WHERE s.location_id = '${selectedLocationId}'
+        la.analyte,
+        la.analyte_group,
+        la.cas_number,
+        SUM(la.result_count)::INT AS result_count,
+        SUM(la.detect_count)::INT AS detect_count,
+        MIN(la.min_result) AS min_result,
+        MAX(la.max_result) AS max_result,
+        la.units
+      FROM location_analytes la
+      WHERE la.location_id = '${selectedLocationId}'
         ${matrixClause}
         ${fractionClause}
-      GROUP BY r.analyte, r.analyte_group, r.cas_number, r.units
-      ORDER BY COALESCE(r.analyte_group, 'Other'), r.analyte
+      GROUP BY la.analyte, la.analyte_group, la.cas_number, la.units
+      ORDER BY la.analyte_group, la.analyte
     `,
     enabled: Boolean(selectedLocationId) && Boolean(locationsTable),
   });

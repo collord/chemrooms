@@ -80,14 +80,67 @@ const cesiumConfigWithLayers = {
 // Data source URL — points to parquet exports of ChemDuck tables
 // ---------------------------------------------------------------------------
 
-import {DATA_BASE_URL} from './config';
+import {ARII_MANIFEST_URL, DATA_BASE_URL} from './config';
 export {DATA_BASE_URL};
+
+/** A parquet file under DATA_BASE_URL loaded as a table (downloaded whole). */
+const parquetTable = (tableName: string) => ({
+  tableName,
+  type: 'url' as const,
+  url: `${DATA_BASE_URL}/${tableName}.parquet`,
+});
+
+/**
+ * Tables SQLRooms loads before init runs. The ChemDuck tables a project
+ * does not ship are created empty by the bootstrap SQL at init.
+ *
+ * - ChemDuck project: every table is a parquet file, results included.
+ * - ARII project: only the small sidecars. `results` is a view over the
+ *   remote partitions, created at init (setup/ariiSource.ts), because a
+ *   url data source would download the whole facility into a table.
+ *   analyte_catalog and location_analytes are chemrooms' catalogs
+ *   (src/sql/chemrooms_catalogs.sql), which the publisher materialized.
+ */
+const DATA_SOURCES = ARII_MANIFEST_URL
+  ? [
+      'locations',
+      'samples',
+      'aggregation_rules',
+      'analyte_catalog',
+      'location_analytes',
+    ].map(parquetTable)
+  : [
+      'locations',
+      'samples',
+      'results',
+      'screening_levels',
+      // Canonical catalog of aggregation rule names and labels. Drives the
+      // UI dropdowns (event_agg, dup_agg, nd_method) without hardcoding the
+      // rule names in TypeScript.
+      'aggregation_rules',
+      'unit_conversions',
+      'downhole_survey',
+    ].map(parquetTable);
 
 // ---------------------------------------------------------------------------
 // Create store
 // ---------------------------------------------------------------------------
 
-const connector = createWasmDuckDbConnector();
+// HTTP range reads, explicitly. With DuckDB-WASM 1.32's defaults a file
+// registered by URL (an ARII partition, setup/ariiSource.ts) is downloaded
+// whole on first open: measured 2026-10-16 in Chrome against a Range-capable
+// server, one partition's footer plus one analyte cost 1 request and
+// 26.6 MiB with the defaults, 8 requests and 0.18 MiB with this. Full reads
+// stay allowed as a fallback for a server without Range support, which
+// will then be slow rather than broken. url data sources are unaffected:
+// SQLRooms downloads those itself and registers the bytes.
+const connector = createWasmDuckDbConnector({
+  filesystem: {
+    reliableHeadRequests: false,
+    allowFullHTTPReads: true,
+    forceFullHTTPReads: false,
+  },
+});
 
 // Dev-only: expose a global `window.__chemroomsProbeSpatial()` for
 // diagnosing whether the spatial extension loads in the current
@@ -101,46 +154,7 @@ export const {roomStore, useRoomStore} = createRoomStore<RoomState>(
       connector,
       config: {
         title: 'Chemrooms',
-        dataSources: [
-          {
-            tableName: 'locations',
-            type: 'url',
-            url: `${DATA_BASE_URL}/locations.parquet`,
-          },
-          {
-            tableName: 'samples',
-            type: 'url',
-            url: `${DATA_BASE_URL}/samples.parquet`,
-          },
-          {
-            tableName: 'results',
-            type: 'url',
-            url: `${DATA_BASE_URL}/results.parquet`,
-          },
-          {
-            tableName: 'screening_levels',
-            type: 'url',
-            url: `${DATA_BASE_URL}/screening_levels.parquet`,
-          },
-          {
-            // Canonical catalog of aggregation rule names and labels.
-            // Drives the UI dropdowns (event_agg, dup_agg, nd_method)
-            // without hardcoding the rule names in TypeScript.
-            tableName: 'aggregation_rules',
-            type: 'url',
-            url: `${DATA_BASE_URL}/aggregation_rules.parquet`,
-          },
-          {
-            tableName: 'unit_conversions',
-            type: 'url',
-            url: `${DATA_BASE_URL}/unit_conversions.parquet`,
-          },
-          {
-            tableName: 'downhole_survey',
-            type: 'url',
-            url: `${DATA_BASE_URL}/downhole_survey.parquet`,
-          },
-        ],
+        dataSources: DATA_SOURCES,
       },
       layout: {
         // SQLRooms 0.29 layout tree: split nodes with sized children.

@@ -4,6 +4,7 @@
  * filter state, and choropleth configuration.
  */
 
+import type {SourceInfo} from '../setup/initEntityLayers';
 import {
   createSlice,
   useBaseRoomShellStore,
@@ -179,8 +180,15 @@ export interface ChemroomsSliceState {
     config: ChemroomsConfig;
     // Runtime state
     availableAnalytes: AnalyteInfo[];
-    /** Sorted distinct analytes loaded from v_analyte_summary. */
+    /** Sorted distinct analytes loaded from analyte_catalog. */
     availableAnalyteNames: string[];
+    /**
+     * Where the data came from, and for an ARII source how fresh it is.
+     * Null until init has run.
+     */
+    sourceInfo: SourceInfo | null;
+    /** Why the source could not be opened (shown in the sidebar), or null. */
+    sourceError: string | null;
     availableMatrices: string[];
     availableScreeningLevels: string[];
     /** chemduck aggregation_rules catalog, keyed by category. */
@@ -243,6 +251,7 @@ export interface ChemroomsSliceState {
     setFractionFilter: (fraction: string | null) => void;
     setAvailableAnalytes: (analytes: AnalyteInfo[]) => void;
     setAvailableAnalyteNames: (names: string[]) => void;
+    setSourceInfo: (info: SourceInfo | null, error: string | null) => void;
     setAvailableMatrices: (matrices: string[]) => void;
     setAvailableScreeningLevels: (levels: string[]) => void;
     setAggregationRules: (rules: AggregationRule[]) => void;
@@ -322,6 +331,8 @@ export function createChemroomsSlice(
       config,
       availableAnalytes: [],
       availableAnalyteNames: [],
+      sourceInfo: null,
+      sourceError: null,
       availableMatrices: [],
       availableScreeningLevels: [],
       aggregationRules: {},
@@ -446,6 +457,11 @@ export function createChemroomsSlice(
       setAvailableAnalyteNames: (names) =>
         set((state: ChemroomsSliceState) =>
           updateRuntime(state, {availableAnalyteNames: names}),
+        ),
+
+      setSourceInfo: (info, error) =>
+        set((state: ChemroomsSliceState) =>
+          updateRuntime(state, {sourceInfo: info, sourceError: error}),
         ),
 
       setAggregationRules: (rules) =>

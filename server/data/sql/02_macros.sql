@@ -94,28 +94,49 @@ CREATE OR REPLACE MACRO duplicate_aggregate(
 -- Additional utility macros
 -- ============================================================================
 
--- Convert units using the unit_conversions table
--- Note: This requires a scalar subquery which may have performance implications
--- Consider pre-joining unit conversions in views for better performance
-CREATE OR REPLACE MACRO convert_units_factor(from_u, to_u) AS (
-    COALESCE(
-        (SELECT multiplier FROM unit_conversions uc
-         WHERE uc.from_units = from_u AND uc.to_units = to_u
-         LIMIT 1),
-        1.0
-    )
+-- Conversion factor between two units, from the unit_conversions table.
+-- Returns NULL when no factor is known: a missing factor means "not
+-- converted", never 1.0, because relabelling a number without converting it
+-- looks like success. Identical units return 1.0. A factor of exactly 1.0 from
+-- the table (ug/g -> mg/kg) is still a conversion.
+-- p_matrix (optional) enables conversions scoped to that matrix's class in
+-- matrix_classes (e.g. ppm -> mg/L for aqueous matrices only). Only general
+-- (analyte_group = '') factors are used.
+CREATE OR REPLACE MACRO convert_units_factor(from_u, to_u, p_matrix := NULL) AS (
+    CASE
+        WHEN from_u IS NULL OR to_u IS NULL THEN NULL
+        WHEN from_u = to_u THEN 1.0
+        ELSE (
+            SELECT uc.multiplier FROM unit_conversions uc
+            WHERE uc.from_units = from_u AND uc.to_units = to_u
+              AND COALESCE(uc.analyte_group, '') = ''
+              AND (
+                  COALESCE(uc.matrix_class, '') = ''
+                  OR uc.matrix_class = (
+                      SELECT mc.matrix_class FROM matrix_classes mc
+                      WHERE mc.matrix = p_matrix
+                  )
+              )
+            -- a matrix-scoped factor wins over a general one
+            ORDER BY COALESCE(uc.matrix_class, '') DESC
+            LIMIT 1
+        )
+    END
 );
 
--- Apply a unit conversion directly to a numeric value
+-- Apply a unit conversion directly to a numeric value.
+-- NULL when the factor is unknown (including an unknown from_units); the
+-- value is returned unchanged only when no target unit is requested.
 CREATE OR REPLACE MACRO convert_units(
     value,
     from_units,
-    to_units
+    to_units,
+    p_matrix := NULL
 ) AS (
     CASE
         WHEN value IS NULL THEN NULL
-        WHEN from_units IS NULL OR to_units IS NULL OR from_units = to_units THEN value
-        ELSE value * convert_units_factor(from_units, to_units)
+        WHEN to_units IS NULL THEN value
+        ELSE value * convert_units_factor(from_units, to_units, p_matrix := p_matrix)
     END
 );
 
@@ -279,6 +300,23 @@ CREATE OR REPLACE MACRO bin_quantile(value_list, n_classes) AS (
     END
 );
 
+-- Mann-Kendall trend test.
+--
+-- Pairs are ordered by sample_date, not by list position, so the caller's
+-- list order does not matter. Rows with a NULL date or value are dropped.
+-- Pairs sharing a sample_date contribute 0 to S: collapse multiple results
+-- on one date to a single value before calling (the variance is not
+-- corrected for ties in time).
+--
+-- Var(S) is tie-corrected for tied values (Gilbert 1987, ch. 16):
+--   Var(S) = [ n(n-1)(2n+5) - sum_p t_p(t_p-1)(2t_p+5) ] / 18
+-- where t_p is the size of the p-th group of equal values. Ties are routine
+-- (non-detects at the same limit), and ignoring them overstates Var(S).
+--
+-- Z uses the usual continuity correction; p is the two-sided normal
+-- approximation.
+--
+-- Returns: s_statistic, z_score, p_value, trend, n, var_s
 CREATE OR REPLACE MACRO mann_kendall_trend(date_list, value_list) AS TABLE
 WITH params AS (
         SELECT
@@ -302,43 +340,57 @@ WITH params AS (
     data AS (
         SELECT
             list_extract(dates, pos + 1) AS sample_date,
-            list_extract(vals, pos + 1) AS sample_value,
-            pos
+            list_extract(vals, pos + 1) AS sample_value
         FROM prepared
         CROSS JOIN idx
     ),
+    valid AS (
+        SELECT sample_date, sample_value
+        FROM data
+        WHERE sample_date IS NOT NULL AND sample_value IS NOT NULL
+    ),
     pairs AS (
+        -- Every pair (i, j) with t_i < t_j, in date order
         SELECT
             CASE
                 WHEN d2.sample_value > d1.sample_value THEN 1
                 WHEN d2.sample_value < d1.sample_value THEN -1
                 ELSE 0
             END AS sign_val
-        FROM data d1
-        JOIN data d2 ON d2.pos > d1.pos
+        FROM valid d1
+        JOIN valid d2 ON d2.sample_date > d1.sample_date
     ),
     s_calc AS (
         SELECT COALESCE(SUM(sign_val), 0) AS s
         FROM pairs
     ),
+    tie_calc AS (
+        SELECT COALESCE(SUM(t * (t - 1) * (2 * t + 5)), 0) AS tie_term
+        FROM (
+            SELECT COUNT(*) AS t
+            FROM valid
+            GROUP BY sample_value
+            HAVING COUNT(*) > 1
+        )
+    ),
     var_calc AS (
         SELECT
+            n,
             CASE
-                WHEN n_effective <= 1 THEN 0.0
-                ELSE n_effective * (n_effective - 1) * (2 * n_effective + 5) / 18.0
+                WHEN n <= 1 THEN 0.0
+                ELSE (n * (n - 1) * (2 * n + 5) - tie_term) / 18.0
             END AS var_s,
-            n_effective,
             lengths_match
-        FROM prepared
+        FROM (SELECT COUNT(*) AS n FROM valid), tie_calc, prepared
     ),
     stats AS (
         SELECT
             s_calc.s,
             var_calc.var_s,
-            var_calc.n_effective,
+            var_calc.n,
             var_calc.lengths_match,
             CASE
-                WHEN var_calc.var_s = 0 THEN 0.0
+                WHEN var_calc.var_s <= 0 THEN 0.0
                 WHEN s_calc.s > 0 THEN (s_calc.s - 1) / SQRT(var_calc.var_s)
                 WHEN s_calc.s < 0 THEN (s_calc.s + 1) / SQRT(var_calc.var_s)
                 ELSE 0.0
@@ -350,10 +402,10 @@ WITH params AS (
             s,
             z_score,
             var_s,
-            n_effective,
+            n,
             lengths_match,
             CASE
-                WHEN var_s = 0 THEN 1.0
+                WHEN var_s <= 0 THEN 1.0
                 ELSE 2 * (1 - normal_cdf(ABS(z_score)))
             END AS p_value
         FROM stats
@@ -362,15 +414,17 @@ WITH params AS (
         s AS s_statistic,
         z_score,
         CASE
-            WHEN NOT lengths_match OR n_effective <= 1 THEN 1.0
+            WHEN NOT lengths_match OR n <= 1 THEN 1.0
             ELSE p_value
         END AS p_value,
         CASE
-            WHEN NOT lengths_match OR n_effective <= 1 THEN 'insufficient_data'
+            WHEN NOT lengths_match OR n <= 1 THEN 'insufficient_data'
             WHEN p_value < 0.05 AND s > 0 THEN 'increasing'
             WHEN p_value < 0.05 AND s < 0 THEN 'decreasing'
             ELSE 'no_trend'
-        END AS trend
+        END AS trend,
+        n,
+        var_s
     FROM results;
 
 CREATE OR REPLACE MACRO sen_slope(date_list, value_list) AS (
@@ -489,6 +543,8 @@ WITH params AS (
             y,
             geom,
             matrix,
+            fraction,
+            meas_basis,
             analyte,
             AVG(adj_result) AS avg_result,
             COUNT(*) AS sample_count,
@@ -501,6 +557,8 @@ WITH params AS (
             y,
             geom,
             matrix,
+            fraction,
+            meas_basis,
             analyte
     )
     SELECT *
@@ -509,9 +567,10 @@ WITH params AS (
 -- ============================================================================
 -- Analyte Pair Data - Cross-tab for chemical-by-chemical scatter plots
 -- ============================================================================
--- Pairs two analytes by location and sample date, averaging duplicate
--- measurements. Returns one row per location/sample_date where BOTH
--- analytes have data (inner join). Used for scatter/correlation plots.
+-- Pairs two analytes by location, sample date, fraction and meas_basis,
+-- averaging duplicate measurements. Returns one row per pairing where BOTH
+-- analytes have data (inner join). Dissolved A is never paired with total B.
+-- Used for scatter/correlation plots.
 
 CREATE OR REPLACE MACRO analyte_pair_data(
     analyte_a,
@@ -546,19 +605,19 @@ WITH params AS (
     ),
     side_a AS (
         SELECT
-            location_id, x, y, geom, sample_date, matrix,
+            location_id, x, y, geom, sample_date, matrix, fraction, meas_basis,
             AVG(result) AS result_a
         FROM base
         WHERE analyte = analyte_a
-        GROUP BY location_id, x, y, geom, sample_date, matrix
+        GROUP BY location_id, x, y, geom, sample_date, matrix, fraction, meas_basis
     ),
     side_b AS (
         SELECT
-            location_id, sample_date,
+            location_id, sample_date, matrix, fraction, meas_basis,
             AVG(result) AS result_b
         FROM base
         WHERE analyte = analyte_b
-        GROUP BY location_id, sample_date
+        GROUP BY location_id, sample_date, matrix, fraction, meas_basis
     )
     SELECT
         a.location_id,
@@ -568,11 +627,16 @@ WITH params AS (
         a.sample_date,
         a.matrix,
         a.result_a,
-        b.result_b
+        b.result_b,
+        a.fraction,
+        a.meas_basis
     FROM side_a a
     INNER JOIN side_b b
         ON a.location_id = b.location_id
-        AND a.sample_date = b.sample_date;
+        AND a.sample_date = b.sample_date
+        AND a.matrix IS NOT DISTINCT FROM b.matrix
+        AND a.fraction IS NOT DISTINCT FROM b.fraction
+        AND a.meas_basis IS NOT DISTINCT FROM b.meas_basis;
 
 -- ============================================================================
 -- Analyte Composition - Relative percentage of each analyte per location
@@ -581,13 +645,19 @@ WITH params AS (
 -- concentration. Used for chemical fingerprinting / forensics stacked
 -- bar charts. Accepts an analyte list to control which analytes are
 -- included in the composition calculation.
+--
+-- A percentage of a total cannot mix dissolved with total, or dry with wet
+-- weight, and has no column to say which it is. So the filtered results must
+-- span one (fraction, meas_basis): the macro raises an error otherwise. Pick
+-- one with p_fraction := '...' (NULL fraction counts as its own value).
 
 CREATE OR REPLACE MACRO analyte_composition(
     analyte_list,
     matrix_filter,
     location_list,
     start_date,
-    end_date
+    end_date,
+    p_fraction := NULL
 ) AS TABLE
 WITH params AS (
         SELECT
@@ -620,6 +690,15 @@ WITH params AS (
                 NOT p.has_locations
                 OR r.location_id IN (SELECT location_id FROM location_filter)
             )
+            AND (p_fraction IS NULL OR r.fraction = p_fraction)
+    ),
+    identity_check AS (
+        SELECT
+            COUNT(DISTINCT COALESCE(fraction, '<none>') || '|' || COALESCE(meas_basis, '<none>'))
+                AS n_identities,
+            string_agg(DISTINCT COALESCE(fraction, '<none>') || '/' || COALESCE(meas_basis, '<none>'), ', ')
+                AS identities
+        FROM filtered
     ),
     per_analyte AS (
         SELECT
@@ -656,7 +735,17 @@ WITH params AS (
             ELSE ROUND(100.0 * pa.total_concentration / pl.location_total, 2)
         END AS pct_of_total
     FROM per_analyte pa
-    JOIN per_location pl ON pa.location_id = pl.location_id;
+    JOIN per_location pl ON pa.location_id = pl.location_id
+    WHERE (
+        SELECT CASE
+            WHEN n_identities > 1 THEN CAST(error(
+                'analyte_composition: results span several fraction/meas_basis '
+                || 'combinations (' || identities || '); pass p_fraction to pick one'
+            ) AS BOOLEAN)
+            ELSE TRUE
+        END
+        FROM identity_check
+    );
 
 -- ============================================================================
 -- Classify Concentration - Quantile binning with ND separation
@@ -666,6 +755,10 @@ WITH params AS (
 -- divided into n_classes bins using NTILE (equal-count partitioning).
 -- Returns per-record bin assignment with human-readable range labels.
 -- Used for choropleth map symbology.
+--
+-- One colour ramp cannot rank dissolved against total results, so the
+-- filtered results must span one (fraction, meas_basis): the macro raises an
+-- error otherwise. Pick one with p_fraction := '...'.
 
 CREATE OR REPLACE MACRO classify_concentration(
     analyte_filter,
@@ -673,7 +766,8 @@ CREATE OR REPLACE MACRO classify_concentration(
     location_list,
     start_date,
     end_date,
-    n_classes
+    n_classes,
+    p_fraction := NULL
 ) AS TABLE
 WITH params AS (
         SELECT
@@ -697,6 +791,15 @@ WITH params AS (
                 NOT p.has_locations
                 OR r.location_id IN (SELECT location_id FROM location_filter)
             )
+            AND (p_fraction IS NULL OR r.fraction = p_fraction)
+    ),
+    identity_check AS (
+        SELECT
+            COUNT(DISTINCT COALESCE(fraction, '<none>') || '|' || COALESCE(meas_basis, '<none>'))
+                AS n_identities,
+            string_agg(DISTINCT COALESCE(fraction, '<none>') || '/' || COALESCE(meas_basis, '<none>'), ', ')
+                AS identities
+        FROM filtered
     ),
     detect_binned AS (
         SELECT
@@ -753,4 +856,14 @@ WITH params AS (
         END AS bin_label,
         bs.bin_count
     FROM all_binned ab
-    LEFT JOIN bin_stats bs ON ab.bin_num = bs.bin_num;
+    LEFT JOIN bin_stats bs ON ab.bin_num = bs.bin_num
+    WHERE (
+        SELECT CASE
+            WHEN n_identities > 1 THEN CAST(error(
+                'classify_concentration: results span several fraction/meas_basis '
+                || 'combinations (' || identities || '); pass p_fraction to pick one'
+            ) AS BOOLEAN)
+            ELSE TRUE
+        END
+        FROM identity_check
+    );

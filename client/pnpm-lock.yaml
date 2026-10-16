@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@duckdb/duckdb-wasm':
+        specifier: 1.32.0
+        version: 1.32.0
       '@esri/wayback-core':
         specifier: ^1.0.10
         version: 1.0.10

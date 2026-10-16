@@ -296,6 +296,12 @@ export const QueryConfig = z.object({
   analyte: z.string(),
   /** Matrix filter. Null = all matrices. */
   matrix: z.string().nullable().default(null),
+  /**
+   * Fraction filter (e.g. 'Dissolved'). Null = every fraction, each its
+   * own entity: aggregate_results never combines dissolved and total.
+   * Optional so layers frozen before it existed still parse.
+   */
+  fraction: z.string().nullable().default(null),
   /** Inclusive start date (ISO 8601). Null = no lower bound. */
   startDate: z.string().nullable().default(null),
   /** Inclusive end date (ISO 8601). Null = no upper bound. */
@@ -489,6 +495,7 @@ export async function freezeCurrentState(params: {
   description?: string;
   analyte: string;
   matrix: string | null;
+  fraction?: string | null;
   eventAgg: string;
   dupAgg: string;
   ndMethod: string;
@@ -508,6 +515,7 @@ export async function freezeCurrentState(params: {
     query: {
       analyte: params.analyte,
       matrix: params.matrix,
+      fraction: params.fraction ?? null,
       startDate: null,
       endDate: null,
       eventAgg: params.eventAgg,
@@ -549,6 +557,7 @@ export function serializeLayerForUrl(layer: LayerConfig): string {
     compact.q = {
       a: layer.query.analyte,
       ...(layer.query.matrix && {m: layer.query.matrix}),
+      ...(layer.query.fraction && {fr: layer.query.fraction}),
       ...(layer.query.startDate && {sd: layer.query.startDate}),
       ...(layer.query.endDate && {ed: layer.query.endDate}),
       ...(layer.query.eventAgg !== 'most_recent' && {ea: layer.query.eventAgg}),
@@ -574,6 +583,7 @@ export function deserializeLayerFromUrl(encoded: string): LayerConfig | null {
       ? {
           analyte: compact.q.a,
           matrix: compact.q.m ?? null,
+          fraction: compact.q.fr ?? null,
           startDate: compact.q.sd ?? null,
           endDate: compact.q.ed ?? null,
           eventAgg: compact.q.ea ?? 'most_recent',

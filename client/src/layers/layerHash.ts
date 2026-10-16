@@ -97,6 +97,10 @@ function canonicalizeQuery(q: NonNullable<LayerConfig['query']>): unknown {
   return {
     analyte: q.analyte,
     matrix: q.matrix ?? null,
+    // Only when set: a layer without a fraction filter keeps the id it
+    // had before the field existed, so saved layers and bookmarks still
+    // match. Placed after matrix; JSON key order is part of the hash.
+    ...(q.fraction ? {fraction: q.fraction} : {}),
     startDate: q.startDate ?? null,
     endDate: q.endDate ?? null,
     eventAgg: q.eventAgg,

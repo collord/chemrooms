@@ -13,3 +13,19 @@
  */
 export const DATA_BASE_URL: string =
   import.meta.env.VITE_DATA_URL ?? 'http://localhost:8000/data';
+
+/**
+ * URL of an EQuIS ARII export's manifest.json (from the equis-parquet-export
+ * pipeline). When set, the project is an ARII source: DATA_BASE_URL is the
+ * folder chemduck's `arii_hybrid.py publish` wrote (sidecars, ChemDuck SQL,
+ * sidecars.json), and `results` is a view over the manifest's partitions,
+ * read by HTTP range requests where they were published.
+ *
+ * A signed URL (e.g. an Azure SAS) may carry its token in the query string;
+ * it is appended to each partition URL and never written into a view.
+ *
+ * Unset: a converted ChemDuck project, every table a parquet file under
+ * DATA_BASE_URL.
+ */
+export const ARII_MANIFEST_URL: string | null =
+  import.meta.env.VITE_ARII_MANIFEST_URL || null;

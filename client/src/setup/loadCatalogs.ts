@@ -44,14 +44,14 @@ export async function loadAggregationRules(
 }
 
 /**
- * Query v_analyte_summary for the sorted distinct analyte list.
+ * The sorted distinct analyte list for the picker, from analyte_catalog
+ * (src/sql/chemrooms_catalogs.sql): a live view for a ChemDuck project, a
+ * sidecar table for an ARII one. It used to read v_analyte_summary, which
+ * groups every result; over remote ARII partitions that downloads the
+ * facility to fill a dropdown.
  *
- * v_analyte_summary has one row per (analyte, matrix, std_units), so
- * the same analyte can appear in multiple matrices. We want a unique
- * sorted list of analyte names for the picker dropdown.
- *
- * Returns [] if v_analyte_summary isn't available (e.g., chemduck
- * schema failed to load).
+ * Returns [] if the catalog isn't available (e.g., chemduck schema failed
+ * to load).
  */
 export async function loadAvailableAnalyteNames(
   connector: DuckDbConnector,
@@ -59,7 +59,7 @@ export async function loadAvailableAnalyteNames(
   try {
     const result = await connector.query(`
       SELECT DISTINCT analyte
-      FROM v_analyte_summary
+      FROM analyte_catalog
       WHERE analyte IS NOT NULL
       ORDER BY analyte
     `);

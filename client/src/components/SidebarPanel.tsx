@@ -33,6 +33,7 @@ import {AggregationRulePicker} from './AggregationRulePicker';
 import {FreezeLayerButton} from './FreezeLayerButton';
 import {SymbolControls} from './SymbolControls';
 import {LayersPanel} from './LayersPanel';
+import {SourceBadge} from './SourceBadge';
 
 export const SidebarPanel: React.FC = () => {
   // Activate hooks. useLocationClick is wiring (click handler);
@@ -51,6 +52,9 @@ export const SidebarPanel: React.FC = () => {
 
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-3">
+      {/* ── 0. Where the data came from (ARII sources only) ────────── */}
+      <SourceBadge />
+
       {/* ── 1. The active recipe ───────────────────────────────────── */}
       <div className="flex flex-col gap-2 rounded-md border border-border p-3">
         <TopAnalytePicker />

@@ -76,15 +76,20 @@ const EmptyState: React.FC = () => (
 
 /**
  * Parse the composite location_id produced by buildSamplesLayerSql's
- * aggregate path: `location_id|matrix|top_depth|bottom_depth`. The
- * pipe-delimited format is a stable identifier for the entity, but
- * for display we want the pieces broken out.
+ * aggregate path:
+ * `location_id|matrix|top_depth|bottom_depth|fraction|meas_basis` (the
+ * last two since aggregate_results keeps fractions apart; older bookmarks
+ * carry only the first four). The pipe-delimited format is a stable
+ * identifier for the entity, but for display we want the pieces broken
+ * out.
  */
-function parseCompositeLocationId(raw: string): {
+export function parseCompositeLocationId(raw: string): {
   locationId: string;
   matrix?: string;
   topDepth?: string;
   bottomDepth?: string;
+  fraction?: string;
+  measBasis?: string;
 } {
   const parts = raw.split('|');
   if (parts.length >= 4) {
@@ -93,6 +98,8 @@ function parseCompositeLocationId(raw: string): {
       matrix: parts[1] || undefined,
       topDepth: parts[2] !== '0.0' ? parts[2] : undefined,
       bottomDepth: parts[3] !== '0.0' ? parts[3] : undefined,
+      fraction: parts[4] || undefined,
+      measBasis: parts[5] || undefined,
     };
   }
   return {locationId: raw};
@@ -111,6 +118,11 @@ const ChemduckLocationDetail: React.FC<{
   );
 
   const parsed = parseCompositeLocationId(entity.locationId);
+  // The depth numbers in the id are in the samples' own unit; the row
+  // carries it (depth_interval_units). It used to be labelled ft always.
+  const depthUnit = entity.rowData?.depth_units
+    ? ` ${String(entity.rowData.depth_units)}`
+    : '';
 
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-3 text-sm">
@@ -120,9 +132,11 @@ const ChemduckLocationDetail: React.FC<{
           <div className="truncate font-semibold">{parsed.locationId}</div>
           <div className="flex flex-wrap gap-x-2 text-[11px] text-muted-foreground">
             {parsed.matrix && <span>{parsed.matrix}</span>}
+            {parsed.fraction && <span>{parsed.fraction}</span>}
             {parsed.topDepth && (
               <span>
-                {parsed.topDepth}–{parsed.bottomDepth ?? '?'} ft
+                {parsed.topDepth}–{parsed.bottomDepth ?? '?'}
+                {depthUnit}
               </span>
             )}
             {entity.source !== 'unknown' && (
