@@ -81,8 +81,8 @@ importers:
         specifier: ^19.2.4
         version: 19.2.4(react@19.2.4)
       resium:
-        specifier: ^1.20.0
-        version: 1.20.0(cesium@1.140.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+        specifier: ~1.20.1
+        version: 1.20.1(cesium@1.140.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       tailwindcss-animate:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@3.4.19(yaml@2.9.1))
@@ -3246,8 +3246,8 @@ packages:
   remark-stringify@11.0.0:
     resolution: {integrity: sha512-1OSmLd3awB/t8qdoEOMazZkNsfVTeY4fTsgzcQFdXNq8ToTN4ZGwrMnlda4K6smTFKD+GRV6O48i6Z4iKgPPpw==}
 
-  resium@1.20.0:
-    resolution: {integrity: sha512-gpe15ziKlCiLhhgSgjNy4blAbp3RD9qWFdP+ujd0RyoZEavkk8oAL2GZQcU6KG1VB0dMD4qhr72cIa2tRmoR6g==}
+  resium@1.20.1:
+    resolution: {integrity: sha512-D97NqulACmD1nltYxt5QtyqZuP3tEmWR2ZqbWZ0QhJIa9cQBeZnrJTCD0O1OfzzlMdr/8FZDYm3Q4wFfzzkIgw==}
     engines: {node: '>=20.19.0'}
     peerDependencies:
       cesium: 1.x
@@ -7361,7 +7361,7 @@ snapshots:
       mdast-util-to-markdown: 2.2.0
       unified: 11.0.5
 
-  resium@1.20.0(cesium@1.140.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
+  resium@1.20.1(cesium@1.140.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
     dependencies:
       cesium: 1.140.0
       react: 19.2.4

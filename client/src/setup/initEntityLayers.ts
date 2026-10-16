@@ -42,17 +42,23 @@
  */
 
 import type {DuckDbConnector} from '@sqlrooms/duckdb';
+import {DATA_BASE_URL} from '../config';
 
 const BASE_URL = import.meta.env.BASE_URL;
 const GEOID_URL = `${BASE_URL}geoid/local.json`;
-const CHEMDUCK_MACROS_URL = `${BASE_URL}data/sql/02_macros.sql`;
-const CHEMDUCK_VIEWS_URL = `${BASE_URL}data/sql/03_views.sql`;
+// The ChemDuck SQL is fetched from the data folder, beside the parquet it
+// describes. It used to be fetched from the app's own origin
+// (`${BASE_URL}data/sql/`), which only worked when CI copied server/data
+// into the site; in local dev the request fell through to index.html and
+// the schema silently failed to load.
+const CHEMDUCK_MACROS_URL = `${DATA_BASE_URL}/sql/02_macros.sql`;
+const CHEMDUCK_VIEWS_URL = `${DATA_BASE_URL}/sql/03_views.sql`;
 // 08_aggregate_results.sql defines the high-level aggregate_results table
 // macro the UI calls. It loads AFTER views since it references
 // v_results_denormalized in its body. 07_catalogs.sql is intentionally
 // NOT loaded here because the aggregation_rules table is shipped as a
 // parquet dataSource and running 07_catalogs.sql would duplicate rows.
-const CHEMDUCK_AGG_RESULTS_URL = `${BASE_URL}data/sql/08_aggregate_results.sql`;
+const CHEMDUCK_AGG_RESULTS_URL = `${DATA_BASE_URL}/sql/08_aggregate_results.sql`;
 
 /** Columns to check on the locations table for an elevation source. */
 const ELEVATION_COLUMN_CANDIDATES = ['elevation', 'z', 'measuring_pt'];

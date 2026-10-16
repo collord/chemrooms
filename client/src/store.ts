@@ -80,8 +80,8 @@ const cesiumConfigWithLayers = {
 // Data source URL — points to parquet exports of ChemDuck tables
 // ---------------------------------------------------------------------------
 
-export const DATA_BASE_URL =
-  import.meta.env.VITE_DATA_URL ?? 'http://localhost:8000/data';
+import {DATA_BASE_URL} from './config';
+export {DATA_BASE_URL};
 
 // ---------------------------------------------------------------------------
 // Create store
@@ -145,12 +145,15 @@ export const {roomStore, useRoomStore} = createRoomStore<RoomState>(
       layout: {
         // SQLRooms 0.29 layout tree: split nodes with sized children.
         // Sizes match the old splitPercentage values (22 | 75 of rest | 60).
+        // Each leaf must name its panel in `panel`: 0.29 resolves the
+        // component from that field only, never from `id`, and a leaf
+        // without it renders as an empty container.
         config: {
           type: 'split',
           id: 'root',
           direction: 'row',
           children: [
-            {type: 'panel', id: 'sidebar', defaultSize: '22%'},
+            {type: 'panel', id: 'sidebar', panel: 'sidebar', defaultSize: '22%'},
             {
               type: 'split',
               id: 'content',
@@ -163,11 +166,11 @@ export const {roomStore, useRoomStore} = createRoomStore<RoomState>(
                   direction: 'column',
                   defaultSize: '75%',
                   children: [
-                    {type: 'panel', id: MAIN_VIEW, defaultSize: '60%'},
-                    {type: 'panel', id: 'timeseries', defaultSize: '40%'},
+                    {type: 'panel', id: MAIN_VIEW, panel: MAIN_VIEW, defaultSize: '60%'},
+                    {type: 'panel', id: 'timeseries', panel: 'timeseries', defaultSize: '40%'},
                   ],
                 },
-                {type: 'panel', id: 'inspector', defaultSize: '25%'},
+                {type: 'panel', id: 'inspector', panel: 'inspector', defaultSize: '25%'},
               ],
             },
           ],
