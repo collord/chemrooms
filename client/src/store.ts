@@ -80,14 +80,14 @@ const cesiumConfigWithLayers = {
 // Data source URL — points to parquet exports of ChemDuck tables
 // ---------------------------------------------------------------------------
 
-import {ARII_MANIFEST_URL, DATA_BASE_URL} from './config';
+import {ARII_MANIFEST_URL, DATA_BASE_URL, PROJECT_SOURCE, dataUrl} from './config';
 export {DATA_BASE_URL};
 
-/** A parquet file under DATA_BASE_URL loaded as a table (downloaded whole). */
+/** A parquet file in the data folder loaded as a table (downloaded whole). */
 const parquetTable = (tableName: string) => ({
   tableName,
   type: 'url' as const,
-  url: `${DATA_BASE_URL}/${tableName}.parquet`,
+  url: dataUrl(`${tableName}.parquet`),
 });
 
 /**
@@ -101,7 +101,9 @@ const parquetTable = (tableName: string) => ({
  *   analyte_catalog and location_analytes are chemrooms' catalogs
  *   (src/sql/chemrooms_catalogs.sql), which the publisher materialized.
  */
-const DATA_SOURCES = ARII_MANIFEST_URL
+const DATA_SOURCES = !PROJECT_SOURCE
+  ? [] // no project: the connect screen is shown and nothing loads
+  : ARII_MANIFEST_URL
   ? [
       'locations',
       'samples',

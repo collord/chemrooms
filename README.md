@@ -18,6 +18,40 @@ It reads two kinds of project:
 | **ChemDuck** | Every table as parquet: `locations`, `samples`, `results`, ... | Data converted to ChemDuck by its loaders |
 | **EQuIS ARII** | ~1 MB of sidecars; results stay in the EQuIS export's own partitions | Analytical Results II exports from the `equis-parquet-export` pipeline, too large to download |
 
+## The hosted app
+
+<https://collord.github.io/chemrooms/> ships **no project data**. It opens on
+a connect screen; paste the URL of an EQuIS ARII export's `manifest.json`
+(prepared as below) and it opens that export. Nothing is uploaded: your
+browser reads the data directly from where it is hosted.
+
+The choice is kept in the page's URL fragment, so the address is a link that
+reopens the same data, and bookmarks made in the app keep it:
+
+```
+https://collord.github.io/chemrooms/#manifest=<URL-encoded manifest.json URL>
+https://collord.github.io/chemrooms/#manifest=<...>&data=<URL-encoded sidecar folder>
+https://collord.github.io/chemrooms/#data=<URL-encoded ChemDuck data folder>
+```
+
+With only `manifest`, the sidecars are looked for in a `chemrooms/` folder
+beside the manifest. A signed URL (an Azure SAS token) works: its query
+string is reused for the sidecars and every partition. A URL fragment is
+never sent to the web server, so the token does not reach GitHub's logs, but
+**anyone you give the link to can read the data until the token expires**.
+Use read-only, expiring tokens.
+
+The data host must allow the app's origin. For Azure Blob Storage:
+
+```bash
+az storage cors add --account-name <account> --services b \
+  --methods GET HEAD OPTIONS --origins https://collord.github.io \
+  --allowed-headers '*' --exposed-headers 'Content-Length,Content-Range,ETag' \
+  --max-age 3600
+```
+
+*Open another source* in the sidebar returns to the connect screen.
+
 ## Repository layout
 
 ```
@@ -52,12 +86,16 @@ Get a free token at <https://ion.cesium.com/tokens>.
 
 ## Configuration
 
-Set in `client/.env` (see `client/.env.example`):
+The project is chosen, in order, by the URL fragment (`#manifest=` /
+`#data=`, see above), then these build-time variables in `client/.env` (see
+`client/.env.example`), then, in `pnpm dev` only, the demo data at
+`http://localhost:8000/data`. A production build with none of them opens on
+the connect screen.
 
 | Variable | Meaning |
 |---|---|
-| `VITE_DATA_URL` | The project's data folder. Default `http://localhost:8000/data`. |
-| `VITE_ARII_MANIFEST_URL` | Set only for an EQuIS ARII project: the export's `manifest.json`. |
+| `VITE_DATA_URL` | The project's data folder: ChemDuck parquet, or ARII sidecars. |
+| `VITE_ARII_MANIFEST_URL` | Set only for an EQuIS ARII project: the export's `manifest.json`. Without `VITE_DATA_URL`, the sidecars are looked for in `chemrooms/` beside it. |
 | `VITE_CESIUM_ION_TOKEN` | Cesium Ion access token, for world terrain. |
 
 The data folder carries the ChemDuck SQL (`sql/`) alongside the data,
@@ -90,9 +128,12 @@ fetching only the row groups each query needs.
 ### 1. Publish the sidecars
 
 ```bash
-python server/publish_arii.py path/to/export/manifest.json path/to/out_dir \
+python server/publish_arii.py path/to/export/manifest.json path/to/export/chemrooms \
     --x LONGITUDE --y LATITUDE
 ```
+
+Writing the sidecars to `chemrooms/` beside the manifest, and uploading that
+folder with the export, means the manifest URL alone opens the project.
 
 This needs a chemduck checkout (default `../chemduck`, or `--chemduck`) and
 Python with `duckdb` and `pyyaml`; the first run downloads DuckDB's spatial
@@ -127,12 +168,14 @@ whole. `python -m http.server` is one such server.
 A signed URL can carry its token in the manifest URL's query string; it is
 appended to each partition URL and never written into SQL.
 
-### 3. Point the client at them
+### 3. Open it
+
+In the hosted app, paste the manifest URL into the connect screen, or
+link to `#manifest=<URL-encoded manifest URL>`. Locally:
 
 ```bash
-VITE_DATA_URL=https://host/path/to/out_dir \
-VITE_ARII_MANIFEST_URL=https://host/path/to/export/manifest.json \
-pnpm dev
+VITE_ARII_MANIFEST_URL=https://host/path/to/export/manifest.json pnpm dev
+# add VITE_DATA_URL=<sidecar folder> if it is not chemrooms/ beside the manifest
 ```
 
 The sidebar shows the facility, result and partition counts, and how old the
@@ -184,6 +227,8 @@ The Cesium integration is a slice vendored in `client/src/cesium/`; see its
 ## Deployment
 
 `.github/workflows/deploy-pages.yml` builds the client on pushes to `main`
-and publishes it to GitHub Pages with `server/data` copied in as `./data`.
-The Cesium Ion token comes from the `VITE_CESIUM_ION_TOKEN` repository
-secret.
+and publishes it to GitHub Pages **without project data**: no `VITE_DATA_URL`,
+no `server/data`, and the site-specific terrain, models and geoid grid under
+`client/public/` are removed from the published build (local development
+still uses them). The Cesium Ion token comes from the `VITE_CESIUM_ION_TOKEN`
+repository secret.

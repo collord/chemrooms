@@ -24,6 +24,7 @@
 
 import {DuckDBDataProtocol} from '@duckdb/duckdb-wasm';
 import type {DuckDbConnector} from '@sqlrooms/duckdb';
+import {joinUrl} from '../config';
 
 export class AriiSourceError extends Error {}
 
@@ -177,7 +178,7 @@ export async function openAriiResults(
   }
 
   const sidecars = (await (
-    await fetchOk(`${dataBaseUrl}/sidecars.json`)
+    await fetchOk(joinUrl(dataBaseUrl, 'sidecars.json'))
   ).json()) as Sidecars;
   const manifestBytes = await (await fetchOk(manifestUrl)).arrayBuffer();
   const manifest = JSON.parse(new TextDecoder().decode(manifestBytes));
@@ -209,7 +210,7 @@ export async function openAriiResults(
   }
 
   const template = await (
-    await fetchOk(`${dataBaseUrl}/${sidecars.results_view.file}`)
+    await fetchOk(joinUrl(dataBaseUrl, sidecars.results_view.file))
   ).text();
   await connector.query(
     resultsViewSql(template, sidecars.results_view.files_token, names),

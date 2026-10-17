@@ -3,6 +3,7 @@
  * table. Missing or malformed sidecars are silently skipped.
  */
 
+import {joinUrl} from '../config';
 import {parseVisSpec, type VisSpec} from './visSpec';
 
 export interface LoadedSpec {
@@ -23,7 +24,8 @@ export async function loadVisSpecs(
   const results = await Promise.all(
     tables.map(async (table) => {
       try {
-        const url = `${baseUrl}/${table}.vis.json`;
+        // joinUrl keeps a signed folder URL's query string last.
+        const url = joinUrl(baseUrl, `${table}.vis.json`);
         const r = await fetch(url);
         if (!r.ok) return null;
         const raw = await r.json();

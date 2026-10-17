@@ -15,6 +15,18 @@ import React from 'react';
 import {Database, TriangleAlert} from 'lucide-react';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
 import {describeFreshness} from '../setup/ariiSource';
+import {PROJECT_SOURCE} from '../config';
+
+/** Back to the connect screen: the page without its fragment. */
+const OpenAnother: React.FC = () =>
+  PROJECT_SOURCE?.from === 'link' ? (
+    <a
+      className="text-primary underline-offset-2 hover:underline"
+      href={window.location.origin + window.location.pathname}
+    >
+      Open another source
+    </a>
+  ) : null;
 
 export const SourceBadge: React.FC = () => {
   const info = useChemroomsStore((s) => s.chemrooms.sourceInfo);
@@ -30,11 +42,26 @@ export const SourceBadge: React.FC = () => {
         <div>
           <div className="font-medium">EQuIS source not opened</div>
           <div className="text-muted-foreground">{error}</div>
+          <OpenAnother />
         </div>
       </div>
     );
   }
-  if (!info || info.kind !== 'arii') return null;
+  if (!info) return null;
+  if (info.kind !== 'arii') {
+    // A ChemDuck folder opened from a link: say which, and how to leave.
+    return PROJECT_SOURCE?.from === 'link' ? (
+      <div className="flex gap-2 rounded-md border border-border p-2 text-xs">
+        <Database className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0">
+          <div className="truncate font-medium" title={PROJECT_SOURCE.dataBaseUrl}>
+            ChemDuck · {PROJECT_SOURCE.dataBaseUrl.split('?')[0]}
+          </div>
+          <OpenAnother />
+        </div>
+      </div>
+    ) : null;
+  }
 
   const freshness = describeFreshness(info.partitions);
   const undated = freshness.startsWith('partition dates not recorded');
@@ -57,6 +84,7 @@ export const SourceBadge: React.FC = () => {
             {info.unplacedLocations} location(s) have no coordinates and are not drawn
           </div>
         )}
+        <OpenAnother />
       </div>
     </div>
   );

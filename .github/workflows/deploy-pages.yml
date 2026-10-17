@@ -36,20 +36,31 @@ jobs:
 
       - name: Build
         working-directory: client
+        # No VITE_DATA_URL: the hosted app ships no project data and opens
+        # whatever a link or its connect screen names (see README.md).
         env:
           VITE_CESIUM_ION_TOKEN: ${{ secrets.VITE_CESIUM_ION_TOKEN }}
-          VITE_DATA_URL: ./data
         run: npx vite build
 
-      - name: Copy parquet data and Cesium assets into build output
+      - name: Copy Cesium assets into build output
         working-directory: client
         run: |
-          cp -r ../server/data dist/data
           mkdir -p dist/cesium
           cp -r node_modules/cesium/Build/Cesium/Assets dist/cesium/Assets
           cp -r node_modules/cesium/Build/Cesium/ThirdParty dist/cesium/ThirdParty
           cp -r node_modules/cesium/Build/Cesium/Workers dist/cesium/Workers
           cp -r node_modules/cesium/Build/Cesium/Widgets dist/cesium/Widgets
+
+      # client/public carries site-specific terrain, models and a geoid grid
+      # for local development. The hosted app ships no project data, so they
+      # are removed from the published build; it runs without them (no
+      # tileset layers, no geoid correction).
+      - name: Remove site-specific assets from the published build
+        working-directory: client
+        run: |
+          rm -rf dist/tiles/local dist/geoid
+          echo '{"tilesets": []}' > dist/tiles/manifest.json
+          ls -R dist/tiles
 
       - uses: actions/upload-pages-artifact@v3
         with:

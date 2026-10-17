@@ -17,6 +17,7 @@
  * distinguished and can be promoted to personal storage.
  */
 
+import {PROJECT_SOURCE, sourceHash} from '../config';
 import {useEffect, useRef} from 'react';
 import {Cartesian3, Cartographic, Math as CesiumMath} from 'cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
@@ -209,7 +210,14 @@ export function useBookmark() {
 
   /** Snapshot current state into a bookmark URL. */
   function getBookmarkUrl(): string {
-    const params = new URLSearchParams();
+    // A project opened from a link keeps its source in the bookmark, so
+    // the bookmark reopens the same data. (A signed URL in it is shared
+    // with whoever gets the link.)
+    const params = new URLSearchParams(
+      PROJECT_SOURCE?.from === 'link'
+        ? sourceHash({manifest: PROJECT_SOURCE.manifestUrl, data: PROJECT_SOURCE.dataBaseUrl})
+        : '',
+    );
 
     if (viewer && !viewer.isDestroyed()) {
       const carto = Cartographic.fromCartesian(viewer.camera.position);
