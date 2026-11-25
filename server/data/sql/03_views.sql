@@ -6,14 +6,18 @@
 -- ============================================================================
 -- This is the primary view for most analytical queries
 -- Excludes QA/QC sample types and rejected records by default
+--
+-- v_results_core is every column but percent_moisture. The moisture lookup
+-- reads every result (3.45M at the test facility, whatever the analyte),
+-- and DuckDB keeps an unused LEFT JOIN, so the engines read the core view;
+-- v_results_denormalized is the core view with the moisture joined back.
 
-CREATE OR REPLACE VIEW v_results_denormalized AS
+CREATE OR REPLACE VIEW v_results_core AS
 SELECT
     -- Location fields
     l.location_id,
     l.x,
     l.y,
-    l.geom,
     l.loc_type,
     l.loc_desc,
     l.aquifer,
@@ -33,6 +37,12 @@ SELECT
     s.sample_type,
     s.composite_type,
     s.event,
+    s.sample_datetime,
+    s.position,
+    -- ISM (docs/ism-and-uncertainty-spec.md §4.2): NULL support is discrete
+    s.support,
+    s.replicate_set,
+    s.replicate_no,
 
     -- Result fields
     r.result_id,
@@ -43,6 +53,10 @@ SELECT
     r.result,
     r.units,
     r.std_units,
+    -- units as converted at load (shared rules D5)
+    r.reported_units,
+    r.unit_factor,
+    r.unit_source,
     r.method_detection_limit,
     r.reporting_limit,
     r.quantitation_limit,
@@ -58,10 +72,50 @@ SELECT
     r.method_code,
     r.meas_basis,
     r.fraction,
+    r.date_analyzed,
+    -- what is measured; data loaded before method classes: the code itself
+    COALESCE(r.method_class, UPPER(TRIM(r.method_code))) AS method_class,
+    r.reportable,
+    r.test_type,
+    r.test_rank,
 
     -- Computed fields
-    COALESCE(r.reporting_limit, r.method_detection_limit, r.quantitation_limit) AS detection_limit,
-    moist.moisture_result AS percent_moisture,
+    -- The limit that stands for a non-detect: chosen at load by the mapping's
+    -- limit_chain (shared rules D4; 'none' = no link had one, so no value);
+    -- for data loaded before that, the chain reporting, method detection,
+    -- quantitation.
+    CASE
+        WHEN r.limit_source IS NULL
+            THEN COALESCE(r.reporting_limit, r.method_detection_limit, r.quantitation_limit)
+        WHEN r.limit_source = 'none' THEN NULL
+        ELSE r.nd_limit
+    END AS detection_limit,
+    -- Which link of the limit chain detection_limit came from
+    COALESCE(r.limit_source, CASE
+        WHEN r.reporting_limit IS NOT NULL THEN 'reporting'
+        WHEN r.method_detection_limit IS NOT NULL THEN 'method_detection'
+        WHEN r.quantitation_limit IS NOT NULL THEN 'quantitation'
+    END) AS limit_source,
+    -- The type of that limit (shared rules D4): a chain link's is its own;
+    -- the source's report limit (EQuIS REPORT_RESULT_LIMIT) states none, so
+    -- it is the type whose limit on the same row it equals, NULL if none
+    CASE
+        WHEN r.limit_source = 'none' THEN NULL
+        WHEN r.limit_source = 'report' THEN CASE
+            WHEN r.nd_limit = r.reporting_limit THEN 'reporting'
+            WHEN r.nd_limit = r.method_detection_limit THEN 'method_detection'
+            WHEN r.nd_limit = r.quantitation_limit THEN 'quantitation'
+        END
+        ELSE COALESCE(r.limit_source, CASE
+            WHEN r.reporting_limit IS NOT NULL THEN 'reporting'
+            WHEN r.method_detection_limit IS NOT NULL THEN 'method_detection'
+            WHEN r.quantitation_limit IS NOT NULL THEN 'quantitation'
+        END)
+    END AS limit_type,
+    r.report_limit,
+    -- a filter's file-skipping twin; see results in 01_tables.sql
+    r.partition_matrix,
+    r.partition_fraction,
     make_dup_id(l.location_id, s.sample_date, s.depth, r.fraction, r.meas_basis) AS dup_id,
     dv_qualifier(r.detected, r.estimated) AS dv_qual,
     EXTRACT(YEAR FROM s.sample_date) AS sample_year,
@@ -70,6 +124,20 @@ SELECT
 FROM results r
 JOIN samples s ON r.sample_id = s.sample_id
 JOIN locations l ON s.location_id = l.location_id
+WHERE
+    -- Exclude QA/QC and special sample types
+    (s.sample_type IS NULL OR s.sample_type NOT IN ('AVG', 'REAN', 'DNU', 'IDW', 'NR'))
+    -- Exclude rejected records (qualifier ending in R)
+    AND (r.qualifier IS NULL OR r.qualifier NOT LIKE '%R');
+
+CREATE OR REPLACE VIEW v_results_denormalized AS
+SELECT
+    -- the partition labels are for filters to skip files with, not data
+    c.* EXCLUDE (dup_id, dv_qual, sample_year, sample_month,
+                 partition_matrix, partition_fraction),
+    moist.moisture_result AS percent_moisture,
+    c.dup_id, c.dv_qual, c.sample_year, c.sample_month
+FROM v_results_core c
 LEFT JOIN (
     SELECT
         r_m.sample_id,
@@ -84,12 +152,7 @@ LEFT JOIN (
         PARTITION BY COALESCE(r_m.lab_sample_id, r_m.sample_id)
         ORDER BY r_m.result_id
     ) = 1
-) moist ON COALESCE(r.lab_sample_id, r.sample_id) = COALESCE(moist.lab_sample_id, moist.sample_id)
-WHERE
-    -- Exclude QA/QC and special sample types
-    (s.sample_type IS NULL OR s.sample_type NOT IN ('AVG', 'REAN', 'DNU', 'IDW', 'NR'))
-    -- Exclude rejected records (qualifier ending in R)
-    AND (r.qualifier IS NULL OR r.qualifier NOT LIKE '%R');
+) moist ON COALESCE(c.lab_sample_id, c.sample_id) = COALESCE(moist.lab_sample_id, moist.sample_id);
 
 -- ============================================================================
 -- 2.2 v_results_for_mapping - Pre-aggregated for spatial display
@@ -103,7 +166,6 @@ SELECT
     location_id,
     x,
     y,
-    geom,
     matrix,
     fraction,
     meas_basis,
@@ -122,10 +184,11 @@ SELECT
     STDDEV(result) AS std_result,
     SUM(CASE WHEN detected THEN 1 ELSE 0 END) AS detect_count,
     SUM(CASE WHEN NOT detected THEN 1 ELSE 0 END) AS nondetect_count,
+    SUM(CASE WHEN detected IS NULL THEN 1 ELSE 0 END) AS unknown_detect_count,
     COUNT(DISTINCT sample_date) AS n_events
 FROM v_results_denormalized
 GROUP BY
-    location_id, x, y, geom,
+    location_id, x, y,
     matrix, fraction, meas_basis, analyte, anl_sm_mb, analyte_group,
     units, std_units;
 
@@ -166,6 +229,8 @@ QUALIFY ROW_NUMBER() OVER (
 -- (EQuIS exports report the limit as the result of a non-detect).
 -- exceedance_ratio is NULL for non-detects; limit_ratio (limit / screening
 -- value) is the separately named ratio for them.
+-- A result whose detect status is unknown (NULL detected) is DETECT_UNKNOWN,
+-- with both ratios NULL: its value may be a concentration or a limit.
 
 CREATE OR REPLACE VIEW v_results_with_screening AS
 SELECT
@@ -178,6 +243,8 @@ SELECT
     sl.source AS screening_source,
     CASE
         WHEN sl.value IS NULL THEN NULL
+        -- Unknown detect status: neither compared as a detect nor as a limit
+        WHEN r.detected IS NULL THEN 'DETECT_UNKNOWN'
         WHEN r.detected = FALSE AND COALESCE(r.detection_limit, r.result) IS NULL
             THEN 'ND_INCONCLUSIVE'
         WHEN r.detected = FALSE AND sl.comparison = '<'
@@ -195,7 +262,7 @@ SELECT
     END AS exceedance_status,
     CASE
         WHEN sl.value IS NULL OR sl.value = 0 THEN NULL
-        WHEN r.detected = FALSE THEN NULL
+        WHEN r.detected = FALSE OR r.detected IS NULL THEN NULL
         WHEN sl.comparison = '<' THEN sl.value / r.result
         ELSE r.result / sl.value
     END AS exceedance_ratio,
@@ -224,30 +291,64 @@ WHERE exceedance_status = 'EXCEEDS';
 -- Additional utility views
 -- ============================================================================
 
--- v_analyte_summary - Summary statistics by analyte/matrix/fraction/basis
+-- v_analyte_summary - Summary statistics per variable: analyte, matrix,
+-- fraction, basis and method class (shared rules D3: a field and a lab pH
+-- are two variables, so a picker offers both)
 CREATE OR REPLACE VIEW v_analyte_summary AS
 SELECT
     analyte,
     matrix,
     fraction,
     meas_basis,
+    method_class,
     std_units,
     COUNT(*) AS n_results,
+    COUNT(DISTINCT sample_id) AS n_samples,
     COUNT(DISTINCT location_id) AS n_locations,
     COUNT(DISTINCT sample_date) AS n_dates,
     SUM(CASE WHEN detected THEN 1 ELSE 0 END) AS n_detect,
     SUM(CASE WHEN NOT detected THEN 1 ELSE 0 END) AS n_nondetect,
+    SUM(CASE WHEN detected IS NULL THEN 1 ELSE 0 END) AS n_detect_unknown,
     ROUND(100.0 * SUM(CASE WHEN detected THEN 1 ELSE 0 END) / COUNT(*), 1) AS detect_pct,
     MIN(result) AS min_result,
     MAX(result) AS max_result,
     AVG(result) AS mean_result,
     PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY result) AS median_result
 FROM v_results_denormalized
-GROUP BY analyte, matrix, fraction, meas_basis, std_units;
+GROUP BY analyte, matrix, fraction, meas_basis, method_class, std_units;
 
--- v_unit_conflicts - Measurement identities reported in more than one unit
+-- v_method_classes - The method classes in the data, each with the method
+-- codes it holds and its results (classes curated in method_classes; a code
+-- nothing matched is its own class)
+CREATE OR REPLACE VIEW v_method_classes AS
+SELECT
+    method_class,
+    list_sort(list_distinct(list(method_code))) AS method_codes,
+    COUNT(*) AS n_results,
+    COUNT(DISTINCT analyte) AS n_analytes
+FROM v_results_denormalized
+GROUP BY method_class
+ORDER BY method_class;
+
+-- v_positions - The vertical positions in the data per matrix (shared rules
+-- D1): each labelled position, and NULL for samples placed by depth alone,
+-- with their distinct depth intervals and samples
+CREATE OR REPLACE VIEW v_positions AS
+SELECT
+    matrix,
+    position,
+    COUNT(DISTINCT (top_depth, bottom_depth))
+        FILTER (WHERE top_depth IS NOT NULL OR bottom_depth IS NOT NULL) AS n_depth_intervals,
+    COUNT(*) AS n_samples,
+    COUNT(DISTINCT location_id) AS n_locations
+FROM samples
+GROUP BY matrix, position
+ORDER BY matrix, position;
+
+-- v_unit_conflicts - Variables still in more than one unit after the load's
+-- conversion (shared rules D5), method class included (D3)
 -- Aggregating across these ranks results by unit, not by concentration
--- (0.57 mg/L loses to 168 ug/L). Missing units alongside real ones are
+-- (0.57 mg/L loses to 168 ug/L); aggregates refuse them by default. Missing units alongside real ones are
 -- listed too: a unitless number cannot be compared with a mg/L one.
 CREATE OR REPLACE VIEW v_unit_conflicts AS
 SELECT
@@ -255,13 +356,15 @@ SELECT
     matrix,
     fraction,
     meas_basis,
+    method_class,
     COUNT(DISTINCT units) AS n_units,
     list_sort(list_distinct(list(units))) AS units_found,
+    list_sort(list_distinct(list(unit_source))) AS unit_sources,
     COUNT(*) FILTER (WHERE units IS NULL) AS n_missing_units,
     COUNT(*) AS n_results,
     COUNT(DISTINCT location_id) AS n_locations
 FROM v_results_denormalized
-GROUP BY analyte, matrix, fraction, meas_basis
+GROUP BY analyte, matrix, fraction, meas_basis, method_class
 HAVING COUNT(DISTINCT units) > 1
     OR (COUNT(DISTINCT units) = 1 AND COUNT(*) FILTER (WHERE units IS NULL) > 0);
 
@@ -271,7 +374,6 @@ SELECT
     location_id,
     x,
     y,
-    geom,
     matrix,
     COUNT(DISTINCT analyte) AS n_analytes,
     COUNT(*) AS n_results,
@@ -279,7 +381,7 @@ SELECT
     MAX(sample_date) AS last_sample,
     COUNT(DISTINCT sample_date) AS n_events
 FROM v_results_denormalized
-GROUP BY location_id, x, y, geom, matrix;
+GROUP BY location_id, x, y, matrix;
 
 -- ============================================================================
 -- 2.6 (Borehole trace) - see desurveyed_stations_fine in sql/09_desurvey.sql
@@ -519,7 +621,6 @@ SELECT
     xyz.collar_z,
     xyz.has_survey,
     xyz.extrapolated AS xyz_extrapolated,
-    l.geom,
     l.loc_type,
     l.loc_desc,
     l.aquifer,
@@ -539,6 +640,12 @@ SELECT
     s.sample_type,
     s.composite_type,
     s.event,
+    s.sample_datetime,
+    s.position,
+    -- ISM (docs/ism-and-uncertainty-spec.md §4.2): NULL support is discrete
+    s.support,
+    s.replicate_set,
+    s.replicate_no,
 
     -- Result fields
     r.result_id,
@@ -549,6 +656,10 @@ SELECT
     r.result,
     r.units,
     r.std_units,
+    -- units as converted at load (shared rules D5)
+    r.reported_units,
+    r.unit_factor,
+    r.unit_source,
     r.method_detection_limit,
     r.reporting_limit,
     r.quantitation_limit,
@@ -564,9 +675,47 @@ SELECT
     r.method_code,
     r.meas_basis,
     r.fraction,
+    r.date_analyzed,
+    -- what is measured; data loaded before method classes: the code itself
+    COALESCE(r.method_class, UPPER(TRIM(r.method_code))) AS method_class,
+    r.reportable,
+    r.test_type,
+    r.test_rank,
 
     -- Computed fields
-    COALESCE(r.reporting_limit, r.method_detection_limit, r.quantitation_limit) AS detection_limit,
+    -- The limit that stands for a non-detect: chosen at load by the mapping's
+    -- limit_chain (shared rules D4; 'none' = no link had one, so no value);
+    -- for data loaded before that, the chain reporting, method detection,
+    -- quantitation.
+    CASE
+        WHEN r.limit_source IS NULL
+            THEN COALESCE(r.reporting_limit, r.method_detection_limit, r.quantitation_limit)
+        WHEN r.limit_source = 'none' THEN NULL
+        ELSE r.nd_limit
+    END AS detection_limit,
+    -- Which link of the limit chain detection_limit came from
+    COALESCE(r.limit_source, CASE
+        WHEN r.reporting_limit IS NOT NULL THEN 'reporting'
+        WHEN r.method_detection_limit IS NOT NULL THEN 'method_detection'
+        WHEN r.quantitation_limit IS NOT NULL THEN 'quantitation'
+    END) AS limit_source,
+    -- The type of that limit (shared rules D4): a chain link's is its own;
+    -- the source's report limit (EQuIS REPORT_RESULT_LIMIT) states none, so
+    -- it is the type whose limit on the same row it equals, NULL if none
+    CASE
+        WHEN r.limit_source = 'none' THEN NULL
+        WHEN r.limit_source = 'report' THEN CASE
+            WHEN r.nd_limit = r.reporting_limit THEN 'reporting'
+            WHEN r.nd_limit = r.method_detection_limit THEN 'method_detection'
+            WHEN r.nd_limit = r.quantitation_limit THEN 'quantitation'
+        END
+        ELSE COALESCE(r.limit_source, CASE
+            WHEN r.reporting_limit IS NOT NULL THEN 'reporting'
+            WHEN r.method_detection_limit IS NOT NULL THEN 'method_detection'
+            WHEN r.quantitation_limit IS NOT NULL THEN 'quantitation'
+        END)
+    END AS limit_type,
+    r.report_limit,
     moist.moisture_result AS percent_moisture,
     make_dup_id(l.location_id, s.sample_date, s.depth, r.fraction, r.meas_basis) AS dup_id,
     dv_qualifier(r.detected, r.estimated) AS dv_qual,

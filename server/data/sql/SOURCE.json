@@ -1,14 +1,20 @@
 {
  "chemduck": {
-  "commit": "206b7d11a5ea227ad570ec080f58c2745e39e3d4",
-  "dirty": false
+  "version": "0.2.0",
+  "commit": "b5fdcd97805c68068d540866a827bb4c9e437103",
+  "dirty": false,
+  "subject": "Merge pull request #21 from IntegralEnvision/sidecars-deterministic",
+  "vendored": "2026-11-25"
  },
  "files": [
   "00_bootstrap.sql",
   "02_macros.sql",
   "03_views.sql",
-  "08_aggregate_results.sql"
+  "08_aggregate_points.sql",
+  "08_aggregate_results.sql",
+  "10_sample_results.sql",
+  "11_ism.sql"
  ],
  "aggregation_rules": 13,
- "generated": "2026-10-16T07:01:43+00:00"
+ "generated": "2026-11-25T23:21:39+00:00"
 }

@@ -1,0 +1,5 @@
+# The vendored ChemDuck (server/vendor_chemduck.py) is its commit's bytes,
+# hashed in server/chemduck/VENDORED.json and checked by
+# server/tests/test_chemduck_vendor.py. CRLF conversion on checkout would
+# change every hash.
+server/chemduck/** -text

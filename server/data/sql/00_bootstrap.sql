@@ -3,14 +3,126 @@
 
 CREATE TABLE IF NOT EXISTS project (
     project_name VARCHAR PRIMARY KEY,
-    crs VARCHAR  
+    crs VARCHAR,  
+    
+    
+    nd_policy VARCHAR,
+    nd_policy_version INTEGER
 );
+
+ALTER TABLE project ADD COLUMN IF NOT EXISTS nd_policy VARCHAR;
+
+ALTER TABLE project ADD COLUMN IF NOT EXISTS nd_policy_version INTEGER;
+
+CREATE TABLE IF NOT EXISTS chemduck_settings (
+    key VARCHAR PRIMARY KEY,
+    value VARCHAR
+);
+
+CREATE TABLE IF NOT EXISTS nd_policies (
+    name VARCHAR NOT NULL,
+    version INTEGER NOT NULL,
+    description VARCHAR,
+    limit_basis VARCHAR NOT NULL
+        CHECK (limit_basis IN ('source_chain', 'reporting', 'method_detection', 'quantitation')),
+    display_factor DOUBLE NOT NULL CHECK (display_factor >= 0),
+    across_nd_limit VARCHAR NOT NULL CHECK (across_nd_limit IN ('higher', 'lower')),
+    reruns_nd_limit VARCHAR NOT NULL CHECK (reruns_nd_limit IN ('higher', 'lower')),
+    
+    
+    
+    event_grain VARCHAR NOT NULL DEFAULT 'timestamp'
+        CHECK (event_grain IN ('timestamp', 'date')),
+    PRIMARY KEY (name, version)
+);
+
+ALTER TABLE nd_policies ADD COLUMN IF NOT EXISTS event_grain VARCHAR DEFAULT 'timestamp';
+
+CREATE TABLE IF NOT EXISTS nd_policy_rules (
+    policy VARCHAR NOT NULL,
+    version INTEGER NOT NULL,
+    stage VARCHAR NOT NULL
+        CHECK (stage IN ('reruns', 'replicates', 'same_day', 'over_time', 'across_points', 'sum')),
+    estimator VARCHAR NOT NULL
+        CHECK (estimator IN ('select', 'pool', 'mean', 'median', 'max', 'min',
+                             'km_mean', 'km_median', 'sum', 'refuse', 'combine',
+                             'ucl95_t', 'ucl95_cheb', 'ucl95_auto')),
+    nd_factor DOUBLE CHECK (nd_factor >= 0),
+    km_floor VARCHAR CHECK (km_floor IN ('lowest_detect', 'half_lowest_detect', 'zero')),
+    all_nd VARCHAR NOT NULL
+        CHECK (all_nd IN ('estimator', 'max_limit', 'min_limit', 'median_limit')),
+    detected_rule VARCHAR NOT NULL CHECK (detected_rule IN ('all', 'any')),
+    PRIMARY KEY (policy, version, stage),
+    
+    CHECK (estimator <> 'pool' OR stage IN ('reruns', 'same_day')),
+    
+    CHECK (estimator <> 'combine' OR stage IN ('reruns', 'same_day', 'across_points')),
+    
+    CHECK (estimator NOT IN ('km_mean', 'km_median') OR stage IN ('over_time', 'across_points')),
+    CHECK (estimator NOT IN ('km_mean', 'km_median') OR km_floor IS NOT NULL),
+    
+    CHECK (estimator NOT IN ('km_mean', 'km_median') OR all_nd <> 'estimator'),
+    CHECK (estimator <> 'sum' OR stage = 'sum'),
+    CHECK (stage <> 'sum' OR estimator IN ('sum', 'refuse')),
+    CHECK (estimator NOT IN ('ucl95_t', 'ucl95_cheb', 'ucl95_auto') OR stage = 'replicates'),
+    CHECK (stage <> 'replicates' OR estimator IN ('select', 'mean', 'ucl95_t', 'ucl95_cheb', 'ucl95_auto')),
+    CHECK (estimator NOT IN ('mean', 'median', 'max', 'min', 'sum', 'ucl95_t', 'ucl95_cheb',
+                             'ucl95_auto') OR nd_factor IS NOT NULL)
+);
+
+CREATE TABLE IF NOT EXISTS nd_policy_brackets (
+    policy VARCHAR NOT NULL,
+    version INTEGER NOT NULL,
+    stage VARCHAR NOT NULL CHECK (stage IN ('replicates')),
+    parameter VARCHAR NOT NULL CHECK (parameter IN ('nd_factor', 'ucl')),
+    alternatives VARCHAR[] NOT NULL,
+    PRIMARY KEY (policy, version, stage, parameter)
+);
+
+INSERT OR REPLACE INTO nd_policies (name, version, description, limit_basis, display_factor,
+                                     across_nd_limit, reruns_nd_limit, event_grain) VALUES
+    ('chemduck_default', 1, 'Real results on maps; Kaplan-Meier for statistics',
+     'source_chain', 1.0, 'higher', 'lower', 'timestamp'),
+    ('half_dl_average', 1, 'Half-limit substitutes averaged with the detects',
+     'source_chain', 0.5, 'higher', 'lower', 'timestamp'),
+    ('km_lowest_detect', 1, 'Kaplan-Meier, the share below the lowest detect placed at it',
+     'source_chain', 1.0, 'higher', 'lower', 'timestamp'),
+    ('chemduck_0_1', 1, 'ChemDuck 0.1: duplicates and events averaged by day, non-detects at half the limit',
+     'source_chain', 0.5, 'higher', 'lower', 'date'),
+    ('combine_same_day', 1, 'chemduck_default, but a day''s samples of one point combined by D2''s recipe',
+     'source_chain', 1.0, 'higher', 'lower', 'timestamp');
+
+INSERT OR REPLACE INTO nd_policy_rules VALUES
+    ('chemduck_default', 1, 'reruns',        'select',  NULL, NULL,            'estimator', 'all'),
+    ('chemduck_default', 1, 'same_day',      'select',  NULL, NULL,            'estimator', 'all'),
+    ('chemduck_default', 1, 'over_time',     'km_mean', NULL, 'lowest_detect', 'max_limit', 'all'),
+    ('chemduck_default', 1, 'across_points', 'select',  NULL, NULL,            'estimator', 'all'),
+    ('chemduck_default', 1, 'sum',           'refuse',  NULL, NULL,            'estimator', 'all'),
+    ('half_dl_average',  1, 'reruns',        'pool',    NULL, NULL,            'estimator', 'any'),
+    ('half_dl_average',  1, 'same_day',      'mean',    0.5,  NULL,            'estimator', 'any'),
+    ('half_dl_average',  1, 'over_time',     'mean',    0.5,  NULL,            'estimator', 'any'),
+    ('half_dl_average',  1, 'across_points', 'select',  NULL, NULL,            'estimator', 'all'),
+    ('half_dl_average',  1, 'sum',           'sum',     0.5,  NULL,            'estimator', 'any'),
+    ('km_lowest_detect', 1, 'reruns',        'select',  NULL, NULL,            'estimator', 'all'),
+    ('km_lowest_detect', 1, 'same_day',      'select',  NULL, NULL,            'estimator', 'all'),
+    ('km_lowest_detect', 1, 'over_time',     'km_mean', NULL, 'lowest_detect', 'max_limit', 'all'),
+    ('km_lowest_detect', 1, 'across_points', 'select',  NULL, NULL,            'estimator', 'all'),
+    ('km_lowest_detect', 1, 'sum',           'refuse',  NULL, NULL,            'estimator', 'all'),
+    ('combine_same_day', 1, 'reruns',        'select',  NULL, NULL,            'estimator', 'all'),
+    ('combine_same_day', 1, 'same_day',      'combine', NULL, NULL,            'estimator', 'all'),
+    ('combine_same_day', 1, 'over_time',     'km_mean', NULL, 'lowest_detect', 'max_limit', 'all'),
+    ('combine_same_day', 1, 'across_points', 'select',  NULL, NULL,            'estimator', 'all'),
+    ('combine_same_day', 1, 'sum',           'refuse',  NULL, NULL,            'estimator', 'all'),
+    ('chemduck_0_1',     1, 'reruns',        'pool',    NULL, NULL,            'estimator', 'any'),
+    ('chemduck_0_1',     1, 'same_day',      'mean',    0.5,  NULL,            'estimator', 'any'),
+    ('chemduck_0_1',     1, 'over_time',     'mean',    0.5,  NULL,            'estimator', 'any'),
+    ('chemduck_0_1',     1, 'across_points', 'select',  NULL, NULL,            'estimator', 'all'),
+    ('chemduck_0_1',     1, 'sum',           'refuse',  NULL, NULL,            'estimator', 'all');
 
 CREATE TABLE IF NOT EXISTS locations (
     location_id VARCHAR PRIMARY KEY,
     x DOUBLE,
     y DOUBLE,
-    geom BLOB,
     loc_type VARCHAR,
     loc_desc VARCHAR,
     aquifer VARCHAR,
@@ -20,14 +132,30 @@ CREATE TABLE IF NOT EXISTS locations (
     study VARCHAR,
     study_description VARCHAR,
     elev_ground DOUBLE,     
-    elev_measuring DOUBLE   
+    elev_measuring DOUBLE,  
+    
+    parent_location_id VARCHAR,
+    
+    
+    spatial_support VARCHAR
 );
+
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS parent_location_id VARCHAR;
+
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS spatial_support VARCHAR;
 
 CREATE TABLE IF NOT EXISTS samples (
     sample_id VARCHAR PRIMARY KEY,
     location_id VARCHAR NOT NULL,
-    sample_date DATE NOT NULL,
-    matrix VARCHAR NOT NULL,
+    
+    
+    
+    
+    
+    
+    
+    sample_date DATE,
+    matrix VARCHAR,
     top_depth DOUBLE,
     bottom_depth DOUBLE,
     depth DOUBLE,  
@@ -36,7 +164,39 @@ CREATE TABLE IF NOT EXISTS samples (
     composite_type VARCHAR,
     event VARCHAR,
     sample_material VARCHAR,  
-    parent_sample_id VARCHAR  
+    parent_sample_id VARCHAR,  
+    
+    sample_datetime TIMESTAMP,
+    
+    
+    
+    position VARCHAR,
+    
+    
+    
+    support VARCHAR,
+    
+    
+    replicate_set VARCHAR,
+    replicate_no INTEGER
+);
+
+ALTER TABLE samples ADD COLUMN IF NOT EXISTS sample_datetime TIMESTAMP;
+
+ALTER TABLE samples ADD COLUMN IF NOT EXISTS position VARCHAR;
+
+ALTER TABLE samples ADD COLUMN IF NOT EXISTS support VARCHAR;
+
+ALTER TABLE samples ADD COLUMN IF NOT EXISTS replicate_set VARCHAR;
+
+ALTER TABLE samples ADD COLUMN IF NOT EXISTS replicate_no INTEGER;
+
+CREATE TABLE IF NOT EXISTS load_report (
+    category VARCHAR NOT NULL,
+    item VARCHAR NOT NULL,
+    n BIGINT,
+    detail VARCHAR,
+    PRIMARY KEY (category, item)
 );
 
 CREATE TABLE IF NOT EXISTS results (
@@ -68,8 +228,72 @@ CREATE TABLE IF NOT EXISTS results (
     lab_flags VARCHAR,
     validator_flags VARCHAR,
     meas_basis VARCHAR,  
-    fraction VARCHAR     
+    fraction VARCHAR,    
+    
+    
+    
+    method_class VARCHAR,
+    
+    reportable BOOLEAN,
+    
+    
+    test_type VARCHAR,
+    test_rank INTEGER,
+    
+    
+    
+    
+    
+    report_limit DOUBLE,
+    nd_limit DOUBLE,
+    limit_source VARCHAR,
+    
+    
+    
+    
+    
+    
+    
+    reported_units VARCHAR,
+    unit_factor DOUBLE,
+    unit_source VARCHAR,
+    
+    
+    
+    
+    
+    
+    
+    partition_matrix VARCHAR,
+    partition_fraction VARCHAR
 );
+
+CREATE TABLE IF NOT EXISTS method_classes (
+    pattern VARCHAR PRIMARY KEY,
+    method_class VARCHAR NOT NULL,
+    priority INTEGER NOT NULL,
+    note VARCHAR
+);
+
+INSERT OR REPLACE INTO method_classes VALUES
+    ('FIELD([ _-]?(MEASURE|MEASUREMENT|METER|PARAMETER|TEST)S?)?|FLD|FIELD[ _-].*', 'field', 10,
+     'in-situ readings taken at sampling'),
+    
+    ('((SW|EPA|E)[ _-]?)?1311[A-Z]?|TCLP', 'leach:TCLP', 20, 'toxicity characteristic leaching'),
+    ('((SW|EPA|E)[ _-]?)?1312[A-Z]?|SPLP', 'leach:SPLP', 20, 'synthetic precipitation leaching'),
+    ('((SW|EPA|E)[ _-]?)?1313[A-Z]?', 'leach:LEAF1313', 20, 'LEAF pH dependence'),
+    ('((SW|EPA|E)[ _-]?)?1314[A-Z]?', 'leach:LEAF1314', 20, 'LEAF percolation column'),
+    ('((SW|EPA|E)[ _-]?)?1315[A-Z]?', 'leach:LEAF1315', 20, 'LEAF mass transfer'),
+    ('((SW|EPA|E)[ _-]?)?1316[A-Z]?', 'leach:LEAF1316', 20, 'LEAF liquid-solid ratio'),
+    ('NBR[ _-]?10005.*', 'leach:NBR10005', 20, 'Brazilian leaching test (lixiviacao)'),
+    ('NBR[ _-]?10006.*', 'extract:NBR10006', 20, 'Brazilian solubilisation test (solubilizacao)'),
+    ('(ASTM[ _-]?)?D[ _-]?3987.*', 'leach:ASTM_D3987', 20, 'shake extraction of solid waste with water'),
+    
+    ('((SW|EPA|E)[ _-]?)?[0-9]{4}[A-Z]?(-[A-Z0-9]+)?', 'lab', 50, 'SW-846 methods'),
+    ('((EPA|E)[ _-]?)?[0-9]{3}\.[0-9]{1,2}[A-Z]?', 'lab', 50, 'EPA water methods (200.7, 300.0, 180.1, ...)'),
+    ('SM[ _-]?[0-9]{4}.*', 'lab', 50, 'Standard Methods'),
+    ('ASTM[ _-]?[A-Z][ _-]?[0-9]+.*', 'lab', 50, 'ASTM methods'),
+    ('ISO[ _-]?[0-9]+.*', 'lab', 50, 'ISO methods');
 
 CREATE TABLE IF NOT EXISTS screening_levels (
     screening_id INTEGER PRIMARY KEY,
@@ -109,7 +333,32 @@ INSERT OR REPLACE INTO matrix_classes (matrix, matrix_class) VALUES
     ('WS', 'aqueous'),   
     ('WW', 'aqueous'),   
     ('WP', 'aqueous'),   
-    ('WQ', 'aqueous');
+    ('WQ', 'aqueous'),   
+    ('Soil', 'solid'),
+    ('Sediment', 'solid'),
+    ('SO', 'solid'),     
+    ('SE', 'solid'),     
+    ('TAILS', 'solid');
+
+CREATE TABLE IF NOT EXISTS unit_dimensions (
+    units VARCHAR PRIMARY KEY,
+    dimension VARCHAR NOT NULL   
+);
+
+INSERT OR REPLACE INTO unit_dimensions (units, dimension) VALUES
+    ('mg/kg', 'mass/mass'), ('ug/kg', 'mass/mass'), ('ng/kg', 'mass/mass'),
+    ('ug/g', 'mass/mass'), ('ng/g', 'mass/mass'), ('mg/g', 'mass/mass'),
+    ('mg/L', 'mass/volume'), ('ug/L', 'mass/volume'), ('ng/L', 'mass/volume'),
+    ('g/L', 'mass/volume');
+
+CREATE TABLE IF NOT EXISTS matrix_class_dimensions (
+    matrix_class VARCHAR PRIMARY KEY,
+    dimension VARCHAR NOT NULL
+);
+
+INSERT OR REPLACE INTO matrix_class_dimensions (matrix_class, dimension) VALUES
+    ('aqueous', 'mass/volume'),
+    ('solid', 'mass/mass');
 
 CREATE TABLE IF NOT EXISTS location_attributes (
     location_id VARCHAR NOT NULL,
@@ -153,4 +402,204 @@ CREATE TABLE IF NOT EXISTS result_attributes (
     field_name VARCHAR NOT NULL,
     field_value VARCHAR,
     PRIMARY KEY (result_id, field_name)
+);
+
+CREATE TABLE IF NOT EXISTS location_geometries (
+    location_id VARCHAR PRIMARY KEY,
+    geom_wkb BLOB,
+    area DOUBLE,
+    area_units VARCHAR,
+    source VARCHAR
+);
+
+CREATE TABLE IF NOT EXISTS field_sample_design (
+    sample_id VARCHAR PRIMARY KEY,
+    design_increments INTEGER,
+    reported_increments INTEGER,
+    increment_layout VARCHAR,
+    increment_layout_source VARCHAR,
+    random_start VARCHAR,
+    tool_type VARCHAR,
+    tool_type_source VARCHAR,
+    tool_diameter_mm DOUBLE,
+    min_core_recovery_pct DOUBLE,
+    target_mass_min_g DOUBLE,
+    target_mass_max_g DOUBLE,
+    field_mass_g DOUBLE,
+    sampling_technique VARCHAR,   
+    composite_desc VARCHAR,       
+    hold_status VARCHAR,
+    hold_status_source VARCHAR,
+    hold_until DATE,
+    source VARCHAR
+);
+
+CREATE TABLE IF NOT EXISTS sample_increments (
+    increment_id VARCHAR PRIMARY KEY,
+    location_id VARCHAR NOT NULL,
+    sample_id VARCHAR,
+    hole_id VARCHAR,
+    increment_no INTEGER,
+    x DOUBLE,
+    y DOUBLE,
+    coord_method VARCHAR,
+    coord_method_source VARCHAR,
+    top_depth DOUBLE,
+    bottom_depth DOUBLE,
+    depth_units VARCHAR,
+    recovery_pct DOUBLE,
+    collected_at TIMESTAMP,
+    mass_g DOUBLE,
+    status VARCHAR,
+    status_source VARCHAR,
+    inside_area BOOLEAN,
+    source VARCHAR
+);
+
+CREATE TABLE IF NOT EXISTS sample_preparations (
+    prep_id VARCHAR PRIMARY KEY,
+    sample_id VARCHAR NOT NULL,
+    lab_name VARCHAR,
+    lab_sample_id VARCHAR,
+    sdg VARCHAR,
+    prep_sop VARCHAR,
+    prep_date DATE,
+    n_containers INTEGER,
+    received_wet_mass_g DOUBLE,
+    extraneous_removed VARCHAR,
+    moisture_subsample_mass_g DOUBLE,
+    drying_method VARCHAR,
+    drying_method_source VARCHAR,
+    drying_temp_c DOUBLE,
+    drying_start DATE,
+    drying_end DATE,
+    disaggregation VARCHAR,
+    disaggregation_source VARCHAR,
+    milling VARCHAR,
+    milling_source VARCHAR,
+    milling_duration_min DOUBLE,
+    sieve_opening_mm DOUBLE,
+    particle_size_fraction VARCHAR,  
+    dry_mass_passing_g DOUBLE,
+    oversize_mass_g DOUBLE,
+    oversize_description VARCHAR,
+    observations VARCHAR,
+    deviations VARCHAR,
+    source VARCHAR
+);
+
+CREATE TABLE IF NOT EXISTS sample_subsamples (
+    subsample_id VARCHAR PRIMARY KEY,
+    prep_id VARCHAR NOT NULL,
+    sample_id VARCHAR NOT NULL,
+    lab_sample_id VARCHAR,
+    prep_role VARCHAR,
+    lab_replicate_no INTEGER,
+    parent_subsample_id VARCHAR,
+    analysis_group VARCHAR,
+    splitting_method VARCHAR,
+    splitting_method_source VARCHAR,
+    slab_depth_cm DOUBLE,
+    n_subsample_increments INTEGER,
+    scoop_type VARCHAR,
+    target_mass_g DOUBLE,
+    mass_g DOUBLE,
+    mass_reported VARCHAR,
+    percent_solids DOUBLE,
+    whole_aliquot_extracted BOOLEAN,
+    prep_method_code VARCHAR,
+    ism_prep_code VARCHAR,
+    extraction_method VARCHAR,
+    source VARCHAR
+);
+
+CREATE TABLE IF NOT EXISTS result_aliquots (
+    result_id BIGINT PRIMARY KEY,
+    subsample_id VARCHAR NOT NULL,
+    prep_role VARCHAR,
+    particle_size_fraction VARCHAR,
+    lab_replicate_on_primary BOOLEAN
+);
+
+CREATE TABLE IF NOT EXISTS ism_analysis_groups (
+    priority INTEGER NOT NULL,
+    match_column VARCHAR NOT NULL CHECK (match_column IN ('method_code', 'method_class')),
+    pattern VARCHAR NOT NULL,
+    analysis_group VARCHAR NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ism_vocabularies (
+    vocabulary VARCHAR NOT NULL,
+    code VARCHAR NOT NULL,
+    description VARCHAR,
+    PRIMARY KEY (vocabulary, code)
+);
+
+INSERT OR REPLACE INTO ism_vocabularies VALUES
+    ('support', 'discrete', 'one spot'),
+    ('support', 'composite', 'a few spots combined, fewer increments than ISM asks'),
+    ('support', 'ism', 'the mean of a DU or SU, from 30 or more increments'),
+    ('increment_layout', 'systematic_random', 'a grid with a random start'),
+    ('increment_layout', 'simple_random', 'random positions over the whole unit'),
+    ('increment_layout', 'stratified_random', 'one random position in each cell'),
+    ('increment_layout', 'systematic_fixed', 'a grid with a fixed start'),
+    ('increment_layout', 'judgmental', 'positions chosen by judgment'),
+    ('increment_layout', 'other', NULL),
+    ('tool_type', 'hand_core', NULL),
+    ('tool_type', 'direct_push', NULL),
+    ('tool_type', 'auger', NULL),
+    ('tool_type', 'scoop', NULL),
+    ('tool_type', 'other', NULL),
+    ('drying_method', 'air', NULL),
+    ('drying_method', 'oven', NULL),
+    ('drying_method', 'freeze', NULL),
+    ('drying_method', 'none', 'processed wet, e.g. for volatile analytes'),
+    ('disaggregation', 'mortar_pestle', NULL),
+    ('disaggregation', 'mechanical', NULL),
+    ('disaggregation', 'none', NULL),
+    ('milling', 'none', NULL),
+    ('milling', 'ball_mill', NULL),
+    ('milling', 'ring_and_puck', NULL),
+    ('milling', 'puck_mill', NULL),
+    ('milling', 'other', NULL),
+    ('splitting_method', 'slab_cake_2d', 'many small scoops across a thin layer, on a grid'),
+    ('splitting_method', 'sectorial_splitter', NULL),
+    ('splitting_method', 'rotary_splitter', NULL),
+    ('splitting_method', 'riffle_splitter', NULL),
+    ('splitting_method', 'cone_and_quarter', 'not representative (ISM-2 section 5.3)'),
+    ('splitting_method', 'grab', 'not representative (ISM-2 section 5.3)'),
+    ('splitting_method', 'other', NULL),
+    ('prep_role', 'primary', 'the aliquot whose result reports the sample'),
+    ('prep_role', 'lab_replicate', 'a further aliquot of the same prepared sample'),
+    ('coord_method', 'gps', NULL),
+    ('coord_method', 'survey', NULL),
+    ('coord_method', 'digitised', NULL),
+    ('coord_method', 'planned', 'a design location, not where the increment was taken'),
+    ('status', 'planned', NULL),
+    ('status', 'collected', NULL),
+    ('status', 'refused', 'the tool could not reach depth'),
+    ('status', 'relocated', 'taken away from its planned spot'),
+    ('hold_status', 'none', NULL),
+    ('hold_status', 'held_frozen', 'collected, analysis deferred'),
+    ('hold_status', 'archived', 'kept for possible analysis');
+
+CREATE TABLE IF NOT EXISTS uncertainty_components (
+    component VARCHAR NOT NULL
+        CHECK (component IN ('analytical', 'subsampling', 'preparation', 'field_heterogeneity',
+                             'between_su', 'blank_bias', 'recovery_bias', 'counting')),
+    scope_kind VARCHAR NOT NULL
+        CHECK (scope_kind IN ('result', 'subsample', 'preparation', 'sample', 'batch',
+                              'lab_method_period', 'replicate_set', 'location')),
+    scope_id VARCHAR NOT NULL,
+    analyte VARCHAR,
+    method_class VARCHAR,
+    matrix VARCHAR,
+    kind VARCHAR NOT NULL CHECK (kind IN ('rsd', 'sd', 'bias_factor', 'flag')),
+    estimate DOUBLE,
+    df INTEGER,
+    basis VARCHAR NOT NULL,
+    includes VARCHAR[],
+    note VARCHAR,
+    CHECK (kind <> 'flag' OR (estimate IS NULL AND note IS NOT NULL)),
+    CHECK (kind = 'flag' OR estimate IS NOT NULL)
 );

@@ -1,5 +1,62 @@
 {
   "version": 1,
   "table": "locations",
-  "columns": {}
+  "columns": {
+    "loc_type": {
+      "label": "Loc Type",
+      "color": {
+        "type": "categorical",
+        "palette": "category10",
+        "categories": [
+          "Borehole",
+          "Monitoring Well"
+        ]
+      }
+    },
+    "region": {
+      "label": "Region",
+      "color": {
+        "type": "categorical",
+        "palette": "category10",
+        "categories": [
+          "Minerals Region",
+          "Synthetic Region"
+        ]
+      }
+    },
+    "dataset": {
+      "label": "Dataset",
+      "color": {
+        "type": "categorical",
+        "palette": "category10",
+        "categories": [
+          "MineralsDataset",
+          "SyntheticDataset"
+        ]
+      }
+    },
+    "project": {
+      "label": "Project",
+      "color": {
+        "type": "categorical",
+        "palette": "category10",
+        "categories": [
+          "Minerals Exploration",
+          "Synthetic Project"
+        ]
+      }
+    },
+    "study": {
+      "label": "Study",
+      "color": {
+        "type": "categorical",
+        "palette": "category10",
+        "categories": [
+          "Minerals Study",
+          "Synthetic Study"
+        ]
+      }
+    }
+  },
+  "defaultColorBy": "study"
 }

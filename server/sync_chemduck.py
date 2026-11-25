@@ -1,24 +1,25 @@
 #!/usr/bin/env python3
 """
-Sync the ChemDuck SQL and catalogs into server/data from a chemduck checkout.
+Write the ChemDuck SQL and catalogs into a ChemDuck data folder.
 
-    python server/sync_chemduck.py [--chemduck ../chemduck] [--out server/data]
+    python server/sync_chemduck.py [--out server/data]
 
-Writes, via chemduck's own tools/arii_hybrid.py write_consumer_bundle():
+Uses the vendored ChemDuck (server/chemduck/, pinned by
+server/vendor_chemduck.py) and its own write_consumer_bundle():
 
-  sql/00_bootstrap.sql         DDL generated from chemduck sql/01_tables.sql
-  sql/02_macros.sql            copied verbatim
-  sql/03_views.sql             copied verbatim
-  sql/08_aggregate_results.sql copied verbatim
-  sql/SOURCE.json              the chemduck commit (and whether it was dirty)
+  sql/00_bootstrap.sql         DDL generated from ChemDuck's sql/01_tables.sql
+  sql/<consumer SQL>           the files arii_hybrid.CONSUMER_SQL names,
+                               copied verbatim
+  sql/SOURCE.json              the ChemDuck version, the pinned commit, and the
+                               files in the order the client loads them
   aggregation_rules.parquet    the catalog sql/07_catalogs.sql defines
 
-This replaces hand-copying. The copy that was here had drifted: its
-aggregate_results partitioned the event collapse on location, matrix and
-depth only, so it combined dissolved and total results across events.
+The client loads the files SOURCE.json lists, so a ChemDuck that adds a
+consumer file needs no client change to ship it.
 
-sql/10_chemrooms_catalogs.sql is chemrooms' own and is not touched.
-An ARII folder gets the same bundle from `arii_hybrid.py publish`.
+An ARII folder gets the same bundle from publish_arii.py. Run this again
+after re-vendoring. The SQL must match the schema the folder's parquet was
+written with, so re-export the data too (main.py export).
 """
 
 import argparse
@@ -27,26 +28,41 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import chemduck  # noqa: E402  the vendored copy, server/chemduck
+from vendor_chemduck import vendored_revision  # noqa: E402
+
+
+def stamp_revision(folder):
+    """Record the pinned commit where ChemDuck could not.
+
+    A vendored ChemDuck writes "commit": null into sql/SOURCE.json and
+    sidecars.json, because it finds no .git folder beside itself. The
+    commit is what tells a reader which macros the SQL defines, so it is
+    added here from VENDORED.json. The version stays ChemDuck's own.
+    """
+    folder = Path(folder)
+    revision = {**vendored_revision(), "version": chemduck.__version__}
+    for path in (folder / "sql" / "SOURCE.json", folder / "sidecars.json"):
+        if path.is_file():
+            doc = json.loads(path.read_text(encoding="utf-8"))
+            doc["chemduck"] = {**doc.get("chemduck", {}), **revision}
+            path.write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
+    return revision
+
+
+def write_bundle(out_dir):
+    """write_consumer_bundle, with the pinned commit recorded. Returns SOURCE.json."""
+    chemduck.write_consumer_bundle(out_dir)
+    stamp_revision(out_dir)
+    return json.loads((Path(out_dir) / "sql" / "SOURCE.json").read_text(encoding="utf-8"))
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--chemduck", default=str(HERE.parent.parent / "chemduck"),
-                    help="chemduck checkout (default: sibling of the chemrooms repo)")
+    ap = argparse.ArgumentParser(description=__doc__.strip().split("\n\n")[0])
     ap.add_argument("--out", default=str(HERE / "data"))
     args = ap.parse_args(argv)
-    tools = Path(args.chemduck).resolve() / "tools"
-    if not (tools / "arii_hybrid.py").exists():
-        print(f"No chemduck tools/arii_hybrid.py under {args.chemduck}", file=sys.stderr)
-        return 2
-    sys.path.insert(0, str(tools))
-    import arii_hybrid  # noqa: E402
-
-    source = arii_hybrid.write_consumer_bundle(args.out)
-    print(json.dumps(source, indent=1))
-    if source["chemduck"].get("dirty"):
-        print("Warning: chemduck sql/ or tools/ has uncommitted changes; SOURCE.json "
-              "records the commit, not what was copied.", file=sys.stderr)
+    print(json.dumps(write_bundle(args.out), indent=1))
     return 0
 
 

@@ -7,9 +7,12 @@ inspector and time-series charts. It runs entirely in the browser on
 client-side with SQL; the server only hands out files.
 
 The domain rules (non-detect substitution, duplicate and event aggregation,
-fractions kept apart) live in [ChemDuck](../chemduck)'s SQL views and macros,
-not in this repository's TypeScript. Chemrooms loads that SQL at startup and
-queries it.
+fractions kept apart) live in ChemDuck's SQL views and macros, not in this
+repository's TypeScript. Each data folder carries that SQL (`sql/`, listed in
+`sql/SOURCE.json`), and Chemrooms loads it at startup and queries it.
+ChemDuck itself is vendored in `server/chemduck/` at a pinned commit, the
+same one the QGIS plugin and its export pipeline pin (see
+[chemduck-transition-plan.md](chemduck-transition-plan.md)).
 
 It reads two kinds of project:
 
@@ -57,10 +60,12 @@ az storage cors add --account-name <account> --services b \
 ```
 client/   the app: React, SQLRooms 0.29, DuckDB-WASM, Cesium (Vite, pnpm)
 server/   data preparation scripts, and a small FastAPI static server
+  chemduck/  ChemDuck, vendored at a pinned commit (vendor_chemduck.py)
   data/   the demo ChemDuck project (synthetic) and its ChemDuck SQL
 utils/    DEM -> Cesium tileset conversion, geoid subset (see utils/README.md)
 Chemrooms.md            the original specification (predates much of the code)
 arii-parquet-source.md  design and measurements for the ARII source
+chemduck-transition-plan.md  moving to the QGIS plugin's ChemDuck + ARII stack
 ```
 
 ## Quick start (demo data)
@@ -103,20 +108,36 @@ because the SQL must match the schema the data was written with.
 
 ## A ChemDuck project
 
-Convert data to ChemDuck with its loaders (`../chemduck/tools/`), then export
-the tables chemrooms reads:
+Convert data to ChemDuck with its loaders, then make a data folder from the
+database (Python with `duckdb` and `pyyaml`; no FastAPI):
 
 ```bash
-cd server
-python main.py export path/to/project.duckdb [output_dir] --create-vis-specs
-python sync_chemduck.py --out output_dir     # ChemDuck SQL + aggregation catalog
+python server/export_chemduck.py path/to/project.duckdb [output_dir]
 ```
 
-`--create-vis-specs` writes `<table>.vis.json` files that drive the
-*Color by* control. `sync_chemduck.py` copies the SQL from a chemduck
-checkout (default: the sibling `../chemduck`) and records the commit in
-`sql/SOURCE.json`; run it again whenever chemduck's SQL changes, including for
-the demo in `server/data`.
+It writes the core tables as parquet in the vendored ChemDuck's current
+shape, the ChemDuck SQL bundle (`sql/`, with the pinned commit in
+`sql/SOURCE.json`), the aggregation catalog, and `<table>.vis.json` files
+that drive the *Color by* control. A database built by an older ChemDuck
+still exports: a column its tables lack is written as NULL, which
+ChemDuck's views read as "an older table" and fall back from.
+
+The demo in `server/data` is `bluejacket_synth.duckdb` from the ChemDuck
+repository, exported this way. `python server/sync_chemduck.py --out <folder>`
+rewrites only the SQL. The SQL must match the schema the parquet was written
+with, so after re-vendoring, re-export rather than only re-sync.
+
+### Moving the ChemDuck pin
+
+```bash
+python server/vendor_chemduck.py --commit <sha> [--source ../chemduck]
+python server/tests/test_chemduck_vendor.py
+python server/export_chemduck.py ../chemduck/bluejacket_synth.duckdb server/data
+```
+
+Pin the commit the QGIS plugin pins (`equis_loader/chemduck/VENDORED.json`
+there): the vendor test warns when the two differ. The files are the commit's
+bytes, hashed in `server/chemduck/VENDORED.json`. Never edit them; re-vendor.
 
 ## An EQuIS ARII project
 
@@ -135,8 +156,7 @@ python server/publish_arii.py path/to/export/manifest.json path/to/export/chemro
 Writing the sidecars to `chemrooms/` beside the manifest, and uploading that
 folder with the export, means the manifest URL alone opens the project.
 
-This needs a chemduck checkout (default `../chemduck`, or `--chemduck`) and
-Python with `duckdb` and `pyyaml`; the first run downloads DuckDB's spatial
+This uses the vendored ChemDuck and needs Python with `duckdb` and `pyyaml`; the first run downloads DuckDB's spatial
 extension. It writes about 1 MB: `locations` and `samples` tables, the
 catalogs the analyte picker and inspector read, vis specs, the ChemDuck SQL,
 `sql/results_view.sql` and `sidecars.json`. For a 3.45-million-row export it
@@ -217,6 +237,14 @@ pnpm test:run          # vitest
 npx tsc --noEmit       # typecheck
 pnpm build             # production build into client/dist
 ```
+
+```bash
+python server/tests/test_chemduck_vendor.py   # the vendored ChemDuck: hashes, version, bundle
+```
+
+`client/src/setup/chemduckBundle.test.ts` loads the demo folder's whole SQL
+bundle into the app's own DuckDB-WASM and calls the map macros, so a
+demo exported with a different ChemDuck than its SQL fails there.
 
 ChemDuck's own tests, including the hybrid ARII parity test, live in the
 chemduck repository (`python tests/test_arii_hybrid.py`).
