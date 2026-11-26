@@ -465,7 +465,7 @@ describe('rehydrateGeoparquetLayers', () => {
       analyte: 'Benzene',
       matrix: 'groundwater',
       eventAgg: 'most_recent',
-      dupAgg: 'avg',
+      methodClass: null,
       ndMethod: 'half_dl',
       colorBy: 'result',
     });

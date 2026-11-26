@@ -12,9 +12,10 @@
       main JS bundle has parsed and DuckDB-WASM gets initialized — adding
       almost a full second to time-to-interactive on a cold load.
 
-      The version below MUST match @duckdb/duckdb-wasm in pnpm-lock.yaml.
-      If you bump that dependency, update this URL or the preload becomes
-      stale (the app still works, just no preload benefit).
+      __DUCKDB_WASM_VERSION__ is replaced at build and dev time with the
+      version SQLRooms' connector loads (vite.config.ts,
+      duckdbWasmPreloadVersion). It was hand-written once, and went stale:
+      the page preloaded 1.31.0's engine and then loaded 1.32.0's.
     -->
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
     <link
@@ -22,13 +23,13 @@
       as="fetch"
       crossorigin="anonymous"
       type="application/wasm"
-      href="https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.31.0/dist/duckdb-eh.wasm"
+      href="https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@__DUCKDB_WASM_VERSION__/dist/duckdb-eh.wasm"
     />
     <link
       rel="preload"
       as="script"
       crossorigin="anonymous"
-      href="https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.31.0/dist/duckdb-browser-eh.worker.js"
+      href="https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@__DUCKDB_WASM_VERSION__/dist/duckdb-browser-eh.worker.js"
     />
   </head>
   <body>

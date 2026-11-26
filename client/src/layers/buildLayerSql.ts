@@ -37,6 +37,7 @@
  *   separately.
  */
 
+import {normalizeRowScope} from '../setup/rowScope';
 import type {LayerConfig} from './layerSchema';
 import {buildSamplesLayerSql} from '../setup/buildSamplesLayerSql';
 
@@ -71,7 +72,8 @@ export function buildLayerSql(
         elevationColumns: ctx.elevationColumns,
         coloringAnalyte: layer.query.analyte,
         eventAgg: layer.query.eventAgg,
-        dupAgg: layer.query.dupAgg,
+        methodClass: layer.query.methodClass ?? null,
+        rowScope: normalizeRowScope(layer.query.rowScope),
         ndMethod: layer.query.ndMethod,
         matrixFilter: layer.query.matrix,
         fractionFilter: layer.query.fraction ?? null,

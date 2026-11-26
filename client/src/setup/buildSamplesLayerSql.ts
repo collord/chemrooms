@@ -11,21 +11,28 @@
  *   of the data so they can click individual points.
  *
  * - **Analyte selected**:
- *   Calls chemduck's `aggregate_results(...)` table macro with the
- *   user's filter + aggregation rule choices. The result is one row
- *   per measurement identity: (location_id, matrix, top_depth,
- *   bottom_depth, fraction, meas_basis). Dissolved and total are never
- *   combined, so with no fraction filter a location measured both ways
- *   yields one row (and one entity) per fraction. `result` is the
- *   aggregated, ND-adjusted value; `detected`, `n_events` etc. feed the
- *   vis spec color pipeline.
+ *   Calls ChemDuck's `aggregate_points(...)` (its shared rules) with the
+ *   user's filters, event choice and non-detect display. The result is
+ *   one row per measurement point: (location_id, matrix, top_depth,
+ *   bottom_depth, position, fraction, meas_basis, method_class). Dissolved
+ *   and total are never combined, and neither are a field and a lab
+ *   method, so with no fraction or method-class filter a location yields
+ *   one row (and one entity) per fraction and class. `result` is the
+ *   selected value, a non-detect drawn by the display factor; `detected`,
+ *   `n_events` etc. feed the vis spec color pipeline, and the provenance
+ *   columns (selected_by, limit_source, nd_policy, ...) the inspector.
+ *
+ *   It used to call `aggregate_results(...)` with ChemDuck 0.1's recipe
+ *   (dup_agg, nd_method), which ChemDuck kept only for Chemrooms: it
+ *   averaged a day's samples, a substituted non-detect among them, and
+ *   called the average detected.
  *
  * Depth is converted to metres per depth interval from samples'
  * depth_units, through `depth_interval_units` (built at init, see
  * initEntityLayers). It used to be multiplied by 0.3048 everywhere, which
  * drew a metre-unit facility at 30% of its depth and centimetre samples
  * 100x too deep. An interval whose unit is unknown gets no depth (rendered
- * at the surface) rather than a guessed one. aggregate_results partitions
+ * at the surface) rather than a guessed one. aggregate_points keys points
  * on the raw depth values, so they are converted here, at render time, and
  * never rewritten in the table.
  *
@@ -39,17 +46,22 @@ interface BuildSamplesLayerSqlOptions {
   elevationColumns: string[];
   /** Currently selected analyte, or null for the fallback query. */
   coloringAnalyte: string | null;
-  /** aggregation_rules event_agg name — used only when analyte is set. */
+  /** most_recent | maximum | mean (statistic) — used only when analyte is set. */
   eventAgg: string;
-  /** aggregation_rules dup_agg name — used only when analyte is set. */
-  dupAgg: string;
-  /** aggregation_rules nd_method name — used only when analyte is set. */
+  /**
+   * Method class to map, or null for every class, each its own point (a
+   * field and a lab pH are two variables). Used only when analyte is set.
+   */
+  methodClass?: string | null;
+  /** Non-detect display (ndDisplay.ts) — used only when analyte is set. */
   ndMethod: string;
+  /** Which results are read (rowScope.ts) — used only when analyte is set. */
+  rowScope?: RowScope | null;
   /** Active matrix filter, or null for "all matrices". */
   matrixFilter: string | null;
   /**
    * Active fraction filter, or null for "every fraction, each its own
-   * entity". Passed to aggregate_results as p_fraction.
+   * entity". Passed to aggregate_points as p_fraction.
    */
   fractionFilter?: string | null;
   /**
@@ -69,6 +81,9 @@ interface BuildSamplesLayerSqlOptions {
  * resampled for years is one place - so grouping loses nothing visible.
  */
 export const SAMPLE_ENTITY_LIMIT = 20000;
+
+import {ndDisplayFactor, ndHides, normalizeEventAgg} from './ndDisplay';
+import {rowScopeArgs, type RowScope} from './rowScope';
 
 /** Single-quote an SQL literal safely. */
 function sqlStr(s: string): string {
@@ -98,8 +113,9 @@ export function buildSamplesLayerSql(
     elevationColumns,
     coloringAnalyte,
     eventAgg,
-    dupAgg,
+    methodClass = null,
     ndMethod,
+    rowScope = null,
     matrixFilter,
     fractionFilter = null,
     groupSamples = false,
@@ -188,18 +204,25 @@ export function buildSamplesLayerSql(
     `;
   }
 
-  // ── Analyte selected: use chemduck aggregate_results table macro. ────────
-  const analyteLit = sqlStr(coloringAnalyte);
-  const matrixLit = matrixFilter ? sqlStr(matrixFilter) : 'NULL';
-  const eventAggLit = sqlStr(eventAgg);
-  const dupAggLit = sqlStr(dupAgg);
-  const ndMethodLit = sqlStr(ndMethod);
-  const fractionArg = fractionFilter
-    ? `,\n        p_fraction := ${sqlStr(fractionFilter)}`
-    : '';
+  // ── Analyte selected: ChemDuck's aggregate_points, one row per point. ────
+  // The point's value, which result it is, and how a non-detect among them
+  // is valued are ChemDuck's shared rules and the dataset's non-detect
+  // policy (ndDisplay.ts). Mixed units in the variable are refused there,
+  // with an error naming them, and the error reaches the user (mapNotice).
+  const factor = ndDisplayFactor(ndMethod);
+  const args = [
+    sqlStr(coloringAnalyte),
+    `p_event_agg := ${sqlStr(normalizeEventAgg(eventAgg))}`,
+    matrixFilter ? `p_matrix := ${sqlStr(matrixFilter)}` : null,
+    fractionFilter ? `p_fraction := ${sqlStr(fractionFilter)}` : null,
+    methodClass ? `p_method_class := ${sqlStr(methodClass)}` : null,
+    factor !== null ? `p_display_factor := ${factor}` : null,
+    ...rowScopeArgs(rowScope),
+  ].filter((a): a is string => a !== null);
+  const hideNonDetects = ndHides(ndMethod) ? 'AND agg.detected IS DISTINCT FROM FALSE' : '';
 
   // Locations are joined back in to get the NAVD88 elevation columns for
-  // the altitude resolution. aggregate_results already has x/y — we only
+  // the altitude resolution. aggregate_points already has x/y — we only
   // need the elevation column values from the source locations table.
   const surveyedSampleParent = surveyedElevExpr(elevationColumns, 'l.');
   const surface = `COALESCE(
@@ -210,28 +233,25 @@ export function buildSamplesLayerSql(
 
   return `
     WITH agg AS (
-      SELECT *
-      FROM aggregate_results(
-        ${analyteLit},
-        ${matrixLit},
-        NULL,
-        NULL,
-        ${eventAggLit},
-        ${dupAggLit},
-        ${ndMethodLit},
-        0.0,
-        1.0${fractionArg}
+      SELECT * EXCLUDE (top_depth, bottom_depth),
+        COALESCE(top_depth, 0) AS top_depth,
+        COALESCE(bottom_depth, 0) AS bottom_depth
+      FROM aggregate_points(
+        ${args.join(',\n        ')}
       )
     )
     SELECT
-      -- One entity per measurement identity. Fraction and basis are part
-      -- of it: without them a location measured dissolved and total
-      -- produced two entities with one id.
+      -- One entity per measurement point (shared rules D1, D3): location,
+      -- matrix, depth interval, fraction, basis, then position and method
+      -- class. The first six keep the order older ids and bookmarks use
+      -- (parseCompositeLocationId).
       agg.location_id || '|' || agg.matrix
         || '|' || CAST(agg.top_depth AS VARCHAR)
         || '|' || CAST(agg.bottom_depth AS VARCHAR)
         || '|' || COALESCE(agg.fraction, '')
-        || '|' || COALESCE(agg.meas_basis, '') AS location_id,
+        || '|' || COALESCE(agg.meas_basis, '')
+        || '|' || COALESCE(agg.position, '')
+        || '|' || COALESCE(agg.method_class, '') AS location_id,
       agg.x AS longitude,
       agg.y AS latitude,
       -- Surface elevation before depth subtraction. The renderer uses
@@ -252,9 +272,11 @@ export function buildSamplesLayerSql(
       ${depthM('agg.bottom_depth', 'du.to_m')} AS bottom_depth_m,
       du.depth_units,
       agg.matrix AS loc_type,
+      -- A non-detect is labelled as one: '<' and the value it is drawn at.
       agg.location_id || ' — ' || agg.analyte
         || COALESCE(' ' || agg.fraction, '')
-        || ' (' || ROUND(agg.result, 3) || COALESCE(' ' || agg.units, '') || ')'
+        || ' (' || CASE WHEN agg.detected IS FALSE THEN '<' ELSE '' END
+        || ROUND(agg.result, 3) || COALESCE(' ' || agg.units, '') || ')'
         AS label,
       -- Passthrough columns for the color pipeline
       agg.analyte,
@@ -272,7 +294,18 @@ export function buildSamplesLayerSql(
       agg.detection_limit,
       agg.fraction,
       agg.meas_basis,
-      agg.matrix
+      agg.matrix,
+      agg.position,
+      agg.method_class,
+      -- Provenance: which result the point shows, and why (inspector).
+      agg.sample_id,
+      agg.method_code,
+      agg.selected_by,
+      agg.limit_source,
+      agg.nd_policy,
+      agg.display_factor,
+      agg.unit_source,
+      array_to_string(agg.filters_ignored, ', ') AS filters_ignored
     FROM agg
     JOIN locations l ON l.location_id = agg.location_id
     LEFT JOIN location_elevations_sampled es
@@ -283,5 +316,6 @@ export function buildSamplesLayerSql(
      AND du.top_depth = agg.top_depth
      AND du.bottom_depth = agg.bottom_depth
     WHERE agg.x IS NOT NULL AND agg.y IS NOT NULL
+      ${hideNonDetects}
   `;
 }

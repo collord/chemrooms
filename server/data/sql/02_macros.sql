@@ -16,6 +16,9 @@
 --   'half_dl'    - Use half the detection limit (common default)
 --   'zero'       - Substitute zero
 --   'dl'         - Use the detection limit
+-- An unknown detect status (NULL detected: a blank or unlisted flag) gives
+-- NULL under every method: the value is neither a measurement nor a limit
+-- anyone can vouch for, so it is not ranked or averaged as either.
 
 CREATE OR REPLACE MACRO nd_adjusted_result(
     result,
@@ -26,6 +29,7 @@ CREATE OR REPLACE MACRO nd_adjusted_result(
     multiplier
 ) AS (
     CASE
+        WHEN detected IS NULL THEN NULL
         WHEN detected THEN result
         WHEN method = 'raw' THEN result
         WHEN method = 'fixed' THEN fixed_val
@@ -44,14 +48,101 @@ CREATE OR REPLACE MACRO nd_adjusted_result(
 -- U  = Non-detect (undetected)
 -- J  = Estimated value
 -- UJ = Non-detect with estimated detection limit
+-- NULL when the detect status is unknown: '' would claim a plain detect.
 
 CREATE OR REPLACE MACRO dv_qualifier(detected, estimated) AS (
     CASE
+        WHEN detected IS NULL THEN NULL
         WHEN NOT detected AND estimated THEN 'UJ'
         WHEN NOT detected THEN 'U'
         WHEN estimated THEN 'J'
         ELSE ''
     END
+);
+
+-- ============================================================================
+-- rank_across_key / rank_reruns_key - The two selection orders
+-- ============================================================================
+-- docs/shared-rules-decisions-response.md, D1. "Select one result" answers
+-- two questions that rank non-detects in opposite directions, so there are
+-- two orders, each defined here once. Each returns a key that sorts the
+-- preferred result first (ORDER BY key, or row_number() OVER (ORDER BY key)).
+--
+-- rank_across: distinct results that each speak for the site (samples,
+--   events, points). Detect, then non-detect, then unknown; among detects
+--   the higher value; among non-detects the higher limit (the cautious
+--   bound); then the later date; then the sample id.
+-- rank_reruns: analyses of ONE sample. The same, but among non-detects the
+--   lower limit (the more sensitive analysis); then the later analysis;
+--   then the result id.
+-- nd_limit_dir ('higher' | 'lower') is the project policy's choice
+-- (nd_policies.across_nd_limit / reruns_nd_limit); the defaults above are
+-- chemduck_default's. Non-detects are ranked by their LIMITS, never by a
+-- substituted value, so no substitution factor changes what is selected.
+
+CREATE OR REPLACE MACRO rank_value_key(detected, result, lim, nd_limit_dir) AS (
+    COALESCE(
+        CASE
+            WHEN detected THEN -result
+            WHEN NOT detected THEN CASE WHEN nd_limit_dir = 'lower' THEN lim ELSE -lim END
+        END,
+        CAST('Infinity' AS DOUBLE))
+);
+
+CREATE OR REPLACE MACRO rank_across_key(detected, result, lim, sample_date, sample_id, nd_limit_dir) AS (
+    struct_pack(
+        d := CASE WHEN detected THEN 0 WHEN NOT detected THEN 1 ELSE 2 END,
+        v := rank_value_key(detected, result, lim, nd_limit_dir),
+        t := COALESCE(-epoch(CAST(sample_date AS TIMESTAMP)), CAST('Infinity' AS DOUBLE)),
+        i := COALESCE(CAST(sample_id AS VARCHAR), ''))
+);
+
+CREATE OR REPLACE MACRO rank_reruns_key(detected, result, lim, date_analyzed, result_id, nd_limit_dir) AS (
+    struct_pack(
+        d := CASE WHEN detected THEN 0 WHEN NOT detected THEN 1 ELSE 2 END,
+        v := rank_value_key(detected, result, lim, nd_limit_dir),
+        t := COALESCE(-epoch(CAST(date_analyzed AS TIMESTAMP)), CAST('Infinity' AS DOUBLE)),
+        i := COALESCE(CAST(result_id AS BIGINT), 9223372036854775807))
+);
+
+-- nd_input_value - one input's value under a policy's substitution factor.
+-- A detect, or a value an earlier stage already computed, enters as it is;
+-- a raw non-detect as factor x its limit; an unknown status not at all.
+CREATE OR REPLACE MACRO nd_input_value(detected, result, lim, computed, nd_factor) AS (
+    CASE
+        WHEN detected IS NULL THEN NULL
+        WHEN detected OR computed THEN result
+        ELSE nd_factor * lim
+    END
+);
+
+-- ============================================================================
+-- in_sample_scope - The sample-type scope every aggregate applies
+-- ============================================================================
+-- Field duplicates, blanks and trip blanks are QC, not results to map: a
+-- blank is near-zero by construction and drags an aggregate down. Which
+-- sample types count is the caller's choice, made once and passed to every
+-- aggregate (p_sample_types), so a map and a chart cannot disagree.
+--   sample_types  list of codes to keep, e.g. ['N']; compared trimmed and
+--                 case-blind. NULL or [] = no scope. A NULL sample_type is
+--                 outside any scope.
+-- (The QGIS plugin's default scope is ['N'].)
+
+-- in_normal_scope: the default scope of the shared-rules macros
+-- (aggregate_points, rollup_points, sample_results): normal samples, typed
+-- N or untyped. A source that records no sample types has no QC typed, so
+-- its samples are normal; QC a source typed as normal is retyped at load by
+-- the mapping's qc_rules (shared rules D1).
+CREATE OR REPLACE MACRO in_normal_scope(sample_type) AS (
+    sample_type IS NULL OR upper(trim(sample_type)) = 'N'
+);
+
+CREATE OR REPLACE MACRO in_sample_scope(sample_type, sample_types) AS (
+    sample_types IS NULL
+    OR len(CAST(sample_types AS VARCHAR[])) = 0
+    OR upper(trim(COALESCE(sample_type, ''))) IN (
+        SELECT upper(trim(code))
+        FROM unnest(CAST(sample_types AS VARCHAR[])) AS scope(code))
 );
 
 -- ============================================================================
@@ -68,6 +159,99 @@ CREATE OR REPLACE MACRO depth_in_range(
 ) AS (
     (filter_top IS NULL OR top_depth >= filter_top) AND
     (filter_bottom IS NULL OR bottom_depth <= filter_bottom)
+);
+
+-- ============================================================================
+-- 1.9b depth_in_scope / units_in_scope - The row scope's depth and units
+-- ============================================================================
+-- The QGIS plugin's row scope, applied by point_scope and sample_scope so
+-- every engine sees it. A depth filter is (p_depth_min, p_depth_max,
+-- p_depth_units), either bound NULL for an open end; p_depth_units turns it
+-- on. A row is in when its WHOLE interval lies inside the bounds, not when
+-- it merely overlaps them: a 0-10 ft composite is mostly material from
+-- below a 0-2 ft range. Depths are compared in the filter's unit, converted
+-- by exact length factors and rounded to 9 places, so 30 cm meets a bound
+-- of 0.3 m. A row with no depth is out of every depth filter, as an undated
+-- one is out of every date range. A unit with no length factor is never
+-- guessed at: it meets only a filter in that same unit. The interval is
+-- (top, bottom), either standing in for the other when one is missing,
+-- turned round when written bottom first.
+--
+-- One facility's sediment held 331,986 results in cm beside 1,624 in m:
+-- bare numbers take the top 5 cm of one and the top 5 m of the other.
+
+CREATE OR REPLACE MACRO depth_unit_name(u) AS (
+    COALESCE(
+        MAP {'meter': 'm', 'meters': 'm', 'metre': 'm', 'metres': 'm',
+             'centimeter': 'cm', 'centimeters': 'cm', 'centimetre': 'cm',
+             'centimetres': 'cm', 'millimeter': 'mm', 'millimeters': 'mm',
+             'millimetre': 'mm', 'millimetres': 'mm', 'feet': 'ft', 'foot': 'ft',
+             'inch': 'in', 'inches': 'in'}[lower(trim(COALESCE(u, '')))],
+        lower(trim(COALESCE(u, ''))))
+);
+
+-- What a depth in u is multiplied by to read in target; NULL when they
+-- cannot be compared (one has no length factor and they differ).
+CREATE OR REPLACE MACRO depth_unit_factor(u, target) AS (
+    CASE WHEN depth_unit_name(u) = depth_unit_name(target) THEN CAST(1 AS DOUBLE)
+         ELSE CAST(MAP {'m': 1.0, 'cm': 0.01, 'mm': 0.001, 'ft': 0.3048, 'in': 0.0254}
+                       [depth_unit_name(u)] AS DOUBLE)
+              / CAST(MAP {'m': 1.0, 'cm': 0.01, 'mm': 0.001, 'ft': 0.3048, 'in': 0.0254}
+                         [depth_unit_name(target)] AS DOUBLE)
+    END
+);
+
+CREATE OR REPLACE MACRO depth_in_scope(top_depth, bottom_depth, depth_units,
+                                       p_depth_min, p_depth_max, p_depth_units) AS (
+    p_depth_units IS NULL
+    OR (COALESCE(top_depth, bottom_depth) IS NOT NULL
+        AND depth_unit_factor(depth_units, p_depth_units) IS NOT NULL
+        AND (p_depth_min IS NULL
+             OR round(least(COALESCE(top_depth, bottom_depth), COALESCE(bottom_depth, top_depth))
+                      * depth_unit_factor(depth_units, p_depth_units), 9)
+                >= round(CAST(p_depth_min AS DOUBLE), 9))
+        AND (p_depth_max IS NULL
+             OR round(greatest(COALESCE(top_depth, bottom_depth), COALESCE(bottom_depth, top_depth))
+                      * depth_unit_factor(depth_units, p_depth_units), 9)
+                <= round(CAST(p_depth_max AS DOUBLE), 9)))
+);
+
+-- p_reported_units: the units to keep, as the source reported them (before
+-- any conversion at load), trimmed and compared case-SENSITIVELY, '' for a
+-- result with none; NULL keeps every unit. It applies before the unit check,
+-- so a solid's stray leachate result in mg/L can be dropped rather than have
+-- its variable refused.
+--
+-- An empty list is refused HERE as well as in row_scope_check. DuckDB 2.0.1
+-- folds list_contains([], x) to FALSE, plans the call as an empty result,
+-- and never evaluates row_scope_check's error(): `aggregate_points('Lead',
+-- p_reported_units := [])` answered with no rows instead of refusing (2.0.0
+-- refused). error() is never folded, so the refusal is part of the
+-- predicate the optimizer must keep. An analyte with no rows at all still
+-- answers empty: there is nothing to filter.
+CREATE OR REPLACE MACRO units_in_scope(caller, reported_units, p_reported_units) AS (
+    p_reported_units IS NULL
+    OR CASE WHEN len(CAST(p_reported_units AS VARCHAR[])) = 0
+            THEN error(caller || ': p_reported_units is empty; name the units to keep, or '
+                       || 'pass NULL for every unit')
+            ELSE list_contains(list_transform(CAST(p_reported_units AS VARCHAR[]),
+                                              lambda u: trim(u)),
+                               trim(COALESCE(reported_units, '')))
+       END
+);
+
+-- The call's own mistakes, refused by name: a bound without its unit would
+-- be compared as though every row's numbers meant the same thing.
+CREATE OR REPLACE MACRO row_scope_check(caller, p_depth_min, p_depth_max, p_depth_units,
+                                        p_reported_units) AS (
+    CASE
+        WHEN p_depth_units IS NULL AND (p_depth_min IS NOT NULL OR p_depth_max IS NOT NULL)
+            THEN error(caller || ': a depth bound needs p_depth_units, the unit it is in')
+        WHEN p_reported_units IS NOT NULL AND len(CAST(p_reported_units AS VARCHAR[])) = 0
+            THEN error(caller || ': p_reported_units is empty; name the units to keep, or '
+                       || 'pass NULL for every unit')
+        ELSE TRUE
+    END
 );
 
 -- ============================================================================
@@ -478,6 +662,9 @@ CREATE OR REPLACE MACRO sen_slope(date_list, value_list) AS (
     FROM prepared
 );
 
+-- pivot_results_by_analyte - per-LOCATION average of each analyte over every
+-- event. A location summary, not a set of samples: for a scatter or ternary
+-- use sample_results / sample_cell_maps (10_sample_results.sql).
 CREATE OR REPLACE MACRO pivot_results_by_analyte(
     analyte_list,
     matrix_filter,
@@ -486,7 +673,8 @@ CREATE OR REPLACE MACRO pivot_results_by_analyte(
     end_date,
     nd_method,
     nd_fixed,
-    nd_multiplier
+    nd_multiplier,
+    p_sample_types := NULL
 ) AS TABLE
 WITH params AS (
         SELECT
@@ -511,7 +699,8 @@ WITH params AS (
         FROM v_results_denormalized r
         CROSS JOIN params p
         WHERE
-            (matrix_filter IS NULL OR r.matrix = matrix_filter)
+            in_sample_scope(r.sample_type, p_sample_types)
+            AND (matrix_filter IS NULL OR r.matrix = matrix_filter)
             AND (start_date IS NULL OR r.sample_date >= start_date)
             AND (end_date IS NULL OR r.sample_date <= end_date)
             AND (
@@ -541,7 +730,6 @@ WITH params AS (
             location_id,
             x,
             y,
-            geom,
             matrix,
             fraction,
             meas_basis,
@@ -555,7 +743,6 @@ WITH params AS (
             location_id,
             x,
             y,
-            geom,
             matrix,
             fraction,
             meas_basis,
@@ -570,7 +757,9 @@ WITH params AS (
 -- Pairs two analytes by location, sample date, fraction and meas_basis,
 -- averaging duplicate measurements. Returns one row per pairing where BOTH
 -- analytes have data (inner join). Dissolved A is never paired with total B.
--- Used for scatter/correlation plots.
+-- Samples taken at one location on one date are averaged together, so a
+-- point may be a combination no sample had: for a scatter of samples use
+-- sample_results / sample_cell_maps (10_sample_results.sql).
 
 CREATE OR REPLACE MACRO analyte_pair_data(
     analyte_a,
@@ -578,7 +767,8 @@ CREATE OR REPLACE MACRO analyte_pair_data(
     matrix_filter,
     location_list,
     start_date,
-    end_date
+    end_date,
+    p_sample_types := NULL
 ) AS TABLE
 WITH params AS (
         SELECT
@@ -595,6 +785,7 @@ WITH params AS (
         CROSS JOIN params p
         WHERE
             r.analyte IN (analyte_a, analyte_b)
+            AND in_sample_scope(r.sample_type, p_sample_types)
             AND (matrix_filter IS NULL OR r.matrix = matrix_filter)
             AND (start_date IS NULL OR r.sample_date >= start_date)
             AND (end_date IS NULL OR r.sample_date <= end_date)
@@ -605,11 +796,11 @@ WITH params AS (
     ),
     side_a AS (
         SELECT
-            location_id, x, y, geom, sample_date, matrix, fraction, meas_basis,
+            location_id, x, y, sample_date, matrix, fraction, meas_basis,
             AVG(result) AS result_a
         FROM base
         WHERE analyte = analyte_a
-        GROUP BY location_id, x, y, geom, sample_date, matrix, fraction, meas_basis
+        GROUP BY location_id, x, y, sample_date, matrix, fraction, meas_basis
     ),
     side_b AS (
         SELECT
@@ -623,7 +814,6 @@ WITH params AS (
         a.location_id,
         a.x,
         a.y,
-        a.geom,
         a.sample_date,
         a.matrix,
         a.result_a,
@@ -657,7 +847,8 @@ CREATE OR REPLACE MACRO analyte_composition(
     location_list,
     start_date,
     end_date,
-    p_fraction := NULL
+    p_fraction := NULL,
+    p_sample_types := NULL
 ) AS TABLE
 WITH params AS (
         SELECT
@@ -691,6 +882,7 @@ WITH params AS (
                 OR r.location_id IN (SELECT location_id FROM location_filter)
             )
             AND (p_fraction IS NULL OR r.fraction = p_fraction)
+            AND in_sample_scope(r.sample_type, p_sample_types)
     ),
     identity_check AS (
         SELECT
@@ -705,13 +897,12 @@ WITH params AS (
             location_id,
             x,
             y,
-            geom,
             matrix,
             analyte,
             SUM(result) AS total_concentration,
             COUNT(*) AS sample_count
         FROM filtered
-        GROUP BY location_id, x, y, geom, matrix, analyte
+        GROUP BY location_id, x, y, matrix, analyte
     ),
     per_location AS (
         SELECT
@@ -724,7 +915,6 @@ WITH params AS (
         pa.location_id,
         pa.x,
         pa.y,
-        pa.geom,
         pa.matrix,
         pa.analyte,
         pa.total_concentration,
@@ -751,8 +941,10 @@ WITH params AS (
 -- Classify Concentration - Quantile binning with ND separation
 -- ============================================================================
 -- Assigns each result record to a quantile-based concentration bin.
--- Non-detects are placed in a separate 'ND' bin. Detected values are
--- divided into n_classes bins using NTILE (equal-count partitioning).
+-- Non-detects are placed in a separate 'ND' bin, and results whose detect
+-- status is unknown (NULL detected) in an 'UNKNOWN' bin: they are reported,
+-- never ranked as either. Detected values are divided into n_classes bins
+-- using NTILE (equal-count partitioning).
 -- Returns per-record bin assignment with human-readable range labels.
 -- Used for choropleth map symbology.
 --
@@ -767,7 +959,8 @@ CREATE OR REPLACE MACRO classify_concentration(
     start_date,
     end_date,
     n_classes,
-    p_fraction := NULL
+    p_fraction := NULL,
+    p_sample_types := NULL
 ) AS TABLE
 WITH params AS (
         SELECT
@@ -792,6 +985,7 @@ WITH params AS (
                 OR r.location_id IN (SELECT location_id FROM location_filter)
             )
             AND (p_fraction IS NULL OR r.fraction = p_fraction)
+            AND in_sample_scope(r.sample_type, p_sample_types)
     ),
     identity_check AS (
         SELECT
@@ -803,7 +997,7 @@ WITH params AS (
     ),
     detect_binned AS (
         SELECT
-            f.location_id, f.x, f.y, f.geom,
+            f.location_id, f.x, f.y,
             f.sample_date, f.matrix, f.analyte, f.result,
             f.detected, f.detection_limit, f.qualifier, f.std_units,
             NTILE(COALESCE(n_classes, 4)) OVER (ORDER BY f.result) AS bin_num
@@ -812,17 +1006,28 @@ WITH params AS (
     ),
     nd_records AS (
         SELECT
-            f.location_id, f.x, f.y, f.geom,
+            f.location_id, f.x, f.y,
             f.sample_date, f.matrix, f.analyte, f.result,
             f.detected, f.detection_limit, f.qualifier, f.std_units,
             0 AS bin_num
         FROM filtered f
         WHERE NOT f.detected
     ),
+    unknown_records AS (
+        SELECT
+            f.location_id, f.x, f.y,
+            f.sample_date, f.matrix, f.analyte, f.result,
+            f.detected, f.detection_limit, f.qualifier, f.std_units,
+            -1 AS bin_num
+        FROM filtered f
+        WHERE f.detected IS NULL
+    ),
     all_binned AS (
         SELECT * FROM detect_binned
         UNION ALL
         SELECT * FROM nd_records
+        UNION ALL
+        SELECT * FROM unknown_records
     ),
     bin_stats AS (
         SELECT
@@ -837,7 +1042,6 @@ WITH params AS (
         ab.location_id,
         ab.x,
         ab.y,
-        ab.geom,
         ab.sample_date,
         ab.matrix,
         ab.analyte,
@@ -847,9 +1051,11 @@ WITH params AS (
         ab.qualifier,
         ab.std_units,
         CASE WHEN ab.bin_num = 0 THEN 'ND'
+             WHEN ab.bin_num = -1 THEN 'UNKNOWN'
              ELSE CAST(ab.bin_num AS VARCHAR)
         END AS concentration_bin,
         CASE WHEN ab.bin_num = 0 THEN 'ND'
+             WHEN ab.bin_num = -1 THEN 'Detect status unknown'
              ELSE CAST(ROUND(bs.bin_min, 4) AS VARCHAR)
                   || ' - '
                   || CAST(ROUND(bs.bin_max, 4) AS VARCHAR)

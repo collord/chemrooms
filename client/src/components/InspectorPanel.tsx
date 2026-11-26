@@ -34,6 +34,8 @@ import {
   Shapes,
 } from 'lucide-react';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
+import {ND_DISPLAY_OPTIONS, normalizeNdDisplay} from '../setup/ndDisplay';
+import {describeRowScope, isDefaultRowScope, type RowScope} from '../setup/rowScope';
 import type {
   AnalyteInfo,
   LocationSummary,
@@ -77,11 +79,11 @@ const EmptyState: React.FC = () => (
 /**
  * Parse the composite location_id produced by buildSamplesLayerSql's
  * aggregate path:
- * `location_id|matrix|top_depth|bottom_depth|fraction|meas_basis` (the
- * last two since aggregate_results keeps fractions apart; older bookmarks
- * carry only the first four). The pipe-delimited format is a stable
- * identifier for the entity, but for display we want the pieces broken
- * out.
+ * `location_id|matrix|top_depth|bottom_depth|fraction|meas_basis|position|method_class`.
+ * Older bookmarks carry the first four (before fractions were kept apart)
+ * or six (before aggregate_points keyed points on position and method
+ * class). The pipe-delimited format is a stable identifier for the
+ * entity, but for display we want the pieces broken out.
  */
 export function parseCompositeLocationId(raw: string): {
   locationId: string;
@@ -90,6 +92,8 @@ export function parseCompositeLocationId(raw: string): {
   bottomDepth?: string;
   fraction?: string;
   measBasis?: string;
+  position?: string;
+  methodClass?: string;
 } {
   const parts = raw.split('|');
   if (parts.length >= 4) {
@@ -100,6 +104,8 @@ export function parseCompositeLocationId(raw: string): {
       bottomDepth: parts[3] !== '0.0' ? parts[3] : undefined,
       fraction: parts[4] || undefined,
       measBasis: parts[5] || undefined,
+      position: parts[6] || undefined,
+      methodClass: parts[7] || undefined,
     };
   }
   return {locationId: raw};
@@ -111,7 +117,8 @@ const ChemduckLocationDetail: React.FC<{
   // Query results consumed directly from the hook — no store intermediary.
   const {summary, analytes, isLoading} = useLocationDetail();
   const eventAgg = useChemroomsStore((s) => s.chemrooms.config.eventAgg);
-  const dupAgg = useChemroomsStore((s) => s.chemrooms.config.dupAgg);
+  const methodClass = useChemroomsStore((s) => s.chemrooms.config.methodClass);
+  const rowScope = useChemroomsStore((s) => s.chemrooms.config.rowScope);
   const ndMethod = useChemroomsStore((s) => s.chemrooms.config.ndMethod);
   const coloringAnalyte = useChemroomsStore(
     (s) => s.chemrooms.config.coloringAnalyte,
@@ -133,6 +140,8 @@ const ChemduckLocationDetail: React.FC<{
           <div className="flex flex-wrap gap-x-2 text-[11px] text-muted-foreground">
             {parsed.matrix && <span>{parsed.matrix}</span>}
             {parsed.fraction && <span>{parsed.fraction}</span>}
+            {parsed.position && <span>{parsed.position}</span>}
+            {parsed.methodClass && <span title="Method class">{parsed.methodClass}</span>}
             {parsed.topDepth && (
               <span>
                 {parsed.topDepth}–{parsed.bottomDepth ?? '?'}
@@ -150,7 +159,8 @@ const ChemduckLocationDetail: React.FC<{
           active so the numbers in the table below make sense. */}
       <AggregationBanner
         eventAgg={eventAgg}
-        dupAgg={dupAgg}
+        methodClass={methodClass}
+        rowScope={rowScope}
         ndMethod={ndMethod}
         coloringAnalyte={coloringAnalyte}
       />
@@ -184,10 +194,11 @@ const ChemduckLocationDetail: React.FC<{
  */
 const AggregationBanner: React.FC<{
   eventAgg: string;
-  dupAgg: string;
+  methodClass: string | null;
+  rowScope: RowScope;
   ndMethod: string;
   coloringAnalyte: string | null;
-}> = ({eventAgg, dupAgg, ndMethod, coloringAnalyte}) => (
+}> = ({eventAgg, methodClass, rowScope, ndMethod, coloringAnalyte}) => (
   <div className="flex flex-wrap items-center gap-1.5 rounded bg-muted/50 px-2 py-1.5 text-[10px] text-muted-foreground">
     {coloringAnalyte && (
       <span className="font-medium text-foreground">{coloringAnalyte}</span>
@@ -198,18 +209,22 @@ const AggregationBanner: React.FC<{
     >
       {eventAgg}
     </span>
+    {methodClass && (
+      <span className="rounded bg-background px-1 py-0.5" title="Method class">
+        {methodClass}
+      </span>
+    )}
     <span
       className="rounded bg-background px-1 py-0.5"
-      title="Duplicate aggregation"
+      title="How a selected non-detect is drawn"
     >
-      dup: {dupAgg}
+      ND: {ND_DISPLAY_OPTIONS.find((o) => o.name === normalizeNdDisplay(ndMethod))?.label}
     </span>
-    <span
-      className="rounded bg-background px-1 py-0.5"
-      title="Non-detect method"
-    >
-      ND: {ndMethod}
-    </span>
+    {!isDefaultRowScope(rowScope) && (
+      <span className="rounded bg-background px-1 py-0.5" title="Rows read">
+        {describeRowScope(rowScope)}
+      </span>
+    )}
   </div>
 );
 
@@ -411,7 +426,42 @@ const ClickedValueCard: React.FC<{rowData: Record<string, unknown>}> = ({
             <span>DL: {Number(rowData.detection_limit).toPrecision(3)}{unitsStr}</span>
           )}
       </div>
+      <Provenance rowData={rowData} />
     </div>
+  );
+};
+
+/**
+ * Which result the point shows, and why: aggregate_points' provenance
+ * columns, passed through by buildSamplesLayerSql. Absent on rows from the
+ * no-analyte views and from layers frozen before the shared rules.
+ */
+const PROVENANCE: {key: string; label: string; title: string}[] = [
+  {key: 'sample_id', label: 'Sample', title: 'The sample whose result the point shows'},
+  {key: 'method_code', label: 'Method', title: 'The analytic method of that result'},
+  {key: 'selected_by', label: 'Chosen by', title: 'The order that chose this result over the others'},
+  {key: 'limit_source', label: 'Limit', title: 'Which limit a non-detect is valued from'},
+  {key: 'display_factor', label: 'Drawn at', title: 'The factor of its limit a selected non-detect is drawn at'},
+  {key: 'nd_policy', label: 'ND policy', title: "The dataset's non-detect policy, name@version"},
+  {key: 'unit_source', label: 'Units', title: 'How its results reached their unit at load'},
+];
+
+const Provenance: React.FC<{rowData: Record<string, unknown>}> = ({rowData}) => {
+  const rows = PROVENANCE.filter(({key}) => rowData[key] != null && rowData[key] !== '');
+  if (rows.length === 0) return null;
+  return (
+    <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 border-t border-primary/20 pt-1.5 text-[10px]">
+      {rows.map(({key, label, title}) => (
+        <React.Fragment key={key}>
+          <dt className="text-muted-foreground" title={title}>
+            {label}
+          </dt>
+          <dd className="truncate" title={String(rowData[key])}>
+            {key === 'display_factor' ? `${Number(rowData[key])} × limit` : String(rowData[key])}
+          </dd>
+        </React.Fragment>
+      ))}
+    </dl>
   );
 };
 

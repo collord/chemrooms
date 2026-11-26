@@ -1,88 +1,17 @@
 /**
  * Time-series chart panel using @sqlrooms/mosaic VgPlotChart.
  *
- * Displays concentration vs. date for the selected location and analytes.
- * Non-detect handling is applied in the SQL query based on user's chosen method.
- * Supports up to 4 analytes with color encoding.
+ * Displays concentration vs. date for the selected location and analytes:
+ * ChemDuck's point_series (setup/buildTimeSeriesSql.ts), one line per
+ * measurement point, non-detects drawn by the map's display choice and
+ * marked. Supports up to 4 analytes with color encoding.
  */
 
+import {selectChemduckReady} from '../slices/selectors';
 import React, {useMemo} from 'react';
 import {VgPlotChart} from '@sqlrooms/mosaic';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
-
-/**
- * Build the SQL query for time-series data, applying non-detect handling
- * inline so the chart gets the correct plot values.
- */
-function buildTimeSeriesQuery(
-  locationId: string,
-  analytes: string[],
-  matrixFilter: string | null,
-  fractionFilter: string | null,
-  ndMethod: string,
-): string {
-  const analyteList = analytes.map((a) => `'${a.replace(/'/g, "''")}'`).join(',');
-  const matrixClause = matrixFilter
-    ? `AND s.matrix = '${matrixFilter.replace(/'/g, "''")}'`
-    : '';
-  const fractionClause = fractionFilter
-    ? `AND r.fraction = '${fractionFilter.replace(/'/g, "''")}'`
-    : '';
-  const ndExcludeClause =
-    ndMethod === 'exclude' ? 'AND r.detected = TRUE' : '';
-
-  let ndExpression: string;
-  switch (ndMethod) {
-    case 'half_dl':
-      ndExpression = `CASE
-        WHEN r.detected THEN r.result
-        ELSE COALESCE(r.reporting_limit, r.method_detection_limit, r.quantitation_limit) / 2.0
-      END`;
-      break;
-    case 'dl':
-      ndExpression = `CASE
-        WHEN r.detected THEN r.result
-        ELSE COALESCE(r.reporting_limit, r.method_detection_limit, r.quantitation_limit)
-      END`;
-      break;
-    case 'zero':
-      ndExpression = `CASE WHEN r.detected THEN r.result ELSE 0 END`;
-      break;
-    default: // 'exclude' — non-detects are filtered out in WHERE
-      ndExpression = `r.result`;
-      break;
-  }
-
-  // sample_date: cast to VARCHAR → ISO 8601 string that Observable
-  // Plot can parse as temporal. DuckDB's typed DATE over Arrow
-  // serializes as epoch integers which the plot engine can't handle.
-  //
-  // plot_value: explicit CAST to DOUBLE to ensure the CASE
-  // expression result is numeric, not inferred as VARCHAR by
-  // DuckDB/Arrow. Without this the chart y-axis shows string-
-  // sorted values (monotonically increasing row indices).
-  return `
-    SELECT
-      r.analyte,
-      CAST(s.sample_date AS VARCHAR) AS sample_date,
-      CAST((${ndExpression}) AS DOUBLE) AS plot_value,
-      CAST(r.result AS DOUBLE) AS result,
-      r.detected,
-      COALESCE(r.reporting_limit, r.method_detection_limit, r.quantitation_limit)
-        AS detection_limit,
-      COALESCE(r.units, '') AS units,
-      COALESCE(r.qualifier, '') AS qualifier,
-      CASE WHEN r.detected THEN 'Detected' ELSE 'Non-Detect' END AS detect_status
-    FROM results r
-    JOIN samples s ON r.sample_id = s.sample_id
-    WHERE s.location_id = '${locationId.replace(/'/g, "''")}'
-      AND r.analyte IN (${analyteList})
-      ${matrixClause}
-      ${fractionClause}
-      ${ndExcludeClause}
-    ORDER BY r.analyte, s.sample_date
-  `;
-}
+import {buildTimeSeriesSql} from '../setup/buildTimeSeriesSql';
 
 export const TimeSeriesPanel: React.FC = () => {
   // Time series is a chemduck-only concept — it's the
@@ -110,22 +39,26 @@ export const TimeSeriesPanel: React.FC = () => {
     (s) => s.chemrooms.config.fractionFilter,
   );
   const ndMethod = useChemroomsStore((s) => s.chemrooms.config.ndMethod);
+  const rowScope = useChemroomsStore((s) => s.chemrooms.config.rowScope);
   const mosaicConn = useChemroomsStore((s) => s.mosaic.connection);
+  // point_series is defined by init; a location from the URL asks sooner.
+  const chemduckReady = useChemroomsStore(selectChemduckReady);
 
   const hasSelection =
     selectedLocationId && selectedAnalytes.length > 0;
 
   // Build VgPlot spec (declarative Mosaic spec)
   const spec = useMemo(() => {
-    if (!hasSelection || mosaicConn.status !== 'ready') return null;
+    if (!hasSelection || mosaicConn.status !== 'ready' || !chemduckReady) return null;
 
-    const query = buildTimeSeriesQuery(
-      selectedLocationId!,
-      selectedAnalytes,
+    const query = buildTimeSeriesSql({
+      locationId: selectedLocationId!,
+      analytes: selectedAnalytes,
       matrixFilter,
       fractionFilter,
       ndMethod,
-    );
+      rowScope,
+    });
 
     console.log('[timeseries] query:', query);
 
@@ -139,32 +72,48 @@ export const TimeSeriesPanel: React.FC = () => {
       data: {
         [tableKey]: {type: 'table' as const, query},
       },
-      plot: [
+      // A legend: each line is one measurement point (a depth interval,
+      // a fraction, a method class), and only its name says which.
+      vconcat: [
+        {legend: 'color', for: 'timeseries'},
         {
-          mark: 'line',
-          data: {from: tableKey},
-          x: 'sample_date',
-          y: 'plot_value',
-          z: 'analyte',
-          stroke: 'analyte',
-          strokeWidth: 2,
-        },
-        {
-          mark: 'dot',
-          data: {from: tableKey},
-          x: 'sample_date',
-          y: 'plot_value',
-          fill: 'analyte',
-          r: 4,
-          tip: true,
+          name: 'timeseries',
+          plot: [
+            {
+              mark: 'line',
+              data: {from: tableKey},
+              x: 'sample_date',
+              y: 'plot_value',
+              // One line per measurement point (buildTimeSeriesSql): depth
+              // intervals, fractions and method classes are never joined.
+              z: 'series',
+              stroke: 'series',
+              strokeWidth: 2,
+            },
+            {
+              mark: 'dot',
+              data: {from: tableKey},
+              x: 'sample_date',
+              y: 'plot_value',
+              fill: 'series',
+              // A non-detect is drawn at its display value, and marked as one.
+              symbol: 'detect_status',
+              r: 4,
+              tip: true,
+            },
+          ],
+          // sample_date arrives as an ISO string (buildTimeSeriesSql); without a
+          // time scale Plot treated it as ordinal ("strings that appear to be
+          // dates"), spacing samples evenly whatever their dates.
+          xScale: 'utc',
+          xLabel: 'Sample Date',
+          yLabel: 'Concentration',
+          xTickRotate: -25,
+          marginBottom: 80,
+          width: 800,
+          height: 350,
         },
       ],
-      xLabel: 'Sample Date',
-      yLabel: 'Concentration',
-      xTickRotate: -25,
-      marginBottom: 80,
-      width: 800,
-      height: 350,
     };
   }, [
     hasSelection,
@@ -173,7 +122,9 @@ export const TimeSeriesPanel: React.FC = () => {
     matrixFilter,
     fractionFilter,
     ndMethod,
+    rowScope,
     mosaicConn.status,
+    chemduckReady,
   ]);
 
   if (mosaicConn.status === 'loading') {

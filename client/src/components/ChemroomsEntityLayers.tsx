@@ -13,7 +13,7 @@
  *   heights into location_elevations_sampled. Bump the layer SQL
  *   state with a timestamp so the entity hooks refetch.
  *
- * Reactive rebuild: whenever any of (coloringAnalyte, eventAgg, dupAgg,
+ * Reactive rebuild: whenever any of (coloringAnalyte, eventAgg, methodClass,
  *   ndMethod, matrixFilter, elevationColumns, hasChemduckSchema) change,
  *   rebuild the samples layer SQL via buildSamplesLayerSql() and push
  *   it into React state. The effect is pure React reactivity — no
@@ -33,6 +33,7 @@ import {
   writeSampledElevations,
   type LocationToSample,
 } from '../setup/initEntityLayers';
+import {analyteMapVisSpec, buildDefaultVisSpec} from '../vis/buildDefaultVisSpec';
 import {loadVisSpecs} from '../vis/loadVisSpecs';
 import {
   loadAggregationRules,
@@ -43,6 +44,7 @@ import {buildLayerSql} from '../layers/buildLayerSql';
 import {resolveDrapeMode} from '../layers/vectorGeometry';
 import {ChemroomsEntityLayer} from './ChemroomsEntityLayer';
 import {ChemroomsVectorLayer} from './ChemroomsVectorLayer';
+import {ARII_MANIFEST_URL} from '../config';
 import {DATA_BASE_URL} from '../store';
 import {
   isEphemeralLayer,
@@ -137,7 +139,9 @@ export const ChemroomsEntityLayers: React.FC = () => {
     (s) => s.chemrooms.config.coloringAnalyte,
   );
   const eventAgg = useChemroomsStore((s) => s.chemrooms.config.eventAgg);
-  const dupAgg = useChemroomsStore((s) => s.chemrooms.config.dupAgg);
+  const methodClass = useChemroomsStore((s) => s.chemrooms.config.methodClass);
+  const samplesNotice = useChemroomsStore((s) => s.chemrooms.layerNotices['samples']);
+  const rowScope = useChemroomsStore((s) => s.chemrooms.config.rowScope);
   const ndMethod = useChemroomsStore((s) => s.chemrooms.config.ndMethod);
   const fractionFilter = useChemroomsStore(
     (s) => s.chemrooms.config.fractionFilter,
@@ -257,16 +261,39 @@ export const ChemroomsEntityLayers: React.FC = () => {
       message: 'Constructing scene…',
     });
 
-    // Fetch sidecar vis specs in parallel.
+    // Fetch sidecar vis specs in parallel. A folder that ships none (the
+    // QGIS plugin's pipeline publishes `chemduck/` without them) gets the
+    // same defaults built here, for the tables that are local: never an
+    // ARII source's remote `results` (buildDefaultVisSpec.ts).
     loadVisSpecs(DATA_BASE_URL, VIS_SPEC_TABLES)
-      .then((loaded) => {
+      .then(async (loaded) => {
         for (const {table, spec} of loaded) {
           setVisSpec(table, spec);
+        }
+        const shipped = new Set(loaded.map((l) => l.table));
+        const local = ARII_MANIFEST_URL ? ['locations', 'samples'] : ['locations', 'samples', 'results'];
+        const built: string[] = [];
+        for (const table of local.filter((t) => !shipped.has(t))) {
+          const spec = await buildDefaultVisSpec(
+            async (sql) => (await connector.query(sql)).toArray().map((r: any) => r.toJSON()),
+            table,
+          ).catch((e) => {
+            console.warn(`[init] default vis spec for ${table} failed:`, e);
+            return null;
+          });
+          if (spec) {
+            setVisSpec(table, spec);
+            built.push(table);
+          }
+        }
+        if (!shipped.has('v_results_denormalized')) {
+          setVisSpec('v_results_denormalized', analyteMapVisSpec());
+          built.push('v_results_denormalized');
         }
         console.log(
           `[init] loaded ${loaded.length} vis spec(s): [${loaded
             .map((l) => l.table)
-            .join(',')}]`,
+            .join(',')}]` + (built.length ? `; built ${built.length}: [${built.join(',')}]` : ''),
         );
       })
       .catch((e) => console.warn('[init] vis spec fetch failed:', e));
@@ -381,8 +408,9 @@ export const ChemroomsEntityLayers: React.FC = () => {
       elevationColumns,
       coloringAnalyte: effectiveAnalyte,
       eventAgg,
-      dupAgg,
+      methodClass,
       ndMethod,
+      rowScope,
       matrixFilter,
       fractionFilter,
       groupSamples,
@@ -393,8 +421,9 @@ export const ChemroomsEntityLayers: React.FC = () => {
     hasChemduckSchema,
     coloringAnalyte,
     eventAgg,
-    dupAgg,
+    methodClass,
     ndMethod,
+    rowScope,
     matrixFilter,
     fractionFilter,
     groupSamples,
@@ -459,6 +488,11 @@ export const ChemroomsEntityLayers: React.FC = () => {
   // come back as the full-extent preview.
   const hasAnalyte = Boolean(coloringAnalyte);
   const samplesVisSpecTable = hasAnalyte ? 'v_results_denormalized' : 'samples';
+  // When ChemDuck refuses the analyte's map (mixed units, ...), there is
+  // nothing to draw in its place; show where the data is instead. Without
+  // a layer drawn the scene never registers an extent, and the
+  // "Constructing scene" overlay stayed up over an empty globe.
+  const samplesRefused = samplesNotice?.kind === 'refused';
 
   return (
     <>
@@ -466,7 +500,7 @@ export const ChemroomsEntityLayers: React.FC = () => {
         layerId="locations"
         sqlQuery={locationsSql}
         visSpecTable="locations"
-        visible={locationsVisible && !hasAnalyte}
+        visible={locationsVisible && (!hasAnalyte || samplesRefused)}
         sampleRenderAs={sampleRenderAs}
         sphereRadiusMeters={sphereRadiusMeters}
         volumeRadiusMeters={volumeRadiusMeters}

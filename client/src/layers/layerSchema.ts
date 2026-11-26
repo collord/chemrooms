@@ -25,7 +25,7 @@
  *
  * `chemduck`
  *   The default. No external data — queries the project's DuckDB tables
- *   via aggregate_results(). The `query` field provides the parameters.
+ *   via aggregate_points(). The `query` field provides the parameters.
  *
  * `geoparquet`
  *   An external GeoParquet file loaded into DuckDB-WASM at runtime.
@@ -48,6 +48,7 @@
  *   interpolated surfaces, etc.
  */
 
+import {compactRowScope, normalizeRowScope, type RowScope} from '../setup/rowScope';
 import {z} from 'zod';
 import {computeLayerHash} from './layerHash';
 
@@ -286,10 +287,11 @@ export type DataSource = z.infer<typeof DataSource>;
 // ---------------------------------------------------------------------------
 
 /**
- * Parameters for the chemduck aggregate_results() macro.
+ * Parameters for ChemDuck's aggregate_points() macro (buildSamplesLayerSql).
  *
- * Field names match the chemduck aggregation_rules catalog vocabulary.
  * All filter fields are optional — omitting them means "no filter."
+ * Layers frozen before aggregate_points carried `dupAgg` (ChemDuck 0.1's
+ * same-day averaging, which the shared rules dropped); zod strips it.
  */
 export const QueryConfig = z.object({
   /** Analyte to filter on (exact match). Required for aggregation. */
@@ -298,7 +300,7 @@ export const QueryConfig = z.object({
   matrix: z.string().nullable().default(null),
   /**
    * Fraction filter (e.g. 'Dissolved'). Null = every fraction, each its
-   * own entity: aggregate_results never combines dissolved and total.
+   * own entity: aggregate_points never combines dissolved and total.
    * Optional so layers frozen before it existed still parse.
    */
   fraction: z.string().nullable().default(null),
@@ -306,12 +308,23 @@ export const QueryConfig = z.object({
   startDate: z.string().nullable().default(null),
   /** Inclusive end date (ISO 8601). Null = no upper bound. */
   endDate: z.string().nullable().default(null),
-  /** Event-aggregation rule name (from aggregation_rules catalog). */
+  /** Event choice: most_recent | maximum | mean (the policy's statistic). */
   eventAgg: z.string().default('most_recent'),
-  /** Duplicate-aggregation rule name. */
-  dupAgg: z.string().default('avg'),
-  /** Non-detect substitution method name. */
-  ndMethod: z.string().default('half_dl'),
+  /**
+   * Method class, or null for every class, each its own entity (a field
+   * and a lab pH are two variables).
+   */
+  methodClass: z.string().nullable().default(null),
+  /**
+   * Non-detect display (setup/ndDisplay.ts). Older layers hold ChemDuck
+   * 0.1's substitution names; each maps to its nearest display.
+   */
+  ndMethod: z.string().default('policy'),
+  /**
+   * The row scope's non-default fields (setup/rowScope.ts), or null for
+   * ChemDuck's defaults. Read through normalizeRowScope, never trusted.
+   */
+  rowScope: z.record(z.string(), z.unknown()).nullable().default(null),
 });
 export type QueryConfig = z.infer<typeof QueryConfig>;
 
@@ -417,7 +430,7 @@ export const LayerConfig = z.object({
   dataSource: DataSource.default({type: 'chemduck'}),
 
   /**
-   * Query parameters for chemduck aggregate_results().
+   * Query parameters for ChemDuck aggregate_points().
    * Only meaningful when dataSource.type is 'chemduck'.
    * Omit for non-query layers (imagery, raw geojson).
    */
@@ -497,8 +510,9 @@ export async function freezeCurrentState(params: {
   matrix: string | null;
   fraction?: string | null;
   eventAgg: string;
-  dupAgg: string;
+  methodClass?: string | null;
   ndMethod: string;
+  rowScope?: RowScope | null;
   colorBy: string | null;
   palette?: string;
   scaleType?: 'linear' | 'log' | 'sqrt';
@@ -519,8 +533,9 @@ export async function freezeCurrentState(params: {
       startDate: null,
       endDate: null,
       eventAgg: params.eventAgg,
-      dupAgg: params.dupAgg,
+      methodClass: params.methodClass ?? null,
       ndMethod: params.ndMethod,
+      rowScope: compactRowScope(params.rowScope),
     },
     visual: {
       renderType: 'point',
@@ -561,8 +576,9 @@ export function serializeLayerForUrl(layer: LayerConfig): string {
       ...(layer.query.startDate && {sd: layer.query.startDate}),
       ...(layer.query.endDate && {ed: layer.query.endDate}),
       ...(layer.query.eventAgg !== 'most_recent' && {ea: layer.query.eventAgg}),
-      ...(layer.query.dupAgg !== 'avg' && {da: layer.query.dupAgg}),
-      ...(layer.query.ndMethod !== 'half_dl' && {nd: layer.query.ndMethod}),
+      ...(layer.query.methodClass && {mc: layer.query.methodClass}),
+      ...(layer.query.ndMethod !== 'policy' && {nd: layer.query.ndMethod}),
+      ...(layer.query.rowScope && {rs: layer.query.rowScope}),
     };
   }
   if (layer.visual.colorBy) compact.cb = layer.visual.colorBy;
@@ -587,8 +603,11 @@ export function deserializeLayerFromUrl(encoded: string): LayerConfig | null {
           startDate: compact.q.sd ?? null,
           endDate: compact.q.ed ?? null,
           eventAgg: compact.q.ea ?? 'most_recent',
-          dupAgg: compact.q.da ?? 'avg',
-          ndMethod: compact.q.nd ?? 'half_dl',
+          methodClass: compact.q.mc ?? null,
+          // A link from before the display choices omitted 'half_dl', its
+          // default; it now opens with the dataset's policy.
+          ndMethod: compact.q.nd ?? 'policy',
+          rowScope: compactRowScope(normalizeRowScope(compact.q.rs)),
         }
       : undefined;
 

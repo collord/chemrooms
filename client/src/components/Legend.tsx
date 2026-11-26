@@ -24,6 +24,9 @@ interface LegendProps {
 export const Legend: React.FC<LegendProps> = ({table}) => {
   const visSpec = useChemroomsStore((s) => s.chemrooms.visSpecs[table]);
   const colorByCol = useChemroomsStore((s) => s.chemrooms.colorBy[table]);
+  const liveDomain = useChemroomsStore((s) =>
+    colorByCol ? s.chemrooms.liveDomains[`${table}.${colorByCol}`] : undefined,
+  );
 
   if (!visSpec || !colorByCol) return null;
   const colSpec = visSpec.columns[colorByCol];
@@ -39,7 +42,7 @@ export const Legend: React.FC<LegendProps> = ({table}) => {
         {unit}
       </div>
       {colSpec.color.type === 'sequential' ? (
-        <SequentialBar spec={colSpec} />
+        <SequentialBar spec={colSpec} liveDomain={liveDomain} />
       ) : (
         <CategoricalSwatches spec={colSpec} />
       )}
@@ -69,7 +72,10 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-const SequentialBar: React.FC<{spec: ColumnSpec}> = ({spec}) => {
+const SequentialBar: React.FC<{spec: ColumnSpec; liveDomain?: [number, number]}> = ({
+  spec,
+  liveDomain,
+}) => {
   if (spec.color.type !== 'sequential') return null;
   const interp = getInterpolator(spec.color.palette);
   if (!interp) return null;
@@ -81,7 +87,8 @@ const SequentialBar: React.FC<{spec: ColumnSpec}> = ({spec}) => {
   });
   const gradient = `linear-gradient(to right, ${stops.join(', ')})`;
 
-  const domain = spec.color.domain;
+  // The range the map was drawn with (liveDomains), else the spec's.
+  const domain = liveDomain ?? spec.color.domain;
   const lo = domain ? formatNumber(domain[0]) : '?';
   const hi = domain ? formatNumber(domain[1]) : '?';
 

@@ -19,6 +19,7 @@
  * is a chemduck location.
  */
 
+import {selectChemduckReady} from '../slices/selectors';
 import {useEffect, useRef} from 'react';
 import {
   Cartesian2,
@@ -350,6 +351,8 @@ export function useLocationDetail(): {
       ? selectedEntity.locationId
       : null;
   const selectedLocationId = rawLocationId?.split('|')[0] ?? null;
+  // location_analytes is made by init; a location from the URL asks sooner.
+  const chemduckReady = useChemroomsStore(selectChemduckReady);
   const matrixFilter = useChemroomsStore(
     (s) => s.chemrooms.config.matrixFilter,
   );
@@ -389,7 +392,7 @@ export function useLocationDetail(): {
       WHERE l.location_id = '${selectedLocationId}'
       GROUP BY l.location_id, l.loc_type, l.loc_desc, l.region
     `,
-    enabled: Boolean(selectedLocationId) && Boolean(locationsTable),
+    enabled: Boolean(selectedLocationId) && Boolean(locationsTable) && chemduckReady,
   });
 
   // Per-location counts come from location_analytes (a view, or an ARII
@@ -427,7 +430,7 @@ export function useLocationDetail(): {
       GROUP BY la.analyte, la.analyte_group, la.cas_number, la.units
       ORDER BY la.analyte_group, la.analyte
     `,
-    enabled: Boolean(selectedLocationId) && Boolean(locationsTable),
+    enabled: Boolean(selectedLocationId) && Boolean(locationsTable) && chemduckReady,
   });
 
   // Derive the return values from query results — no store push.

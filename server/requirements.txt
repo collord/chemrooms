@@ -1,3 +1,6 @@
 fastapi>=0.115.0
 uvicorn>=0.34.0
-duckdb>=1.1.0
+# The vendored ChemDuck (server/chemduck) lists the DuckDB versions it was
+# tested on in SUPPORTED_DUCKDB; server/tests/test_chemduck_vendor.py checks.
+duckdb>=1.5.4
+pyyaml>=6.0

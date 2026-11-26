@@ -25,7 +25,8 @@ export function selectCurrentRecipe(s: RoomStateWithChemrooms) {
     coloringAnalyte: s.chemrooms.config.coloringAnalyte,
     matrixFilter: s.chemrooms.config.matrixFilter,
     eventAgg: s.chemrooms.config.eventAgg,
-    dupAgg: s.chemrooms.config.dupAgg,
+    methodClass: s.chemrooms.config.methodClass,
+    rowScope: s.chemrooms.config.rowScope,
     ndMethod: s.chemrooms.config.ndMethod,
     sampleRenderAs: s.chemrooms.config.sampleRenderAs,
     sphereRadiusMeters: s.chemrooms.config.sphereRadiusMeters,
@@ -54,4 +55,15 @@ export function selectSelectedEntity(s: RoomStateWithChemrooms) {
  */
 export function selectTimeSeriesAnalytes(s: RoomStateWithChemrooms) {
   return s.chemrooms.config.timeSeriesAnalytes;
+}
+
+/**
+ * Whether ChemDuck's SQL, and chemrooms' catalogs over it, have loaded.
+ * The rule catalog is set by init after both (loadCatalogs). Queries that
+ * call ChemDuck's macros or chemrooms' catalogs wait on this: a location
+ * or analyte from the URL otherwise asks before init has defined them
+ * ("point_series does not exist").
+ */
+export function selectChemduckReady(s: RoomStateWithChemrooms): boolean {
+  return Object.keys(s.chemrooms.aggregationRules ?? {}).length > 0;
 }

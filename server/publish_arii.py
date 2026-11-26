@@ -3,7 +3,7 @@
 Publish an EQuIS ARII export as a chemrooms data folder.
 
     python server/publish_arii.py <manifest.json> <out_dir> --x LONGITUDE --y LATITUDE
-        [--chemduck ../chemduck] [--memory-limit 8GB]
+        [--memory-limit 8GB]
 
 Then serve <out_dir> and run the client with
 
@@ -13,7 +13,8 @@ The partitions are not copied: the browser reads them where the export
 pipeline published them, by HTTP range requests (see
 client/src/setup/ariiSource.ts). <out_dir> gets about 1 MB for the test facility:
 
-  1. chemduck's tools/arii_hybrid.py publish: locations and samples
+  1. ChemDuck's publish(), from the vendored copy (server/chemduck, pinned
+     by server/vendor_chemduck.py): locations and samples
      sidecars, the ChemDuck SQL bundle, sql/results_view.sql and
      sidecars.json, refusing a source without DETECT_FLAG, with conflicting
      sample or location values, non-WGS84 coordinates or an unknown depth
@@ -39,6 +40,8 @@ import duckdb
 HERE = Path(__file__).resolve().parent
 CATALOGS_SQL = HERE.parent / "client" / "src" / "sql" / "chemrooms_catalogs.sql"
 sys.path.insert(0, str(HERE))
+import chemduck as hy  # noqa: E402  the vendored copy, server/chemduck
+from sync_chemduck import stamp_revision  # noqa: E402
 from vis_specs import write_vis_specs  # noqa: E402
 
 
@@ -48,16 +51,8 @@ def main(argv=None):
     ap.add_argument("out_dir")
     ap.add_argument("--x", required=True, help="WGS84 longitude column, e.g. LONGITUDE")
     ap.add_argument("--y", required=True, help="WGS84 latitude column, e.g. LATITUDE")
-    ap.add_argument("--chemduck", default=str(HERE.parent.parent / "chemduck"))
     ap.add_argument("--memory-limit", default="8GB")
     args = ap.parse_args(argv)
-
-    tools = Path(args.chemduck).resolve() / "tools"
-    if not (tools / "arii_hybrid.py").exists():
-        print(f"No chemduck tools/arii_hybrid.py under {args.chemduck}", file=sys.stderr)
-        return 2
-    sys.path.insert(0, str(tools))
-    import arii_hybrid as hy  # noqa: E402
 
     t = time.time()
     try:
@@ -66,6 +61,7 @@ def main(argv=None):
     except Exception as e:  # SourceRefused, ManifestError, LoadConflictError
         print(f"Refused: {e}", file=sys.stderr)
         return 2
+    stamp_revision(args.out_dir)
     print(f"  sidecars: {time.time() - t:.1f}s")
 
     t = time.time()

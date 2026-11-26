@@ -17,8 +17,13 @@ describe('joinUrl', () => {
 });
 
 describe('defaultSidecarFolder', () => {
-  it('is a chemrooms folder beside the manifest, with its token', () => {
+  it("is the pipeline's chemduck folder beside the manifest, with its token", () => {
     expect(defaultSidecarFolder(MANIFEST + SAS)).toBe(
+      `https://acct.blob.core.windows.net/exports/site-a/chemduck${SAS}`,
+    );
+  });
+  it('names another folder beside it', () => {
+    expect(defaultSidecarFolder(MANIFEST + SAS, 'chemrooms')).toBe(
       `https://acct.blob.core.windows.net/exports/site-a/chemrooms${SAS}`,
     );
   });
@@ -32,9 +37,20 @@ describe('resolveSource', () => {
     expect(s).toEqual({
       kind: 'arii',
       manifestUrl: MANIFEST + SAS,
-      dataBaseUrl: `https://acct.blob.core.windows.net/exports/site-a/chemrooms${SAS}`,
+      dataBaseUrl: `https://acct.blob.core.windows.net/exports/site-a/chemduck${SAS}`,
       from: 'link',
     });
+  });
+
+  it('uses the sidecar folder main.tsx found, unless the source names one', () => {
+    const found = `https://acct.blob.core.windows.net/exports/site-a/chemrooms${SAS}`;
+    const hash = '#' + sourceHash({manifest: MANIFEST + SAS});
+    expect(resolveSource(hash, {}, false, found)?.dataBaseUrl).toBe(found);
+    const named = '#' + sourceHash({manifest: MANIFEST, data: 'https://elsewhere/side'});
+    expect(resolveSource(named, {}, false, found)?.dataBaseUrl).toBe('https://elsewhere/side');
+    expect(
+      resolveSource('', {VITE_ARII_MANIFEST_URL: MANIFEST}, false, found)?.dataBaseUrl,
+    ).toBe(found);
   });
 
   it('takes an explicit sidecar folder', () => {

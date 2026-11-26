@@ -40,7 +40,8 @@ function makeLayer(overrides: Partial<LayerConfig> = {}): LayerConfig {
       startDate: null,
       endDate: null,
       eventAgg: 'most_recent',
-      dupAgg: 'avg',
+      methodClass: null,
+      rowScope: null,
       ndMethod: 'half_dl',
     },
     visual: {
@@ -154,18 +155,20 @@ describe('computeLayerHash', () => {
       expect(a).not.toBe(b);
     });
 
-    it('reacts to dupAgg', async () => {
+    it('reacts to methodClass, and a recipe without one keeps its id', async () => {
+      const none = await computeLayerHash(makeLayer());
       const a = await computeLayerHash(
         makeLayer({
-          query: {...makeLayer().query!, dupAgg: 'avg'},
+          query: {...makeLayer().query!, methodClass: 'lab'},
         }),
       );
       const b = await computeLayerHash(
         makeLayer({
-          query: {...makeLayer().query!, dupAgg: 'max'},
+          query: {...makeLayer().query!, methodClass: 'field'},
         }),
       );
       expect(a).not.toBe(b);
+      expect(a).not.toBe(none);
     });
 
     it('reacts to ndMethod', async () => {

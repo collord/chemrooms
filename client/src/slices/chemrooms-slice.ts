@@ -4,6 +4,7 @@
  * filter state, and choropleth configuration.
  */
 
+import {DEFAULT_ROW_SCOPE, normalizeRowScope, type RowScope} from '../setup/rowScope';
 import type {SourceInfo} from '../setup/initEntityLayers';
 import {
   createSlice,
@@ -16,6 +17,7 @@ import type {SqlEditorSliceState} from '@sqlrooms/sql-editor';
 import type {StateCreator} from 'zustand';
 import type {VisSpec} from '../vis/visSpec';
 import type {LayerConfig} from '../layers/layerSchema';
+import type {LayerNotice} from '../layers/layerNotice';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -27,9 +29,9 @@ import type {LayerConfig} from '../layers/layerSchema';
  * as a hint to call sites. They match chemduck's canonical vocabulary —
  * the single source of truth is the catalog, not this file.
  */
-export type NdMethod = 'raw' | 'half_dl' | 'dl' | 'zero' | 'exclude';
+/** The non-detect display (setup/ndDisplay.ts). */
+export type NdMethod = 'policy' | 'dl' | 'half_dl' | 'zero' | 'exclude';
 export type EventAgg = 'most_recent' | 'maximum' | 'mean';
-export type DupAgg = 'avg' | 'max' | 'min' | 'first' | 'last';
 export type ColorMode = 'concentration' | 'exceedance';
 
 /** One entry from the chemduck `aggregation_rules` catalog. */
@@ -149,12 +151,24 @@ export interface ChemroomsConfig {
    */
   coloringAnalyte: string | null;
   matrixFilter: string | null;
-  /** Non-detect substitution method (chemduck `aggregation_rules` nd_method). */
+  /**
+   * How a selected non-detect is drawn (setup/ndDisplay.ts). Which result
+   * a point shows is the dataset's non-detect policy's, never this.
+   */
   ndMethod: NdMethod;
-  /** Event-aggregation method (chemduck `aggregation_rules` event_agg). */
+  /** Event choice (`aggregation_rules` event_agg; 'mean' is the policy's statistic). */
   eventAgg: EventAgg;
-  /** Duplicate-aggregation method (chemduck `aggregation_rules` dup_agg). */
-  dupAgg: DupAgg;
+  /**
+   * Method class to map, or null for every class. Set when the analyte is
+   * measured by more than one (a field and a lab pH are two variables).
+   */
+  methodClass: string | null;
+  /**
+   * Which results every map and chart reads (setup/rowScope.ts): dates,
+   * sample types, reportable, depth, reported units. One place, passed to
+   * every ChemDuck call, so a map and a chart can't disagree.
+   */
+  rowScope: RowScope;
   colorMode: ColorMode;
   selectedScreeningLevel: string | null;
   fractionFilter: string | null;
@@ -189,6 +203,20 @@ export interface ChemroomsSliceState {
     sourceInfo: SourceInfo | null;
     /** Why the source could not be opened (shown in the sidebar), or null. */
     sourceError: string | null;
+    /**
+     * What a layer's query said instead of drawing, or alongside it, by
+     * layer id: ChemDuck's refusals (mixed units, a matrix combination it
+     * won't make) and the filters its source can't apply
+     * (layerNotice.ts). Shown in the sidebar for the live recipe.
+     */
+    layerNotices: Record<string, LayerNotice>;
+    /**
+     * The value range a live layer's sequential colour was drawn with, by
+     * `${table}.${column}`: the legend's numbers. The colour pipeline
+     * takes the range from the points drawn, and the legend printed the
+     * spec's, a global range baked at export, or "?" where none was.
+     */
+    liveDomains: Record<string, [number, number]>;
     availableMatrices: string[];
     availableScreeningLevels: string[];
     /** chemduck aggregation_rules catalog, keyed by category. */
@@ -245,13 +273,17 @@ export interface ChemroomsSliceState {
     setMatrixFilter: (matrix: string | null) => void;
     setNdMethod: (method: NdMethod) => void;
     setEventAgg: (method: EventAgg) => void;
-    setDupAgg: (method: DupAgg) => void;
+    setMethodClass: (methodClass: string | null) => void;
+    /** Change some of the row scope; null resets it to ChemDuck's defaults. */
+    setRowScope: (update: Partial<RowScope> | null) => void;
     setColorMode: (mode: ColorMode) => void;
     setSelectedScreeningLevel: (name: string | null) => void;
     setFractionFilter: (fraction: string | null) => void;
     setAvailableAnalytes: (analytes: AnalyteInfo[]) => void;
     setAvailableAnalyteNames: (names: string[]) => void;
     setSourceInfo: (info: SourceInfo | null, error: string | null) => void;
+    setLayerNotice: (layerId: string, notice: LayerNotice | null) => void;
+    setLiveDomain: (key: string, domain: [number, number] | null) => void;
     setAvailableMatrices: (matrices: string[]) => void;
     setAvailableScreeningLevels: (levels: string[]) => void;
     setAggregationRules: (rules: AggregationRule[]) => void;
@@ -310,9 +342,10 @@ const DEFAULT_CONFIG: ChemroomsConfig = {
   timeSeriesAnalytes: [],
   coloringAnalyte: null,
   matrixFilter: null,
-  ndMethod: 'half_dl',
+  ndMethod: 'policy',
   eventAgg: 'most_recent',
-  dupAgg: 'avg',
+  methodClass: null,
+  rowScope: DEFAULT_ROW_SCOPE,
   colorMode: 'concentration',
   selectedScreeningLevel: null,
   fractionFilter: null,
@@ -333,6 +366,8 @@ export function createChemroomsSlice(
       availableAnalyteNames: [],
       sourceInfo: null,
       sourceError: null,
+      layerNotices: {},
+      liveDomains: {},
       availableMatrices: [],
       availableScreeningLevels: [],
       aggregationRules: {},
@@ -429,9 +464,19 @@ export function createChemroomsSlice(
           updateConfig(state, {eventAgg: method}),
         ),
 
-      setDupAgg: (method) =>
+      setMethodClass: (methodClass) =>
         set((state: ChemroomsSliceState) =>
-          updateConfig(state, {dupAgg: method}),
+          updateConfig(state, {methodClass}),
+        ),
+
+      setRowScope: (update) =>
+        set((state: ChemroomsSliceState) =>
+          updateConfig(state, {
+            rowScope:
+              update === null
+                ? DEFAULT_ROW_SCOPE
+                : normalizeRowScope({...state.chemrooms.config.rowScope, ...update}),
+          }),
         ),
 
       setColorMode: (mode) =>
@@ -463,6 +508,27 @@ export function createChemroomsSlice(
         set((state: ChemroomsSliceState) =>
           updateRuntime(state, {sourceInfo: info, sourceError: error}),
         ),
+
+      setLiveDomain: (key, domain) =>
+        set((state: ChemroomsSliceState) => {
+          const was = state.chemrooms.liveDomains[key];
+          if (was?.[0] === domain?.[0] && was?.[1] === domain?.[1]) return state;
+          const next = {...state.chemrooms.liveDomains};
+          if (domain) next[key] = domain;
+          else delete next[key];
+          return updateRuntime(state, {liveDomains: next});
+        }),
+
+      setLayerNotice: (layerId, notice) =>
+        set((state: ChemroomsSliceState) => {
+          const current = state.chemrooms.layerNotices;
+          const was = current[layerId];
+          if (was?.message === notice?.message && was?.kind === notice?.kind) return state;
+          const next = {...current};
+          if (notice) next[layerId] = notice;
+          else delete next[layerId];
+          return updateRuntime(state, {layerNotices: next});
+        }),
 
       setAggregationRules: (rules) =>
         set((state: ChemroomsSliceState) => {

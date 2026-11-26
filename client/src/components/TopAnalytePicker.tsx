@@ -5,7 +5,7 @@
  * The list of analytes comes from `v_analyte_summary` (which is loaded
  * from the chemduck SQL view at startup). When the user selects an
  * analyte, the samples layer SQL is rebuilt to call
- * `aggregate_results(...)` and the visual encoding switches to color
+ * `aggregate_points(...)` and the visual encoding switches to color
  * by the resulting concentration values.
  */
 

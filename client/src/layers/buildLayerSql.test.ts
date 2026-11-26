@@ -21,14 +21,15 @@ describe('buildLayerSql dispatch', () => {
       analyte: 'Benzene',
       matrix: 'groundwater',
       eventAgg: 'most_recent',
-      dupAgg: 'avg',
+      methodClass: null,
       ndMethod: 'half_dl',
       colorBy: 'result',
     });
     const sql = buildLayerSql(layer, ctx);
     expect(sql).not.toBeNull();
-    // Chemduck recipes go through aggregate_results when an analyte is set
-    expect(sql).toContain('aggregate_results');
+    // Chemduck recipes go through aggregate_points when an analyte is set
+    expect(sql).toContain('aggregate_points');
+    expect(sql).not.toContain('aggregate_results');
     expect(sql).toContain("'Benzene'");
   });
 

@@ -11,7 +11,7 @@
 import React, {useMemo, useState} from 'react';
 import {Database} from 'lucide-react';
 import {Button, Input, Label} from '@sqlrooms/ui';
-import {DEFAULT_SIDECAR_FOLDER, defaultSidecarFolder, sourceHash} from '../config';
+import {SIDECAR_FOLDERS, defaultSidecarFolder, sourceHash} from '../config';
 
 function isHttpUrl(s: string): boolean {
   try {
@@ -73,14 +73,16 @@ export const ConnectScreen: React.FC = () => {
             autoFocus
           />
           <p className="text-xs text-muted-foreground">
-            The sidecars from <code>server/publish_arii.py</code> are looked for in a{' '}
-            <code>{DEFAULT_SIDECAR_FOLDER}/</code> folder beside the manifest
+            The sidecars are looked for beside the manifest: in{' '}
+            <code>{SIDECAR_FOLDERS[0]}/</code>, as the export pipeline publishes them, then
+            in <code>{SIDECAR_FOLDERS[1]}/</code>, as <code>server/publish_arii.py</code> did
             {m && isHttpUrl(m) ? (
               <>
-                : <code className="break-all">{defaultSidecarFolder(m).split('?')[0]}</code>
+                {' '}
+                (<code className="break-all">{defaultSidecarFolder(m).split('?')[0]}</code>)
               </>
             ) : null}
-            . A signed URL's token is reused for it and for every partition.
+            . A signed URL's token is reused for them and for every partition.
           </p>
         </div>
 

@@ -20,6 +20,7 @@
  * is negligibly small.
  */
 
+import {compactRowScope, normalizeRowScope} from '../setup/rowScope';
 import type {LayerConfig} from './layerSchema';
 
 /**
@@ -104,8 +105,13 @@ function canonicalizeQuery(q: NonNullable<LayerConfig['query']>): unknown {
     startDate: q.startDate ?? null,
     endDate: q.endDate ?? null,
     eventAgg: q.eventAgg,
-    dupAgg: q.dupAgg,
+    // dupAgg (ChemDuck 0.1's same-day averaging) left the recipe with
+    // aggregate_points; a recipe's id changes with it, as its map does.
+    // methodClass only when set, as fraction above.
+    ...(q.methodClass ? {methodClass: q.methodClass} : {}),
     ndMethod: q.ndMethod,
+    // Only when not ChemDuck's defaults, so a layer without one keeps its id.
+    ...(compactRowScope(normalizeRowScope(q.rowScope)) ? {rowScope: compactRowScope(normalizeRowScope(q.rowScope))} : {}),
   };
 }
 

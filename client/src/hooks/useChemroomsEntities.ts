@@ -40,6 +40,7 @@ import {
 } from 'cesium';
 import {useStoreWithCesium} from '../cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
+import {filtersIgnoredNotice, refusalNotice} from '../layers/layerNotice';
 import {roomStore} from '../store';
 import {makeColorFnForColumn} from '../vis/colormap';
 import {
@@ -93,11 +94,16 @@ const TUBE_THRESHOLD = 50_000;
  * compile — the old worker gets killed, the new one starts, repeat.
  * A 300ms debounce lets the state settle before we do the heavy work. */
 const EFFECT_DEBOUNCE_MS = 300;
+
+/** The live recipe's layers (ChemroomsEntityLayers), whose legend is shown. */
+const LIVE_LAYERS = new Set(['locations', 'samples']);
 const MIN_SEGMENT_LENGTH_M = 0.1;
 
 export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
   const viewer = useStoreWithCesium((s) => s.cesium.viewer);
   const connector = useStoreWithCesium((s) => s.db.connector);
+  const setLayerNotice = useChemroomsStore((s) => s.chemrooms.setLayerNotice);
+  const setLiveDomain = useChemroomsStore((s) => s.chemrooms.setLiveDomain);
   const visSpec = useChemroomsStore(
     (s) => s.chemrooms.visSpecs[args.visSpecTable],
   );
@@ -138,9 +144,14 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
         rows = result.toArray();
       } catch (e) {
         console.error(`[${args.layerId}] query failed:`, e);
+        // A refusal (mixed units, ...) is the user's to read, not only the
+        // console's: without it a refused map looked like an empty one.
+        if (!cancelled) setLayerNotice(args.layerId, refusalNotice(e));
         return;
       }
-      if (cancelled || rows.length === 0) return;
+      if (cancelled) return;
+      setLayerNotice(args.layerId, filtersIgnoredNotice(rows));
+      if (rows.length === 0) return;
 
       // ── First pass: bbox ──────────────────────────────────────
       const bboxAcc = new BboxAccumulator();
@@ -168,6 +179,10 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
               ? [Math.min(...vals), Math.max(...vals)]
               : undefined;
           colorFn = makeColorFnForColumn(colSpec, domain);
+          // The live recipe's layers tell the legend the range they drew.
+          if (LIVE_LAYERS.has(args.layerId)) {
+            setLiveDomain(`${args.visSpecTable}.${colorByCol}`, domain ?? null);
+          }
         } else if (colSpec.color.type === 'categorical') {
           const seen = new Set<string>();
           for (const r of rows) {

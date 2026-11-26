@@ -6,10 +6,19 @@ inspector and time-series charts. It runs entirely in the browser on
 [SQLRooms](https://sqlrooms.org) and DuckDB-WASM, so the data is queried
 client-side with SQL; the server only hands out files.
 
-The domain rules (non-detect substitution, duplicate and event aggregation,
-fractions kept apart) live in [ChemDuck](../chemduck)'s SQL views and macros,
-not in this repository's TypeScript. Chemrooms loads that SQL at startup and
-queries it.
+The domain rules (which result a point shows, how a non-detect is valued,
+re-runs and same-day samples, fractions and method classes kept apart, units
+refused when they disagree) live in ChemDuck's SQL views and macros
+(`aggregate_points`, `point_series`), not in this repository's TypeScript.
+The *Non-Detect Display* control only changes how a selected non-detect is
+drawn (at the limit, half of it, zero, or hidden), never which result is
+selected. *Rows read* sets which results every map and chart reads: dates, sample
+types (normal samples by default), reportable results, a depth range (a
+sample's whole interval inside it) and reported units. Each data folder carries that SQL (`sql/`, listed in
+`sql/SOURCE.json`), and Chemrooms loads it at startup and queries it.
+ChemDuck itself is vendored in `server/chemduck/` at a pinned commit, the
+same one the QGIS plugin and its export pipeline pin (see
+[chemduck-transition-plan.md](chemduck-transition-plan.md)).
 
 It reads two kinds of project:
 
@@ -34,8 +43,9 @@ https://collord.github.io/chemrooms/#manifest=<...>&data=<URL-encoded sidecar fo
 https://collord.github.io/chemrooms/#data=<URL-encoded ChemDuck data folder>
 ```
 
-With only `manifest`, the sidecars are looked for in a `chemrooms/` folder
-beside the manifest. A signed URL (an Azure SAS token) works: its query
+With only `manifest`, the sidecars are looked for beside the manifest: in
+`chemduck/`, which the export pipeline publishes each night, then in
+`chemrooms/`, which `server/publish_arii.py` writes. A signed URL (an Azure SAS token) works: its query
 string is reused for the sidecars and every partition. A URL fragment is
 never sent to the web server, so the token does not reach GitHub's logs, but
 **anyone you give the link to can read the data until the token expires**.
@@ -57,10 +67,12 @@ az storage cors add --account-name <account> --services b \
 ```
 client/   the app: React, SQLRooms 0.29, DuckDB-WASM, Cesium (Vite, pnpm)
 server/   data preparation scripts, and a small FastAPI static server
+  chemduck/  ChemDuck, vendored at a pinned commit (vendor_chemduck.py)
   data/   the demo ChemDuck project (synthetic) and its ChemDuck SQL
 utils/    DEM -> Cesium tileset conversion, geoid subset (see utils/README.md)
 Chemrooms.md            the original specification (predates much of the code)
 arii-parquet-source.md  design and measurements for the ARII source
+chemduck-transition-plan.md  moving to the QGIS plugin's ChemDuck + ARII stack
 ```
 
 ## Quick start (demo data)
@@ -95,7 +107,7 @@ the connect screen.
 | Variable | Meaning |
 |---|---|
 | `VITE_DATA_URL` | The project's data folder: ChemDuck parquet, or ARII sidecars. |
-| `VITE_ARII_MANIFEST_URL` | Set only for an EQuIS ARII project: the export's `manifest.json`. Without `VITE_DATA_URL`, the sidecars are looked for in `chemrooms/` beside it. |
+| `VITE_ARII_MANIFEST_URL` | Set only for an EQuIS ARII project: the export's `manifest.json`. Without `VITE_DATA_URL`, the sidecars are looked for in `chemduck/`, then `chemrooms/`, beside it. |
 | `VITE_CESIUM_ION_TOKEN` | Cesium Ion access token, for world terrain. |
 
 The data folder carries the ChemDuck SQL (`sql/`) alongside the data,
@@ -103,20 +115,36 @@ because the SQL must match the schema the data was written with.
 
 ## A ChemDuck project
 
-Convert data to ChemDuck with its loaders (`../chemduck/tools/`), then export
-the tables chemrooms reads:
+Convert data to ChemDuck with its loaders, then make a data folder from the
+database (Python with `duckdb` and `pyyaml`; no FastAPI):
 
 ```bash
-cd server
-python main.py export path/to/project.duckdb [output_dir] --create-vis-specs
-python sync_chemduck.py --out output_dir     # ChemDuck SQL + aggregation catalog
+python server/export_chemduck.py path/to/project.duckdb [output_dir]
 ```
 
-`--create-vis-specs` writes `<table>.vis.json` files that drive the
-*Color by* control. `sync_chemduck.py` copies the SQL from a chemduck
-checkout (default: the sibling `../chemduck`) and records the commit in
-`sql/SOURCE.json`; run it again whenever chemduck's SQL changes, including for
-the demo in `server/data`.
+It writes the core tables as parquet in the vendored ChemDuck's current
+shape, the ChemDuck SQL bundle (`sql/`, with the pinned commit in
+`sql/SOURCE.json`), the aggregation catalog, and `<table>.vis.json` files
+that drive the *Color by* control. A database built by an older ChemDuck
+still exports: a column its tables lack is written as NULL, which
+ChemDuck's views read as "an older table" and fall back from.
+
+The demo in `server/data` is `bluejacket_synth.duckdb` from the ChemDuck
+repository, exported this way. `python server/sync_chemduck.py --out <folder>`
+rewrites only the SQL. The SQL must match the schema the parquet was written
+with, so after re-vendoring, re-export rather than only re-sync.
+
+### Moving the ChemDuck pin
+
+```bash
+python server/vendor_chemduck.py --commit <sha> [--source ../chemduck]
+python server/tests/test_chemduck_vendor.py
+python server/export_chemduck.py ../chemduck/bluejacket_synth.duckdb server/data
+```
+
+Pin the commit the QGIS plugin pins (`equis_loader/chemduck/VENDORED.json`
+there): the vendor test warns when the two differ. The files are the commit's
+bytes, hashed in `server/chemduck/VENDORED.json`. Never edit them; re-vendor.
 
 ## An EQuIS ARII project
 
@@ -127,6 +155,18 @@ fetching only the row groups each query needs.
 
 ### 1. Publish the sidecars
 
+An export from the pipeline that has ChemDuck switched on (`"chemduck"` in
+its `pipeline.json`) already has them: a `chemduck/` folder beside
+`manifest.json`, rebuilt each night. Nothing more is needed; go to step 2.
+Chemrooms builds what that folder lacks when it opens it:
+- `analyte_catalog`, from ChemDuck's `analyte_summary`. Analyte groups and
+  CAS numbers aren't in it.
+- `location_analytes`, as a live view that the inspector queries one
+  location at a time.
+- default vis specs, for `locations` and `samples`.
+
+Otherwise publish them yourself:
+
 ```bash
 python server/publish_arii.py path/to/export/manifest.json path/to/export/chemrooms \
     --x LONGITUDE --y LATITUDE
@@ -135,9 +175,8 @@ python server/publish_arii.py path/to/export/manifest.json path/to/export/chemro
 Writing the sidecars to `chemrooms/` beside the manifest, and uploading that
 folder with the export, means the manifest URL alone opens the project.
 
-This needs a chemduck checkout (default `../chemduck`, or `--chemduck`) and
-Python with `duckdb` and `pyyaml`; the first run downloads DuckDB's spatial
-extension. It writes about 1 MB: `locations` and `samples` tables, the
+This uses the vendored ChemDuck and needs Python with `duckdb` and `pyyaml`,
+and no DuckDB extension. It writes about 1 MB: `locations` and `samples` tables, the
 catalogs the analyte picker and inspector read, vis specs, the ChemDuck SQL,
 `sql/results_view.sql` and `sidecars.json`. For a 3.45-million-row export it
 takes under a minute.
@@ -175,7 +214,7 @@ link to `#manifest=<URL-encoded manifest URL>`. Locally:
 
 ```bash
 VITE_ARII_MANIFEST_URL=https://host/path/to/export/manifest.json pnpm dev
-# add VITE_DATA_URL=<sidecar folder> if it is not chemrooms/ beside the manifest
+# add VITE_DATA_URL=<sidecar folder> if it is not chemduck/ or chemrooms/ beside the manifest
 ```
 
 The sidebar shows the facility, result and partition counts, and how old the
@@ -217,6 +256,17 @@ pnpm test:run          # vitest
 npx tsc --noEmit       # typecheck
 pnpm build             # production build into client/dist
 ```
+
+```bash
+python server/tests/test_chemduck_vendor.py   # the vendored ChemDuck: hashes, version, bundle
+```
+
+`client/src/setup/chemduckBundle.test.ts` loads the demo folder's whole SQL
+bundle into the app's own DuckDB-WASM and calls the map macros, so a
+demo exported with a different ChemDuck than its SQL fails there.
+`client/src/setup/mapRules.test.ts` holds the map and the time series to
+ChemDuck's own answers on the demo: the same points, values and chosen
+results, and a display choice that never changes the selection.
 
 ChemDuck's own tests, including the hybrid ARII parity test, live in the
 chemduck repository (`python tests/test_arii_hybrid.py`).

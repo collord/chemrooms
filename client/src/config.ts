@@ -21,13 +21,26 @@
  * the room store and its data sources are created at module load.
  */
 
+import {probedSidecars} from './sidecarProbe';
+import {defaultSidecarFolder, joinUrl, sourceParams} from './urls';
+
+export {
+  DEFAULT_SIDECAR_FOLDER,
+  SIDECAR_FOLDERS,
+  SOURCE_PARAMS,
+  defaultSidecarFolder,
+  joinUrl,
+  sourceParams,
+} from './urls';
+
 export type ProjectKind = 'arii' | 'chemduck';
 
 export interface ProjectSource {
   kind: ProjectKind;
   /**
    * The data folder: for ChemDuck, the parquet tables, vis specs and `sql/`;
-   * for ARII, the folder `server/publish_arii.py` wrote. May carry a query
+   * for ARII, the sidecar folder: `chemduck/` from the QGIS plugin's
+   * pipeline, or `chemrooms/` from server/publish_arii.py. May carry a query
    * string (a signed URL); build paths into it with joinUrl.
    */
   dataBaseUrl: string;
@@ -37,56 +50,25 @@ export interface ProjectSource {
   from: 'link' | 'build' | 'dev-default';
 }
 
-/** Fragment keys that select the project. Bookmarks keep them. */
-export const SOURCE_PARAMS = ['manifest', 'data'] as const;
-
 /**
- * Where publish_arii.py's output is looked for when only a manifest is
- * given: a `chemrooms` folder beside the manifest.
+ * Resolve the project from the fragment, then env, then the dev default.
+ *
+ * `foundSidecars` is the sidecar folder main.tsx found beside an ARII
+ * manifest (sidecarProbe.ts), used when the source names none. Without one,
+ * the first of SIDECAR_FOLDERS is assumed, and opening it says what's wrong.
  */
-export const DEFAULT_SIDECAR_FOLDER = 'chemrooms';
-
-/**
- * `path` inside `base`, keeping base's query string LAST. Appending a path
- * after `?sv=...&sig=...` is the classic way to send a signed URL to the
- * wrong blob, and a plain `${base}/${path}` does exactly that.
- */
-export function joinUrl(base: string, path: string): string {
-  const q = base.indexOf('?');
-  const root = (q >= 0 ? base.slice(0, q) : base).replace(/\/+$/, '');
-  const query = q >= 0 ? base.slice(q) : '';
-  return `${root}/${path.replace(/^\/+/, '')}${query}`;
-}
-
-/** The default sidecar folder for a manifest URL, with its query string. */
-export function defaultSidecarFolder(manifestUrl: string): string {
-  const q = manifestUrl.indexOf('?');
-  const path = q >= 0 ? manifestUrl.slice(0, q) : manifestUrl;
-  const query = q >= 0 ? manifestUrl.slice(q) : '';
-  return path.slice(0, path.lastIndexOf('/') + 1) + DEFAULT_SIDECAR_FOLDER + query;
-}
-
-/** The source-selecting fragment parameters, if any. */
-export function sourceParams(hash: string): {manifest: string | null; data: string | null} {
-  const params = new URLSearchParams(hash.replace(/^#/, ''));
-  return {
-    manifest: params.get('manifest') || null,
-    data: params.get('data') || null,
-  };
-}
-
-/** Resolve the project from the fragment, then env, then the dev default. */
 export function resolveSource(
   hash: string,
   env: {VITE_ARII_MANIFEST_URL?: string; VITE_DATA_URL?: string},
   dev: boolean,
+  foundSidecars: string | null = null,
 ): ProjectSource | null {
   const link = sourceParams(hash);
   if (link.manifest) {
     return {
       kind: 'arii',
       manifestUrl: link.manifest,
-      dataBaseUrl: link.data ?? defaultSidecarFolder(link.manifest),
+      dataBaseUrl: link.data ?? foundSidecars ?? defaultSidecarFolder(link.manifest),
       from: 'link',
     };
   }
@@ -97,7 +79,8 @@ export function resolveSource(
     return {
       kind: 'arii',
       manifestUrl: env.VITE_ARII_MANIFEST_URL,
-      dataBaseUrl: env.VITE_DATA_URL || defaultSidecarFolder(env.VITE_ARII_MANIFEST_URL),
+      dataBaseUrl:
+        env.VITE_DATA_URL || foundSidecars || defaultSidecarFolder(env.VITE_ARII_MANIFEST_URL),
       from: 'build',
     };
   }
@@ -119,7 +102,15 @@ export const PROJECT_SOURCE: ProjectSource | null = resolveSource(
   typeof window === 'undefined' ? '' : window.location.hash,
   import.meta.env,
   import.meta.env.DEV,
+  probedSidecars()?.folder ?? null,
 );
+
+/**
+ * The tables an ARII source's sidecars.json lists, as main.tsx found them
+ * before the app loaded (sidecarProbe.ts); null when it found none, or the
+ * source isn't ARII.
+ */
+export const SIDECAR_TABLES: readonly string[] | null = probedSidecars()?.tables ?? null;
 
 /**
  * Base URL of the project's data folder ('' when there is none). The

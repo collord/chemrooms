@@ -95,7 +95,10 @@ def _build_default_spec(con, table: str) -> dict:
                 f'WHERE "{name}" IS NOT NULL ORDER BY "{name}"'
             ).fetchall()
         ]
-        cats = [str(c) for c in cats]
+        # As the client keys them: colormap.ts matches String(value), so a
+        # boolean is 'true'/'false'. Python's str() gave 'True', which no
+        # value ever matched, and `detected` drew in hashed colours.
+        cats = [("true" if c else "false") if isinstance(c, bool) else str(c) for c in cats]
         columns[name] = {
             "label": name.replace("_", " ").title(),
             "color": {

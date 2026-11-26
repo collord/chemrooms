@@ -6,7 +6,7 @@
  *  - Vertical exaggeration
  *  - Visible globe/topo layers
  *  - Selected location
- *  - Recipe: analyte, matrix, fraction, ND method, eventAgg, dupAgg, colorBy
+ *  - Recipe: analyte, matrix, fraction, ND display, eventAgg, method class, colorBy
  *  - Time-series analytes
  *  - Cross-section plane (two picked surface points)
  *  - Visible personal layers (encoded as compact JSON, repeated `layer=` params)
@@ -21,6 +21,8 @@ import {PROJECT_SOURCE, sourceHash} from '../config';
 import {useEffect, useRef} from 'react';
 import {Cartesian3, Cartographic, Math as CesiumMath} from 'cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
+import {normalizeNdDisplay} from '../setup/ndDisplay';
+import {compactRowScope, normalizeRowScope} from '../setup/rowScope';
 import {useStoreWithCesium} from '../cesium';
 import {
   deserializeLayerFromUrl,
@@ -63,7 +65,8 @@ export function useBookmark() {
     (s) => s.chemrooms.setColoringAnalyte,
   );
   const setEventAgg = useChemroomsStore((s) => s.chemrooms.setEventAgg);
-  const setDupAgg = useChemroomsStore((s) => s.chemrooms.setDupAgg);
+  const setMethodClass = useChemroomsStore((s) => s.chemrooms.setMethodClass);
+  const setRowScope = useChemroomsStore((s) => s.chemrooms.setRowScope);
   const setColorBy = useChemroomsStore((s) => s.chemrooms.setColorBy);
   const setBookmarkLayers = useChemroomsStore(
     (s) => s.chemrooms.setBookmarkLayers,
@@ -131,7 +134,10 @@ export function useBookmark() {
     const nd = params.get('nd');
     // Bookmark backwards compat: chemrooms used to call this 'at_dl';
     // chemduck's canonical name is 'dl'.
-    if (nd) setNdMethod((nd === 'at_dl' ? 'dl' : nd) as any);
+    // A link from before the display choices omitted 'half_dl', its default;
+    // it now opens with the dataset's policy. Old names map to the nearest
+    // display (normalizeNdDisplay).
+    if (nd) setNdMethod(normalizeNdDisplay(nd === 'at_dl' ? 'dl' : nd));
 
     // Selected location
     const loc = params.get('loc');
@@ -148,8 +154,19 @@ export function useBookmark() {
     const ea = params.get('ea'); // eventAgg
     if (ea) setEventAgg(ea as any);
 
-    const da = params.get('da'); // dupAgg
-    if (da) setDupAgg(da as any);
+    // `da` (dupAgg, ChemDuck 0.1's same-day averaging) is ignored: the
+    // shared rules never average a day's samples.
+    const mc = params.get('mc'); // methodClass
+    if (mc) setMethodClass(mc);
+
+    const rs = params.get('rs'); // rowScope, its non-default fields as JSON
+    if (rs) {
+      try {
+        setRowScope(normalizeRowScope(JSON.parse(rs)));
+      } catch {
+        console.warn('[bookmark] ignoring an unreadable row scope:', rs);
+      }
+    }
 
     const cbr = params.get('cbr'); // colorBy['v_results_denormalized']
     if (cbr) setColorBy('v_results_denormalized', cbr);
@@ -201,7 +218,8 @@ export function useBookmark() {
     setCrossSectionPoints,
     setColoringAnalyte,
     setEventAgg,
-    setDupAgg,
+    setMethodClass,
+    setRowScope,
     setColorBy,
     setBookmarkLayers,
     toggleLayerVisibility,
@@ -261,7 +279,7 @@ export function useBookmark() {
     if (config.fractionFilter) {
       params.set('fraction', config.fractionFilter);
     }
-    if (config.ndMethod !== 'half_dl') {
+    if (config.ndMethod !== 'policy') {
       params.set('nd', config.ndMethod);
     }
     if (config.timeSeriesAnalytes.length > 0) {
@@ -275,8 +293,12 @@ export function useBookmark() {
     if (config.eventAgg !== 'most_recent') {
       params.set('ea', config.eventAgg);
     }
-    if (config.dupAgg !== 'avg') {
-      params.set('da', config.dupAgg);
+    if (config.methodClass) {
+      params.set('mc', config.methodClass);
+    }
+    const scope = compactRowScope(config.rowScope);
+    if (scope) {
+      params.set('rs', JSON.stringify(scope));
     }
     if (colorByResults) {
       params.set('cbr', colorByResults);

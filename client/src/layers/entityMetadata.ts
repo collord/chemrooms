@@ -125,7 +125,7 @@ const POSITIONING_COLUMN_NAMES = new Set([
   'altitude',
   'label',
   'geom',
-  // chemduck aggregate_results passes through these for the point
+  // ChemDuck aggregate_points passes through these for the point
   // renderer's color pipeline; they're not user-visible attributes
   // in a vector-feature sense but also aren't positioning columns.
   // We keep them because they're meaningful for chemduck location

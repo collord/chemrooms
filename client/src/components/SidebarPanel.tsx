@@ -34,6 +34,7 @@ import {FreezeLayerButton} from './FreezeLayerButton';
 import {SymbolControls} from './SymbolControls';
 import {LayersPanel} from './LayersPanel';
 import {SourceBadge} from './SourceBadge';
+import {RecipeNotice} from './RecipeNotice';
 
 export const SidebarPanel: React.FC = () => {
   // Activate hooks. useLocationClick is wiring (click handler);
@@ -58,6 +59,7 @@ export const SidebarPanel: React.FC = () => {
       {/* ── 1. The active recipe ───────────────────────────────────── */}
       <div className="flex flex-col gap-2 rounded-md border border-border p-3">
         <TopAnalytePicker />
+        <RecipeNotice />
         <AggregationRulePicker
           category="event_agg"
           label="Show value"

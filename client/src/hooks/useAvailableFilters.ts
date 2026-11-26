@@ -3,6 +3,7 @@
  * from DuckDB once the data tables are ready.
  */
 
+import {selectChemduckReady} from '../slices/selectors';
 import {useEffect} from 'react';
 import {useSql} from '@sqlrooms/duckdb';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
@@ -10,9 +11,7 @@ import {useChemroomsStore} from '../slices/chemrooms-slice';
 export function useAvailableFilters() {
   // analyte_catalog exists once init has loaded the ChemDuck schema and
   // chemrooms' catalogs (a view, or an ARII sidecar table).
-  const hasSchema = useChemroomsStore(
-    (s) => s.chemrooms.aggregationRules && Object.keys(s.chemrooms.aggregationRules).length > 0,
-  );
+  const hasSchema = useChemroomsStore(selectChemduckReady);
   const samplesTable = useChemroomsStore((s) =>
     s.db.findTableByName('samples'),
   );
