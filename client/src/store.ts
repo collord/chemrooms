@@ -40,6 +40,7 @@ import {SidebarPanel} from './components/SidebarPanel';
 import {TimeSeriesPanel} from './components/TimeSeriesPanel';
 import {InspectorPanel} from './components/InspectorPanel';
 import {registerSpatialProbeGlobal} from './dev/probeSpatial';
+import {registerQueryTimerGlobal} from './dev/queryTimer';
 
 // ---------------------------------------------------------------------------
 // Combined state type
@@ -80,7 +81,13 @@ const cesiumConfigWithLayers = {
 // Data source URL — points to parquet exports of ChemDuck tables
 // ---------------------------------------------------------------------------
 
-import {ARII_MANIFEST_URL, DATA_BASE_URL, PROJECT_SOURCE, dataUrl} from './config';
+import {
+  ARII_MANIFEST_URL,
+  DATA_BASE_URL,
+  PROJECT_SOURCE,
+  SIDECAR_TABLES,
+  dataUrl,
+} from './config';
 export {DATA_BASE_URL};
 
 /** A parquet file in the data folder loaded as a table (downloaded whole). */
@@ -98,9 +105,18 @@ const parquetTable = (tableName: string) => ({
  * - ARII project: only the small sidecars. `results` is a view over the
  *   remote partitions, created at init (setup/ariiSource.ts), because a
  *   url data source would download the whole facility into a table.
- *   analyte_catalog and location_analytes are chemrooms' catalogs
- *   (src/sql/chemrooms_catalogs.sql), which the publisher materialized.
+ *   The optional sidecars are loaded only where sidecars.json lists them
+ *   (SIDECAR_TABLES), because a url source for a missing file fails the
+ *   room's whole load:
+ *     - analyte_catalog, location_analytes: chemrooms' catalogs
+ *       (src/sql/chemrooms_catalogs.sql), materialized by
+ *       server/publish_arii.py into a `chemrooms/` folder;
+ *     - analyte_summary: ChemDuck's catalogue, in every ChemDuck publish,
+ *       including the pipeline's `chemduck/` folder. Without
+ *       chemrooms' own catalogs, analyte_catalog is made from it at init.
  */
+const OPTIONAL_ARII_SIDECARS = ['analyte_catalog', 'location_analytes', 'analyte_summary'];
+
 const DATA_SOURCES = !PROJECT_SOURCE
   ? [] // no project: the connect screen is shown and nothing loads
   : ARII_MANIFEST_URL
@@ -108,8 +124,7 @@ const DATA_SOURCES = !PROJECT_SOURCE
       'locations',
       'samples',
       'aggregation_rules',
-      'analyte_catalog',
-      'location_analytes',
+      ...OPTIONAL_ARII_SIDECARS.filter((t) => SIDECAR_TABLES?.includes(t)),
     ].map(parquetTable)
   : [
       'locations',
@@ -148,6 +163,8 @@ const connector = createWasmDuckDbConnector({
 // diagnosing whether the spatial extension loads in the current
 // DuckDB-WASM bundle. No-op in production builds.
 registerSpatialProbeGlobal(() => connector);
+// Dev-only: `window.__chemroomsQuery(sql, runs)` times SQL on this connector.
+registerQueryTimerGlobal(() => connector);
 
 export const {roomStore, useRoomStore} = createRoomStore<RoomState>(
   (set, get, store) => ({

@@ -37,8 +37,9 @@ https://collord.github.io/chemrooms/#manifest=<...>&data=<URL-encoded sidecar fo
 https://collord.github.io/chemrooms/#data=<URL-encoded ChemDuck data folder>
 ```
 
-With only `manifest`, the sidecars are looked for in a `chemrooms/` folder
-beside the manifest. A signed URL (an Azure SAS token) works: its query
+With only `manifest`, the sidecars are looked for beside the manifest: in
+`chemduck/`, which the export pipeline publishes each night, then in
+`chemrooms/`, which `server/publish_arii.py` writes. A signed URL (an Azure SAS token) works: its query
 string is reused for the sidecars and every partition. A URL fragment is
 never sent to the web server, so the token does not reach GitHub's logs, but
 **anyone you give the link to can read the data until the token expires**.
@@ -100,7 +101,7 @@ the connect screen.
 | Variable | Meaning |
 |---|---|
 | `VITE_DATA_URL` | The project's data folder: ChemDuck parquet, or ARII sidecars. |
-| `VITE_ARII_MANIFEST_URL` | Set only for an EQuIS ARII project: the export's `manifest.json`. Without `VITE_DATA_URL`, the sidecars are looked for in `chemrooms/` beside it. |
+| `VITE_ARII_MANIFEST_URL` | Set only for an EQuIS ARII project: the export's `manifest.json`. Without `VITE_DATA_URL`, the sidecars are looked for in `chemduck/`, then `chemrooms/`, beside it. |
 | `VITE_CESIUM_ION_TOKEN` | Cesium Ion access token, for world terrain. |
 
 The data folder carries the ChemDuck SQL (`sql/`) alongside the data,
@@ -148,6 +149,18 @@ fetching only the row groups each query needs.
 
 ### 1. Publish the sidecars
 
+An export from the pipeline that has ChemDuck switched on (`"chemduck"` in
+its `pipeline.json`) already has them: a `chemduck/` folder beside
+`manifest.json`, rebuilt each night. Nothing more is needed; go to step 2.
+Chemrooms builds what that folder lacks when it opens it:
+- `analyte_catalog`, from ChemDuck's `analyte_summary`. Analyte groups and
+  CAS numbers aren't in it.
+- `location_analytes`, as a live view that the inspector queries one
+  location at a time.
+- default vis specs, for `locations` and `samples`.
+
+Otherwise publish them yourself:
+
 ```bash
 python server/publish_arii.py path/to/export/manifest.json path/to/export/chemrooms \
     --x LONGITUDE --y LATITUDE
@@ -156,8 +169,8 @@ python server/publish_arii.py path/to/export/manifest.json path/to/export/chemro
 Writing the sidecars to `chemrooms/` beside the manifest, and uploading that
 folder with the export, means the manifest URL alone opens the project.
 
-This uses the vendored ChemDuck and needs Python with `duckdb` and `pyyaml`; the first run downloads DuckDB's spatial
-extension. It writes about 1 MB: `locations` and `samples` tables, the
+This uses the vendored ChemDuck and needs Python with `duckdb` and `pyyaml`,
+and no DuckDB extension. It writes about 1 MB: `locations` and `samples` tables, the
 catalogs the analyte picker and inspector read, vis specs, the ChemDuck SQL,
 `sql/results_view.sql` and `sidecars.json`. For a 3.45-million-row export it
 takes under a minute.
@@ -195,7 +208,7 @@ link to `#manifest=<URL-encoded manifest URL>`. Locally:
 
 ```bash
 VITE_ARII_MANIFEST_URL=https://host/path/to/export/manifest.json pnpm dev
-# add VITE_DATA_URL=<sidecar folder> if it is not chemrooms/ beside the manifest
+# add VITE_DATA_URL=<sidecar folder> if it is not chemduck/ or chemrooms/ beside the manifest
 ```
 
 The sidebar shows the facility, result and partition counts, and how old the

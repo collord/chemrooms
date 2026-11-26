@@ -75,7 +75,9 @@ describe('checkSidecarsMatch', () => {
   });
 
   it('refuses a republished manifest', () => {
-    expect(() => checkSidecarsMatch(sidecars(), manifest, 'sha256:bb')).toThrow(/different manifest/);
+    expect(() => checkSidecarsMatch(sidecars(), manifest, 'sha256:bb')).toThrow(
+      /built on 2026-10-16 from an earlier manifest/,
+    );
   });
 
   it('refuses partitions listed differently', () => {

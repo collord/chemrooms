@@ -1,8 +1,9 @@
 /**
  * An EQuIS Analytical Results II (ARII) parquet set as the `results` table.
  *
- * The data folder (DATA_BASE_URL) holds the sidecars chemduck's
- * `tools/arii_hybrid.py publish` wrote: samples, locations and catalog
+ * The data folder (DATA_BASE_URL) holds the sidecars ChemDuck's `publish`
+ * wrote, by the QGIS plugin's pipeline (`chemduck/`) or server/publish_arii.py
+ * (`chemrooms/`): samples, locations and catalog
  * tables (loaded by SQLRooms url data sources, see store.ts), the ChemDuck
  * SQL bundle, `sidecars.json`, and `sql/results_view.sql`. The partitions
  * themselves stay where the export pipeline published them, named by
@@ -124,10 +125,17 @@ export function checkSidecarsMatch(
     );
   }
   if (manifestSha !== sidecars.source_manifest.sha256) {
+    // The usual cause is a night whose sidecar step failed: the pipeline
+    // still publishes the data, and leaves the last sidecars in place
+    // (parquet_source/chemduck_sidecars.py). So say when they were built.
+    const built = sidecars.generated ? sidecars.generated.slice(0, 10) : 'an unrecorded date';
+    const asOf = (manifest as {as_of?: string}).as_of;
     throw new AriiSourceError(
-      'The sidecars were built from a different manifest.json than the one ' +
-        'at the ARII URL (the export has been republished since). Republish ' +
-        'the sidecars with arii_hybrid.py before opening this source.',
+      `The sidecars were built on ${built} from an earlier manifest.json; ` +
+        `the export has been republished since${asOf ? ` (as of ${asOf.slice(0, 10)})` : ''}. ` +
+        'They are rebuilt by the export pipeline each night it succeeds, or ' +
+        'by server/publish_arii.py. Refusing to open stale sidecars: their ' +
+        'locations and samples may not match the results.',
     );
   }
   const want = sidecars.source_manifest.partitions.map((p) => p.path);

@@ -1,9 +1,8 @@
 // @vitest-environment node
 import {describe, it, expect} from 'vitest';
-import {createRequire} from 'node:module';
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {DEMO_DATA, openWasmDb} from '../testing/wasmDb';
 import {
   bundleFiles,
   LEGACY_BUNDLE_FILES,
@@ -118,55 +117,37 @@ describe('loadBundle', () => {
  * failed in 03_views on results.reported_units.
  */
 describe('the demo folder in DuckDB-WASM', () => {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  const data = path.resolve(here, '../../../server/data');
-  const require = createRequire(import.meta.url);
-  const wasmDir = path.dirname(require.resolve('@duckdb/duckdb-wasm/dist/duckdb-node-blocking.cjs'));
-
-  it.runIf(existsSync(path.join(data, 'sql', 'SOURCE.json')))(
+  it.runIf(existsSync(path.join(DEMO_DATA, 'sql', 'SOURCE.json')))(
     'loads every file SOURCE.json lists, and the map macros answer',
     async () => {
-      const duckdb = require('@duckdb/duckdb-wasm/dist/duckdb-node-blocking.cjs');
-      const db = await duckdb.createDuckDB(
-        {
-          mvp: {mainModule: path.join(wasmDir, 'duckdb-mvp.wasm'), mainWorker: ''},
-          eh: {mainModule: path.join(wasmDir, 'duckdb-eh.wasm'), mainWorker: ''},
-        },
-        new duckdb.VoidLogger(),
-        duckdb.NODE_RUNTIME,
-      );
-      await db.instantiate(() => {});
-      db.open({});
-      const conn = db.connect();
-      const q = (sql: string) => conn.query(sql);
+      const db = await openWasmDb();
       // The tables client/src/store.ts loads for a ChemDuck project.
       for (const t of [
         'locations', 'samples', 'results', 'screening_levels',
         'aggregation_rules', 'unit_conversions', 'downhole_survey',
       ]) {
-        db.registerFileBuffer(`${t}.parquet`, new Uint8Array(readFileSync(path.join(data, `${t}.parquet`))));
-        q(`CREATE TABLE ${t} AS SELECT * FROM read_parquet('${t}.parquet')`);
+        db.loadParquet(t, path.join(DEMO_DATA, `${t}.parquet`));
       }
-      const source = JSON.parse(readFileSync(path.join(data, 'sql', 'SOURCE.json'), 'utf8'));
+      const source = JSON.parse(readFileSync(path.join(DEMO_DATA, 'sql', 'SOURCE.json'), 'utf8'));
       const files = bundleFiles(source);
       const result = await loadBundle(
         files,
-        (f) => readFileSync(path.join(data, 'sql', f), 'utf8'),
-        async (sql) => q(sql),
+        (f) => readFileSync(path.join(DEMO_DATA, 'sql', f), 'utf8'),
+        async (sql) => db.run(sql),
       );
       expect(result.failed).toEqual([]);
 
-      const analyte = q(
+      const analyte = db.rows(
         'SELECT analyte FROM results GROUP BY 1 ORDER BY count(*) DESC LIMIT 1',
-      ).toArray()[0].analyte as string;
-      const count = (sql: string) => Number(q(`SELECT count(*) AS n FROM ${sql}`).toArray()[0].n);
+      )[0]!.analyte as string;
+      const count = (sql: string) => Number(db.rows(`SELECT count(*) AS n FROM ${sql}`)[0]!.n);
       const lit = `'${analyte.replace(/'/g, "''")}'`;
       // Today's map call (the legacy recipe path), and the shared-rules ones.
       expect(count(`aggregate_results(${lit}, NULL, NULL, NULL, 'most_recent', 'avg', 'half_dl', 0.0, 1.0)`)).toBeGreaterThan(0);
       expect(count(`aggregate_points(${lit})`)).toBeGreaterThan(0);
       expect(count(`point_series(${lit})`)).toBeGreaterThan(0);
       expect(count(`km_quartiles([${lit}], p_group := 'location')`)).toBeGreaterThan(0);
-      conn.close();
+      db.close();
     },
     60_000,
   );

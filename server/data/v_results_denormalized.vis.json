@@ -283,8 +283,8 @@
         "type": "categorical",
         "palette": "category10",
         "categories": [
-          "False",
-          "True"
+          "false",
+          "true"
         ]
       }
     },
@@ -294,8 +294,8 @@
         "type": "categorical",
         "palette": "category10",
         "categories": [
-          "False",
-          "True"
+          "false",
+          "true"
         ]
       }
     },

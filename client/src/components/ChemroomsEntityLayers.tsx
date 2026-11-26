@@ -33,6 +33,7 @@ import {
   writeSampledElevations,
   type LocationToSample,
 } from '../setup/initEntityLayers';
+import {buildDefaultVisSpec} from '../vis/buildDefaultVisSpec';
 import {loadVisSpecs} from '../vis/loadVisSpecs';
 import {
   loadAggregationRules,
@@ -43,6 +44,7 @@ import {buildLayerSql} from '../layers/buildLayerSql';
 import {resolveDrapeMode} from '../layers/vectorGeometry';
 import {ChemroomsEntityLayer} from './ChemroomsEntityLayer';
 import {ChemroomsVectorLayer} from './ChemroomsVectorLayer';
+import {ARII_MANIFEST_URL} from '../config';
 import {DATA_BASE_URL} from '../store';
 import {
   isEphemeralLayer,
@@ -257,16 +259,35 @@ export const ChemroomsEntityLayers: React.FC = () => {
       message: 'Constructing scene…',
     });
 
-    // Fetch sidecar vis specs in parallel.
+    // Fetch sidecar vis specs in parallel. A folder that ships none (the
+    // QGIS plugin's pipeline publishes `chemduck/` without them) gets the
+    // same defaults built here, for the tables that are local: never an
+    // ARII source's remote `results` (buildDefaultVisSpec.ts).
     loadVisSpecs(DATA_BASE_URL, VIS_SPEC_TABLES)
-      .then((loaded) => {
+      .then(async (loaded) => {
         for (const {table, spec} of loaded) {
           setVisSpec(table, spec);
+        }
+        const shipped = new Set(loaded.map((l) => l.table));
+        const local = ARII_MANIFEST_URL ? ['locations', 'samples'] : ['locations', 'samples', 'results'];
+        const built: string[] = [];
+        for (const table of local.filter((t) => !shipped.has(t))) {
+          const spec = await buildDefaultVisSpec(
+            async (sql) => (await connector.query(sql)).toArray().map((r: any) => r.toJSON()),
+            table,
+          ).catch((e) => {
+            console.warn(`[init] default vis spec for ${table} failed:`, e);
+            return null;
+          });
+          if (spec) {
+            setVisSpec(table, spec);
+            built.push(table);
+          }
         }
         console.log(
           `[init] loaded ${loaded.length} vis spec(s): [${loaded
             .map((l) => l.table)
-            .join(',')}]`,
+            .join(',')}]` + (built.length ? `; built ${built.length}: [${built.join(',')}]` : ''),
         );
       })
       .catch((e) => console.warn('[init] vis spec fetch failed:', e));

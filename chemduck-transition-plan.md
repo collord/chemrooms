@@ -184,6 +184,39 @@ legacy macro, with the full bundle loaded.
 *Done when:* a facility the pipeline published opens from its manifest URL,
 with no Chemrooms publish.
 
+> *Done 2026-11-25, except where noted.*
+>
+> **What was built:**
+> - **Finding the folder.** `main.tsx` looks for `chemduck/sidecars.json`,
+>   then `chemrooms/`, before the app is imported (`sidecarProbe.ts`). The
+>   store loads only the optional sidecars `sidecars.json` lists.
+> - **`analyte_catalog`** is built from ChemDuck's `analyte_summary`
+>   (`analyte_catalog_from_summary.sql`). It loses analyte groups and CAS
+>   numbers. The two exports tried here have no `ANALYTE_TYPE`, so their
+>   group was already "Other".
+> - **`location_analytes`** stays a live view.
+> - **Vis specs** for local tables are built in the browser
+>   (`buildDefaultVisSpec.ts`). A test holds them to `vis_specs.py`'s on the
+>   demo.
+> - **Stale sidecars** are refused with the date they were built.
+>
+> **Found:** `vis_specs.py` wrote boolean categories as "True"/"False", but
+> the client matches `String(value)`, "true". So `detected` has never
+> coloured by its spec. Fixed.
+>
+> **Seen:** Facility C (a smaller real export), with a `chemduck/` folder published as
+> the pipeline publishes it (`commit: null`, no vis specs, no Chemrooms
+> catalogues), opened from its manifest URL alone. It reported 408 analytes
+> and drew its map.
+>
+> **Not done:**
+> - **The manifest watch.** It isn't needed today: the browser never turns
+>   on `parquet_metadata_cache`, which ChemDuck's Python `open_consumer`
+>   does.
+> - **A `location_analytes` sidecar from ChemDuck.** On Facility B, the live
+>   view costs a location click 3.9 s cold and about 9 MB (phase 2's table).
+>   Ask ChemDuck to publish a per-location catalogue.
+
 ### Phase 2: measure speed in WASM (a gate before Phase 3)
 
 - Time `aggregate_points`, `point_counts`, `point_series` and `km_quartiles`
@@ -200,6 +233,63 @@ with no Chemrooms publish.
 
 *Done when:* every call has a recorded time, and any call over budget is
 either fixed or raised with ChemDuck.
+
+> *Measured 2026-11-25. Every call is over budget. Not yet raised with
+> ChemDuck.*
+>
+> **Setup:**
+> - **Data:** Facility B, a real ARII export kept off this repository:
+>   5,719,622 results in 26 partitions, 7,871 locations, 200,385 samples. It is larger
+>   than Facility A (3.45 M).
+> - **Sidecars:** published with the vendored ChemDuck `b5fdcd9` in 45 s.
+> - **Browser:** headless Chrome on this laptop, running the app's DuckDB-WASM
+>   (1.32.0, DuckDB 1.4.3, one thread). It read the partitions over HTTP Range
+>   from a local server, so there was no network latency.
+> - **Query:** the most-measured variable in `analyte_summary`.
+> - **Runs:** four per call (`window.__chemroomsQuery`, dev builds only).
+>
+> **Open:** 13.0 s, 3.5 MB.
+>
+> | Call | Budget | First | Warm (3 runs) | Read, 4 runs |
+> | --- | --- | --- | --- | --- |
+> | Map today: `aggregate_results`, legacy recipe | | 0.86 s | 0.88, 0.92, 1.75 s | 1.8 MB |
+> | Map: `aggregate_points` | 0.5 s | 1.15 s | 1.07, 1.09, 1.26 s | 0.3 MB |
+> | Footer: `point_counts` | 0.2 s | 0.50 s | 0.51, 0.72, 0.80 s | cached |
+> | One location's series: `point_series` | 0.2 s | 0.88 s | 0.64, 0.65, 0.76 s | cached |
+> | Time series today (TimeSeriesPanel SQL) | | 0.61 s | 0.50, 0.54, 0.68 s | 0.2 MB |
+> | Every location's series: `point_series` | 1 s | 2.20 s | 2.37, 2.72, 2.76 s | cached |
+> | Box plot by location: `km_quartiles` | | 2.06 s | 1.90, 1.99, 2.01 s | 3.2 MB |
+> | Inspector: `location_analytes`, live view | | 3.90 s | 1.16, 1.20, 1.26 s | 36 MB |
+>
+> **The same calls in native DuckDB 1.5.5** on the same local files, same
+> day, warm:
+>
+> | Call | 1 thread | 4 threads |
+> | --- | --- | --- |
+> | Map today (legacy) | 0.57–0.72 s | 0.31–0.36 s |
+> | `aggregate_points` | 0.93–1.37 s | 0.79–2.17 s |
+> | `point_counts` | 0.44–0.48 s | 0.59–0.75 s |
+> | One location's series | 0.47–0.54 s | 0.72–0.86 s |
+> | Every location's series | 1.84–3.16 s | 1.72–1.85 s |
+> | `km_quartiles` | 0.83–0.93 s | 0.79–0.82 s |
+>
+> **What the numbers say:**
+> - **WASM isn't the cost.** The browser is about as fast as native on one
+>   thread. Four native threads barely help these macros, and the machine
+>   was busy. The time is in the shared-rules macros on a facility this
+>   size.
+> - **Against today's app,** a map moves from about 0.9 s to about 1.1–1.3 s.
+>   The plugin's budgets are already missed by today's map.
+> - **Facility C** (177,138 results, same day): every call took 0.15–0.42 s.
+>
+> **For ChemDuck,** as the plugin raised its own numbers:
+> - the per-variable cost of `aggregate_points`, `point_counts` and
+>   `point_series` at Facility B's scale;
+> - a per-location catalogue sidecar, to replace the live
+>   `location_analytes`.
+>
+> **The decision before phase 3:** go ahead at about 1.1–1.3 s per map, or
+> wait for ChemDuck's speed work.
 
 ### Phase 3: maps on the shared rules
 

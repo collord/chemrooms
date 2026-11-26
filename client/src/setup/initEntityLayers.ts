@@ -43,6 +43,7 @@
 
 import type {DuckDbConnector} from '@sqlrooms/duckdb';
 import {ARII_MANIFEST_URL, DATA_BASE_URL, dataUrl} from '../config';
+import analyteCatalogFromSummarySql from '../sql/analyte_catalog_from_summary.sql?raw';
 import chemroomsCatalogsSql from '../sql/chemrooms_catalogs.sql?raw';
 import {openAriiResults, type AriiSourceInfo} from './ariiSource';
 import {
@@ -250,16 +251,33 @@ async function loadChemduckSchema(
   }
   if (!result.usable) return false;
 
-  // Pass 5: chemrooms' catalogs (analyte_catalog, location_analytes). An
-  // ARII source ships them as sidecar tables, because building them here
-  // would scan every remote result; otherwise they are live views.
+  // Pass 5: chemrooms' catalogs (analyte_catalog, location_analytes).
+  //  - A ChemDuck project: live views (chemrooms_catalogs.sql); the data
+  //    is local, so grouping it is cheap.
+  //  - An ARII folder from server/publish_arii.py (`chemrooms/`): sidecar
+  //    tables, materialized at publish.
+  //  - An ARII folder from the QGIS plugin's pipeline (`chemduck/`): neither.
+  //    analyte_catalog is built from ChemDuck's analyte_summary sidecar
+  //    (analyte_catalog_from_summary.sql), since a live view would scan
+  //    every remote result to fill the picker. location_analytes stays a
+  //    live view: the inspector reads it for one location at a time.
   try {
-    const provided = await connector.query(`
-      SELECT count(*) AS n FROM information_schema.tables
-      WHERE table_name IN ('analyte_catalog', 'location_analytes')
-    `);
-    if (Number(provided.toArray()[0]?.n ?? 0) < 2) {
-      await connector.query(chemroomsCatalogsSql);
+    const have = new Set(
+      (
+        await connector.query(`
+          SELECT table_name FROM information_schema.tables
+          WHERE table_name IN ('analyte_catalog', 'location_analytes', 'analyte_summary')
+        `)
+      )
+        .toArray()
+        .map((r: any) => String(r.table_name)),
+    );
+    if (!have.has('analyte_catalog') || !have.has('location_analytes')) {
+      const shipped = have.has('analyte_catalog');
+      if (!shipped) await connector.query(chemroomsCatalogsSql);
+      if (!shipped && ARII_MANIFEST_URL && have.has('analyte_summary')) {
+        await connector.query(analyteCatalogFromSummarySql);
+      }
     }
   } catch (e) {
     console.error('[init] chemrooms catalogs failed to load:', e);
