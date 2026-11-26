@@ -322,13 +322,13 @@ const DEPTH_UNIT_TO_M_SQL = `
 
 /**
  * `depth_interval_units`: the metres factor for each depth interval the
- * aggregate layer can produce, keyed as aggregate_results keys it
+ * aggregate layer can produce, keyed as aggregate_points keys it
  * (location, matrix, top and bottom depth with NULL as 0).
  *
  * Depth used to be multiplied by 0.3048 everywhere. That is right for the
  * demo data (all `ft`) and wrong for EQuIS facilities reporting `m` or
  * `cm`. The values are converted at render time and never rewritten in
- * `samples`, because aggregate_results partitions on them. An interval
+ * `samples`, because aggregate_points keys points on them. An interval
  * whose samples disagree on the unit, or name one not listed above, gets
  * no factor: it renders at the surface, and the count is logged.
  */

@@ -25,7 +25,7 @@
  *
  * `chemduck`
  *   The default. No external data — queries the project's DuckDB tables
- *   via aggregate_results(). The `query` field provides the parameters.
+ *   via aggregate_points(). The `query` field provides the parameters.
  *
  * `geoparquet`
  *   An external GeoParquet file loaded into DuckDB-WASM at runtime.
@@ -424,7 +424,7 @@ export const LayerConfig = z.object({
   dataSource: DataSource.default({type: 'chemduck'}),
 
   /**
-   * Query parameters for chemduck aggregate_results().
+   * Query parameters for ChemDuck aggregate_points().
    * Only meaningful when dataSource.type is 'chemduck'.
    * Omit for non-query layers (imagery, raw geojson).
    */
