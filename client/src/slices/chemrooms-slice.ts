@@ -4,6 +4,7 @@
  * filter state, and choropleth configuration.
  */
 
+import {DEFAULT_ROW_SCOPE, normalizeRowScope, type RowScope} from '../setup/rowScope';
 import type {SourceInfo} from '../setup/initEntityLayers';
 import {
   createSlice,
@@ -162,6 +163,12 @@ export interface ChemroomsConfig {
    * measured by more than one (a field and a lab pH are two variables).
    */
   methodClass: string | null;
+  /**
+   * Which results every map and chart reads (setup/rowScope.ts): dates,
+   * sample types, reportable, depth, reported units. One place, passed to
+   * every ChemDuck call, so a map and a chart can't disagree.
+   */
+  rowScope: RowScope;
   colorMode: ColorMode;
   selectedScreeningLevel: string | null;
   fractionFilter: string | null;
@@ -203,6 +210,13 @@ export interface ChemroomsSliceState {
      * (layerNotice.ts). Shown in the sidebar for the live recipe.
      */
     layerNotices: Record<string, LayerNotice>;
+    /**
+     * The value range a live layer's sequential colour was drawn with, by
+     * `${table}.${column}`: the legend's numbers. The colour pipeline
+     * takes the range from the points drawn, and the legend printed the
+     * spec's, a global range baked at export, or "?" where none was.
+     */
+    liveDomains: Record<string, [number, number]>;
     availableMatrices: string[];
     availableScreeningLevels: string[];
     /** chemduck aggregation_rules catalog, keyed by category. */
@@ -260,6 +274,8 @@ export interface ChemroomsSliceState {
     setNdMethod: (method: NdMethod) => void;
     setEventAgg: (method: EventAgg) => void;
     setMethodClass: (methodClass: string | null) => void;
+    /** Change some of the row scope; null resets it to ChemDuck's defaults. */
+    setRowScope: (update: Partial<RowScope> | null) => void;
     setColorMode: (mode: ColorMode) => void;
     setSelectedScreeningLevel: (name: string | null) => void;
     setFractionFilter: (fraction: string | null) => void;
@@ -267,6 +283,7 @@ export interface ChemroomsSliceState {
     setAvailableAnalyteNames: (names: string[]) => void;
     setSourceInfo: (info: SourceInfo | null, error: string | null) => void;
     setLayerNotice: (layerId: string, notice: LayerNotice | null) => void;
+    setLiveDomain: (key: string, domain: [number, number] | null) => void;
     setAvailableMatrices: (matrices: string[]) => void;
     setAvailableScreeningLevels: (levels: string[]) => void;
     setAggregationRules: (rules: AggregationRule[]) => void;
@@ -328,6 +345,7 @@ const DEFAULT_CONFIG: ChemroomsConfig = {
   ndMethod: 'policy',
   eventAgg: 'most_recent',
   methodClass: null,
+  rowScope: DEFAULT_ROW_SCOPE,
   colorMode: 'concentration',
   selectedScreeningLevel: null,
   fractionFilter: null,
@@ -349,6 +367,7 @@ export function createChemroomsSlice(
       sourceInfo: null,
       sourceError: null,
       layerNotices: {},
+      liveDomains: {},
       availableMatrices: [],
       availableScreeningLevels: [],
       aggregationRules: {},
@@ -450,6 +469,16 @@ export function createChemroomsSlice(
           updateConfig(state, {methodClass}),
         ),
 
+      setRowScope: (update) =>
+        set((state: ChemroomsSliceState) =>
+          updateConfig(state, {
+            rowScope:
+              update === null
+                ? DEFAULT_ROW_SCOPE
+                : normalizeRowScope({...state.chemrooms.config.rowScope, ...update}),
+          }),
+        ),
+
       setColorMode: (mode) =>
         set((state: ChemroomsSliceState) =>
           updateConfig(state, {colorMode: mode}),
@@ -479,6 +508,16 @@ export function createChemroomsSlice(
         set((state: ChemroomsSliceState) =>
           updateRuntime(state, {sourceInfo: info, sourceError: error}),
         ),
+
+      setLiveDomain: (key, domain) =>
+        set((state: ChemroomsSliceState) => {
+          const was = state.chemrooms.liveDomains[key];
+          if (was?.[0] === domain?.[0] && was?.[1] === domain?.[1]) return state;
+          const next = {...state.chemrooms.liveDomains};
+          if (domain) next[key] = domain;
+          else delete next[key];
+          return updateRuntime(state, {liveDomains: next});
+        }),
 
       setLayerNotice: (layerId, notice) =>
         set((state: ChemroomsSliceState) => {

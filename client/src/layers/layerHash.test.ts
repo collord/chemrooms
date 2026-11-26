@@ -41,6 +41,7 @@ function makeLayer(overrides: Partial<LayerConfig> = {}): LayerConfig {
       endDate: null,
       eventAgg: 'most_recent',
       methodClass: null,
+      rowScope: null,
       ndMethod: 'half_dl',
     },
     visual: {

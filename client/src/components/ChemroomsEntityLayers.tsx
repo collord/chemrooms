@@ -33,7 +33,7 @@ import {
   writeSampledElevations,
   type LocationToSample,
 } from '../setup/initEntityLayers';
-import {buildDefaultVisSpec} from '../vis/buildDefaultVisSpec';
+import {analyteMapVisSpec, buildDefaultVisSpec} from '../vis/buildDefaultVisSpec';
 import {loadVisSpecs} from '../vis/loadVisSpecs';
 import {
   loadAggregationRules,
@@ -141,6 +141,7 @@ export const ChemroomsEntityLayers: React.FC = () => {
   const eventAgg = useChemroomsStore((s) => s.chemrooms.config.eventAgg);
   const methodClass = useChemroomsStore((s) => s.chemrooms.config.methodClass);
   const samplesNotice = useChemroomsStore((s) => s.chemrooms.layerNotices['samples']);
+  const rowScope = useChemroomsStore((s) => s.chemrooms.config.rowScope);
   const ndMethod = useChemroomsStore((s) => s.chemrooms.config.ndMethod);
   const fractionFilter = useChemroomsStore(
     (s) => s.chemrooms.config.fractionFilter,
@@ -285,6 +286,10 @@ export const ChemroomsEntityLayers: React.FC = () => {
             built.push(table);
           }
         }
+        if (!shipped.has('v_results_denormalized')) {
+          setVisSpec('v_results_denormalized', analyteMapVisSpec());
+          built.push('v_results_denormalized');
+        }
         console.log(
           `[init] loaded ${loaded.length} vis spec(s): [${loaded
             .map((l) => l.table)
@@ -405,6 +410,7 @@ export const ChemroomsEntityLayers: React.FC = () => {
       eventAgg,
       methodClass,
       ndMethod,
+      rowScope,
       matrixFilter,
       fractionFilter,
       groupSamples,
@@ -417,6 +423,7 @@ export const ChemroomsEntityLayers: React.FC = () => {
     eventAgg,
     methodClass,
     ndMethod,
+    rowScope,
     matrixFilter,
     fractionFilter,
     groupSamples,

@@ -26,6 +26,7 @@ export function selectCurrentRecipe(s: RoomStateWithChemrooms) {
     matrixFilter: s.chemrooms.config.matrixFilter,
     eventAgg: s.chemrooms.config.eventAgg,
     methodClass: s.chemrooms.config.methodClass,
+    rowScope: s.chemrooms.config.rowScope,
     ndMethod: s.chemrooms.config.ndMethod,
     sampleRenderAs: s.chemrooms.config.sampleRenderAs,
     sphereRadiusMeters: s.chemrooms.config.sphereRadiusMeters,

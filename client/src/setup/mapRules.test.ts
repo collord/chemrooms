@@ -16,6 +16,7 @@ import {DEMO_DATA, openWasmDb, type WasmDb} from '../testing/wasmDb';
 import {bundleFiles, loadBundle} from './chemduckBundle';
 import {buildSamplesLayerSql} from './buildSamplesLayerSql';
 import {buildTimeSeriesSql} from './buildTimeSeriesSql';
+import {DEFAULT_ROW_SCOPE, rowScopeArgs, type RowScope} from './rowScope';
 
 const HAVE_DEMO = existsSync(path.join(DEMO_DATA, 'sql', 'SOURCE.json'));
 let db: WasmDb;
@@ -140,6 +141,49 @@ describe.runIf(HAVE_DEMO)('the map and the time series hold to ChemDuck', () => 
       expect(row, col).toHaveProperty(col);
     }
     expect(String(row.nd_policy)).toMatch(/@\d+$/);
+  });
+
+  it('reads only the rows the scope keeps, the map and the chart alike', () => {
+    // The demo: samples 2020-01-01 to 2024-06-30, depths in ft, intervals
+    // 5-10 and 15-20 at the wells and deeper at the boreholes.
+    const scopes: RowScope[] = [
+      {...DEFAULT_ROW_SCOPE, startDate: '2020-01-01', endDate: '2020-12-31'},
+      {...DEFAULT_ROW_SCOPE, depthMin: 0, depthMax: 12, depthUnits: 'ft'},
+      {...DEFAULT_ROW_SCOPE, depthMin: 0, depthMax: 4, depthUnits: 'm'},
+      {...DEFAULT_ROW_SCOPE, sampleTypes: [], reportableOnly: false},
+    ];
+    for (const a of analytes) {
+      const all = db.rows(`SELECT location_id AS id FROM (${mapSql(a, 'policy')})`).length;
+      for (const scope of scopes) {
+        const args = [lit(a), ...rowScopeArgs(scope)].join(', ');
+        const direct = db.rows(`
+          SELECT ${KEY} AS id, result, detected, sample_id FROM aggregate_points(${args})
+          WHERE x IS NOT NULL AND y IS NOT NULL ORDER BY id`);
+        const mapped = db.rows(`
+          SELECT location_id AS id, result, detected, sample_id
+          FROM (${mapSql(a, 'policy', {rowScope: scope})}) ORDER BY id`);
+        expect(mapped, `${a} ${JSON.stringify(scope)}`).toEqual(direct);
+        expect(mapped.length).toBeLessThanOrEqual(all);
+      }
+    }
+    // Not vacuous: a depth bound and a date window each drop points, and
+    // 12 ft (3.6576 m) keeps what 4 m keeps among the wells' screens.
+    const lead = (scope: RowScope) =>
+      db.rows(`SELECT location_id AS id, sample_id FROM (${mapSql('Lead', 'policy', {rowScope: scope})})`);
+    const leadAll = lead(DEFAULT_ROW_SCOPE);
+    expect(lead(scopes[1]!).length).toBeLessThan(leadAll.length);
+    expect(lead(scopes[2]!).map((r) => r.id).sort()).toEqual(lead(scopes[1]!).map((r) => r.id).sort());
+    const dated = lead(scopes[0]!);
+    expect(dated.map((r) => r.sample_id)).not.toEqual(leadAll.map((r) => r.sample_id));
+
+    // The chart reads the same rows: a 2020 window keeps 2020 samples only.
+    const loc = String(leadAll[0]!.id).split('|')[0]!;
+    const chart = db.rows(buildTimeSeriesSql({
+      locationId: loc, analytes: ['Lead'], matrixFilter: null, fractionFilter: null,
+      ndMethod: 'policy', rowScope: scopes[0]!,
+    }));
+    expect(chart.length).toBeGreaterThan(0);
+    for (const r of chart) expect(String(r.sample_date) <= '2020-12-31').toBe(true);
   });
 
   it("plots point_series' rows, one line per measurement point", () => {

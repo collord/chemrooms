@@ -48,6 +48,7 @@
  *   interpolated surfaces, etc.
  */
 
+import {compactRowScope, normalizeRowScope, type RowScope} from '../setup/rowScope';
 import {z} from 'zod';
 import {computeLayerHash} from './layerHash';
 
@@ -319,6 +320,11 @@ export const QueryConfig = z.object({
    * 0.1's substitution names; each maps to its nearest display.
    */
   ndMethod: z.string().default('policy'),
+  /**
+   * The row scope's non-default fields (setup/rowScope.ts), or null for
+   * ChemDuck's defaults. Read through normalizeRowScope, never trusted.
+   */
+  rowScope: z.record(z.string(), z.unknown()).nullable().default(null),
 });
 export type QueryConfig = z.infer<typeof QueryConfig>;
 
@@ -506,6 +512,7 @@ export async function freezeCurrentState(params: {
   eventAgg: string;
   methodClass?: string | null;
   ndMethod: string;
+  rowScope?: RowScope | null;
   colorBy: string | null;
   palette?: string;
   scaleType?: 'linear' | 'log' | 'sqrt';
@@ -528,6 +535,7 @@ export async function freezeCurrentState(params: {
       eventAgg: params.eventAgg,
       methodClass: params.methodClass ?? null,
       ndMethod: params.ndMethod,
+      rowScope: compactRowScope(params.rowScope),
     },
     visual: {
       renderType: 'point',
@@ -570,6 +578,7 @@ export function serializeLayerForUrl(layer: LayerConfig): string {
       ...(layer.query.eventAgg !== 'most_recent' && {ea: layer.query.eventAgg}),
       ...(layer.query.methodClass && {mc: layer.query.methodClass}),
       ...(layer.query.ndMethod !== 'policy' && {nd: layer.query.ndMethod}),
+      ...(layer.query.rowScope && {rs: layer.query.rowScope}),
     };
   }
   if (layer.visual.colorBy) compact.cb = layer.visual.colorBy;
@@ -598,6 +607,7 @@ export function deserializeLayerFromUrl(encoded: string): LayerConfig | null {
           // A link from before the display choices omitted 'half_dl', its
           // default; it now opens with the dataset's policy.
           ndMethod: compact.q.nd ?? 'policy',
+          rowScope: compactRowScope(normalizeRowScope(compact.q.rs)),
         }
       : undefined;
 

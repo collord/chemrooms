@@ -17,6 +17,7 @@
  */
 
 import {ndDisplayFactor, ndHides} from './ndDisplay';
+import {rowScopeArgs, type RowScope} from './rowScope';
 
 const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
@@ -26,10 +27,12 @@ export interface TimeSeriesQueryOptions {
   matrixFilter: string | null;
   fractionFilter: string | null;
   ndMethod: string;
+  /** The map's row scope (rowScope.ts): the chart reads the same rows. */
+  rowScope?: RowScope | null;
 }
 
 export function buildTimeSeriesSql(opts: TimeSeriesQueryOptions): string {
-  const {locationId, analytes, matrixFilter, fractionFilter, ndMethod} = opts;
+  const {locationId, analytes, matrixFilter, fractionFilter, ndMethod, rowScope = null} = opts;
   const factor = ndDisplayFactor(ndMethod);
   const calls = analytes.map((a) => {
     const args = [
@@ -38,6 +41,7 @@ export function buildTimeSeriesSql(opts: TimeSeriesQueryOptions): string {
       matrixFilter ? `p_matrix := ${lit(matrixFilter)}` : null,
       fractionFilter ? `p_fraction := ${lit(fractionFilter)}` : null,
       factor !== null ? `p_display_factor := ${factor}` : null,
+      ...rowScopeArgs(rowScope),
     ].filter((x): x is string => x !== null);
     return `SELECT * FROM point_series(${args.join(', ')})`;
   });

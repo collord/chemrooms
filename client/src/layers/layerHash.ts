@@ -20,6 +20,7 @@
  * is negligibly small.
  */
 
+import {compactRowScope, normalizeRowScope} from '../setup/rowScope';
 import type {LayerConfig} from './layerSchema';
 
 /**
@@ -109,6 +110,8 @@ function canonicalizeQuery(q: NonNullable<LayerConfig['query']>): unknown {
     // methodClass only when set, as fraction above.
     ...(q.methodClass ? {methodClass: q.methodClass} : {}),
     ndMethod: q.ndMethod,
+    // Only when not ChemDuck's defaults, so a layer without one keeps its id.
+    ...(compactRowScope(normalizeRowScope(q.rowScope)) ? {rowScope: compactRowScope(normalizeRowScope(q.rowScope))} : {}),
   };
 }
 

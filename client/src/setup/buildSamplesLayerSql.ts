@@ -55,6 +55,8 @@ interface BuildSamplesLayerSqlOptions {
   methodClass?: string | null;
   /** Non-detect display (ndDisplay.ts) — used only when analyte is set. */
   ndMethod: string;
+  /** Which results are read (rowScope.ts) — used only when analyte is set. */
+  rowScope?: RowScope | null;
   /** Active matrix filter, or null for "all matrices". */
   matrixFilter: string | null;
   /**
@@ -81,6 +83,7 @@ interface BuildSamplesLayerSqlOptions {
 export const SAMPLE_ENTITY_LIMIT = 20000;
 
 import {ndDisplayFactor, ndHides, normalizeEventAgg} from './ndDisplay';
+import {rowScopeArgs, type RowScope} from './rowScope';
 
 /** Single-quote an SQL literal safely. */
 function sqlStr(s: string): string {
@@ -112,6 +115,7 @@ export function buildSamplesLayerSql(
     eventAgg,
     methodClass = null,
     ndMethod,
+    rowScope = null,
     matrixFilter,
     fractionFilter = null,
     groupSamples = false,
@@ -213,6 +217,7 @@ export function buildSamplesLayerSql(
     fractionFilter ? `p_fraction := ${sqlStr(fractionFilter)}` : null,
     methodClass ? `p_method_class := ${sqlStr(methodClass)}` : null,
     factor !== null ? `p_display_factor := ${factor}` : null,
+    ...rowScopeArgs(rowScope),
   ].filter((a): a is string => a !== null);
   const hideNonDetects = ndHides(ndMethod) ? 'AND agg.detected IS DISTINCT FROM FALSE' : '';
 

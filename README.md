@@ -12,7 +12,9 @@ refused when they disagree) live in ChemDuck's SQL views and macros
 (`aggregate_points`, `point_series`), not in this repository's TypeScript.
 The *Non-Detect Display* control only changes how a selected non-detect is
 drawn (at the limit, half of it, zero, or hidden), never which result is
-selected. Each data folder carries that SQL (`sql/`, listed in
+selected. *Rows read* sets which results every map and chart reads: dates, sample
+types (normal samples by default), reportable results, a depth range (a
+sample's whole interval inside it) and reported units. Each data folder carries that SQL (`sql/`, listed in
 `sql/SOURCE.json`), and Chemrooms loads it at startup and queries it.
 ChemDuck itself is vendored in `server/chemduck/` at a pinned commit, the
 same one the QGIS plugin and its export pipeline pin (see

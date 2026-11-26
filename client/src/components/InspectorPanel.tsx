@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
 import {ND_DISPLAY_OPTIONS, normalizeNdDisplay} from '../setup/ndDisplay';
+import {describeRowScope, isDefaultRowScope, type RowScope} from '../setup/rowScope';
 import type {
   AnalyteInfo,
   LocationSummary,
@@ -117,6 +118,7 @@ const ChemduckLocationDetail: React.FC<{
   const {summary, analytes, isLoading} = useLocationDetail();
   const eventAgg = useChemroomsStore((s) => s.chemrooms.config.eventAgg);
   const methodClass = useChemroomsStore((s) => s.chemrooms.config.methodClass);
+  const rowScope = useChemroomsStore((s) => s.chemrooms.config.rowScope);
   const ndMethod = useChemroomsStore((s) => s.chemrooms.config.ndMethod);
   const coloringAnalyte = useChemroomsStore(
     (s) => s.chemrooms.config.coloringAnalyte,
@@ -158,6 +160,7 @@ const ChemduckLocationDetail: React.FC<{
       <AggregationBanner
         eventAgg={eventAgg}
         methodClass={methodClass}
+        rowScope={rowScope}
         ndMethod={ndMethod}
         coloringAnalyte={coloringAnalyte}
       />
@@ -192,9 +195,10 @@ const ChemduckLocationDetail: React.FC<{
 const AggregationBanner: React.FC<{
   eventAgg: string;
   methodClass: string | null;
+  rowScope: RowScope;
   ndMethod: string;
   coloringAnalyte: string | null;
-}> = ({eventAgg, methodClass, ndMethod, coloringAnalyte}) => (
+}> = ({eventAgg, methodClass, rowScope, ndMethod, coloringAnalyte}) => (
   <div className="flex flex-wrap items-center gap-1.5 rounded bg-muted/50 px-2 py-1.5 text-[10px] text-muted-foreground">
     {coloringAnalyte && (
       <span className="font-medium text-foreground">{coloringAnalyte}</span>
@@ -216,6 +220,11 @@ const AggregationBanner: React.FC<{
     >
       ND: {ND_DISPLAY_OPTIONS.find((o) => o.name === normalizeNdDisplay(ndMethod))?.label}
     </span>
+    {!isDefaultRowScope(rowScope) && (
+      <span className="rounded bg-background px-1 py-0.5" title="Rows read">
+        {describeRowScope(rowScope)}
+      </span>
+    )}
   </div>
 );
 

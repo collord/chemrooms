@@ -23,6 +23,7 @@ import {useSql} from '@sqlrooms/duckdb';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
 import type {NdMethod} from '../slices/chemrooms-slice';
 import {ND_DISPLAY_OPTIONS, normalizeNdDisplay} from '../setup/ndDisplay';
+import {RowScopeControls} from './RowScopeControls';
 
 interface FilterToolbarProps {
   disabled?: boolean;
@@ -93,6 +94,8 @@ export const FilterToolbar: React.FC<FilterToolbarProps> = ({
       </label>
 
       <MethodClassPicker disabled={disabled} />
+
+      <RowScopeControls disabled={disabled} />
 
       {/* Non-detect display */}
       <label className="flex flex-col gap-1">

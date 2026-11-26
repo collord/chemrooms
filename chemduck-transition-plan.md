@@ -373,12 +373,34 @@ cell for cell. A refusal for mixed units has been seen in the UI.
 >   ("pH in WS, N, method class field is in more than one unit (NONE: 57,
 >   SU: 19073)"), and the method-class picker was offered.
 >
-> **Not done:**
-> - **The row scope controls:** dates, sample types, reportable only, depth,
->   units. ChemDuck's defaults apply: normal samples, and the dataset's
->   reportable choice.
-> - **A cell-for-cell check on Facility A,** whose data isn't on this
->   machine.
+> **Not done:** a cell-for-cell check on Facility A, whose data isn't on
+> this machine.
+>
+> *The row scope, done 2026-11-25.* "Rows read" in the toolbar
+> (`RowScopeControls.tsx`, `rowScope.ts`) covers dates, sample types,
+> reportable only, depth (whole interval inside, in a chosen unit) and
+> reported units.
+> - **One place.** The scope lives in the recipe and goes to `aggregate_points`
+>   and `point_series` alike (`rowScopeArgs`). Frozen layers, the layer hash
+>   and bookmarks (`rs=`) carry it.
+> - **Unscoped offers.** Lists are read from unscoped rows: sample types,
+>   dates and depth units from `samples`; units from the analyte's results
+>   in the chosen matrix, read only while the panel is open.
+> - **Tests.** `mapRules.test.ts` holds the map to `aggregate_points` under
+>   four scopes and checks that a date window and a depth bound bite.
+>   Dropping the scope from the map, or from the chart, each failed it.
+>
+> **Seen in the app:** Facility B's pH in surface water was refused for
+> mixed units. With only SU read, 3,483 points drew; from 2019 on, 2,739.
+>
+> **Found on the way:**
+> - **Analyte maps on pipeline folders were uncoloured.** No vis spec covers
+>   result columns, so Color by had nothing and every point was cyan. The
+>   analyte map now gets a spec built without reading a row
+>   (`analyteMapVisSpec`), and takes its range from the points drawn.
+> - **The legend printed the spec's range,** while the map used the range
+>   of the points drawn: "?" here, and a global range on the demo. Live
+>   layers now publish the range they drew (`liveDomains`).
 >
 > **Changed for users:** an old link that didn't name a non-detect choice
 > meant half the limit, and now opens with the dataset's policy.

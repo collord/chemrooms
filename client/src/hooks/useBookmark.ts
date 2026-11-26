@@ -22,6 +22,7 @@ import {useEffect, useRef} from 'react';
 import {Cartesian3, Cartographic, Math as CesiumMath} from 'cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
 import {normalizeNdDisplay} from '../setup/ndDisplay';
+import {compactRowScope, normalizeRowScope} from '../setup/rowScope';
 import {useStoreWithCesium} from '../cesium';
 import {
   deserializeLayerFromUrl,
@@ -65,6 +66,7 @@ export function useBookmark() {
   );
   const setEventAgg = useChemroomsStore((s) => s.chemrooms.setEventAgg);
   const setMethodClass = useChemroomsStore((s) => s.chemrooms.setMethodClass);
+  const setRowScope = useChemroomsStore((s) => s.chemrooms.setRowScope);
   const setColorBy = useChemroomsStore((s) => s.chemrooms.setColorBy);
   const setBookmarkLayers = useChemroomsStore(
     (s) => s.chemrooms.setBookmarkLayers,
@@ -157,6 +159,15 @@ export function useBookmark() {
     const mc = params.get('mc'); // methodClass
     if (mc) setMethodClass(mc);
 
+    const rs = params.get('rs'); // rowScope, its non-default fields as JSON
+    if (rs) {
+      try {
+        setRowScope(normalizeRowScope(JSON.parse(rs)));
+      } catch {
+        console.warn('[bookmark] ignoring an unreadable row scope:', rs);
+      }
+    }
+
     const cbr = params.get('cbr'); // colorBy['v_results_denormalized']
     if (cbr) setColorBy('v_results_denormalized', cbr);
 
@@ -208,6 +219,7 @@ export function useBookmark() {
     setColoringAnalyte,
     setEventAgg,
     setMethodClass,
+    setRowScope,
     setColorBy,
     setBookmarkLayers,
     toggleLayerVisibility,
@@ -283,6 +295,10 @@ export function useBookmark() {
     }
     if (config.methodClass) {
       params.set('mc', config.methodClass);
+    }
+    const scope = compactRowScope(config.rowScope);
+    if (scope) {
+      params.set('rs', JSON.stringify(scope));
     }
     if (colorByResults) {
       params.set('cbr', colorByResults);

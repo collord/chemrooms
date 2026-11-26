@@ -104,3 +104,29 @@ export async function buildDefaultVisSpec(
 
   return parseVisSpec({version: 1, table, columns, ...(defaultColorBy ? {defaultColorBy} : {})});
 }
+
+/**
+ * The analyte map's spec (`v_results_denormalized`, the table the colour
+ * pipeline keys an analyte layer on) for a folder that ships none: a folder
+ * the QGIS plugin's pipeline publishes. Without it the colour-by control had
+ * no columns and every point drew in the fallback cyan.
+ *
+ * Built without reading a row, because over an ARII source the results are
+ * remote: `result` gets no domain, and the colour pipeline takes it from
+ * the points drawn (colormap.ts, "live data domain wins"); `detected` is
+ * keyed as colormap.ts matches values, String(value).
+ */
+export function analyteMapVisSpec(): VisSpec {
+  return parseVisSpec({
+    version: 1,
+    table: 'v_results_denormalized',
+    columns: {
+      result: {label: 'Result', color: {type: 'sequential', palette: 'viridis', scaleType: 'linear'}},
+      detected: {
+        label: 'Detected',
+        color: {type: 'categorical', palette: 'category10', categories: ['false', 'true']},
+      },
+    },
+    defaultColorBy: 'result',
+  })!;
+}

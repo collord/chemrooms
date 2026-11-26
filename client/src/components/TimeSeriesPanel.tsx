@@ -39,6 +39,7 @@ export const TimeSeriesPanel: React.FC = () => {
     (s) => s.chemrooms.config.fractionFilter,
   );
   const ndMethod = useChemroomsStore((s) => s.chemrooms.config.ndMethod);
+  const rowScope = useChemroomsStore((s) => s.chemrooms.config.rowScope);
   const mosaicConn = useChemroomsStore((s) => s.mosaic.connection);
   // point_series is defined by init; a location from the URL asks sooner.
   const chemduckReady = useChemroomsStore(selectChemduckReady);
@@ -56,6 +57,7 @@ export const TimeSeriesPanel: React.FC = () => {
       matrixFilter,
       fractionFilter,
       ndMethod,
+      rowScope,
     });
 
     console.log('[timeseries] query:', query);
@@ -120,6 +122,7 @@ export const TimeSeriesPanel: React.FC = () => {
     matrixFilter,
     fractionFilter,
     ndMethod,
+    rowScope,
     mosaicConn.status,
     chemduckReady,
   ]);
