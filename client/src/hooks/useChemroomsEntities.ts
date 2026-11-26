@@ -40,6 +40,7 @@ import {
 } from 'cesium';
 import {useStoreWithCesium} from '../cesium';
 import {useChemroomsStore} from '../slices/chemrooms-slice';
+import {filtersIgnoredNotice, refusalNotice} from '../layers/layerNotice';
 import {roomStore} from '../store';
 import {makeColorFnForColumn} from '../vis/colormap';
 import {
@@ -98,6 +99,7 @@ const MIN_SEGMENT_LENGTH_M = 0.1;
 export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
   const viewer = useStoreWithCesium((s) => s.cesium.viewer);
   const connector = useStoreWithCesium((s) => s.db.connector);
+  const setLayerNotice = useChemroomsStore((s) => s.chemrooms.setLayerNotice);
   const visSpec = useChemroomsStore(
     (s) => s.chemrooms.visSpecs[args.visSpecTable],
   );
@@ -138,9 +140,14 @@ export function useChemroomsEntities(args: UseChemroomsEntitiesArgs) {
         rows = result.toArray();
       } catch (e) {
         console.error(`[${args.layerId}] query failed:`, e);
+        // A refusal (mixed units, ...) is the user's to read, not only the
+        // console's: without it a refused map looked like an empty one.
+        if (!cancelled) setLayerNotice(args.layerId, refusalNotice(e));
         return;
       }
-      if (cancelled || rows.length === 0) return;
+      if (cancelled) return;
+      setLayerNotice(args.layerId, filtersIgnoredNotice(rows));
+      if (rows.length === 0) return;
 
       // ── First pass: bbox ──────────────────────────────────────
       const bboxAcc = new BboxAccumulator();

@@ -104,7 +104,10 @@ function canonicalizeQuery(q: NonNullable<LayerConfig['query']>): unknown {
     startDate: q.startDate ?? null,
     endDate: q.endDate ?? null,
     eventAgg: q.eventAgg,
-    dupAgg: q.dupAgg,
+    // dupAgg (ChemDuck 0.1's same-day averaging) left the recipe with
+    // aggregate_points; a recipe's id changes with it, as its map does.
+    // methodClass only when set, as fraction above.
+    ...(q.methodClass ? {methodClass: q.methodClass} : {}),
     ndMethod: q.ndMethod,
   };
 }

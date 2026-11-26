@@ -286,10 +286,11 @@ export type DataSource = z.infer<typeof DataSource>;
 // ---------------------------------------------------------------------------
 
 /**
- * Parameters for the chemduck aggregate_results() macro.
+ * Parameters for ChemDuck's aggregate_points() macro (buildSamplesLayerSql).
  *
- * Field names match the chemduck aggregation_rules catalog vocabulary.
  * All filter fields are optional — omitting them means "no filter."
+ * Layers frozen before aggregate_points carried `dupAgg` (ChemDuck 0.1's
+ * same-day averaging, which the shared rules dropped); zod strips it.
  */
 export const QueryConfig = z.object({
   /** Analyte to filter on (exact match). Required for aggregation. */
@@ -298,7 +299,7 @@ export const QueryConfig = z.object({
   matrix: z.string().nullable().default(null),
   /**
    * Fraction filter (e.g. 'Dissolved'). Null = every fraction, each its
-   * own entity: aggregate_results never combines dissolved and total.
+   * own entity: aggregate_points never combines dissolved and total.
    * Optional so layers frozen before it existed still parse.
    */
   fraction: z.string().nullable().default(null),
@@ -306,12 +307,18 @@ export const QueryConfig = z.object({
   startDate: z.string().nullable().default(null),
   /** Inclusive end date (ISO 8601). Null = no upper bound. */
   endDate: z.string().nullable().default(null),
-  /** Event-aggregation rule name (from aggregation_rules catalog). */
+  /** Event choice: most_recent | maximum | mean (the policy's statistic). */
   eventAgg: z.string().default('most_recent'),
-  /** Duplicate-aggregation rule name. */
-  dupAgg: z.string().default('avg'),
-  /** Non-detect substitution method name. */
-  ndMethod: z.string().default('half_dl'),
+  /**
+   * Method class, or null for every class, each its own entity (a field
+   * and a lab pH are two variables).
+   */
+  methodClass: z.string().nullable().default(null),
+  /**
+   * Non-detect display (setup/ndDisplay.ts). Older layers hold ChemDuck
+   * 0.1's substitution names; each maps to its nearest display.
+   */
+  ndMethod: z.string().default('policy'),
 });
 export type QueryConfig = z.infer<typeof QueryConfig>;
 
@@ -497,7 +504,7 @@ export async function freezeCurrentState(params: {
   matrix: string | null;
   fraction?: string | null;
   eventAgg: string;
-  dupAgg: string;
+  methodClass?: string | null;
   ndMethod: string;
   colorBy: string | null;
   palette?: string;
@@ -519,7 +526,7 @@ export async function freezeCurrentState(params: {
       startDate: null,
       endDate: null,
       eventAgg: params.eventAgg,
-      dupAgg: params.dupAgg,
+      methodClass: params.methodClass ?? null,
       ndMethod: params.ndMethod,
     },
     visual: {
@@ -561,8 +568,8 @@ export function serializeLayerForUrl(layer: LayerConfig): string {
       ...(layer.query.startDate && {sd: layer.query.startDate}),
       ...(layer.query.endDate && {ed: layer.query.endDate}),
       ...(layer.query.eventAgg !== 'most_recent' && {ea: layer.query.eventAgg}),
-      ...(layer.query.dupAgg !== 'avg' && {da: layer.query.dupAgg}),
-      ...(layer.query.ndMethod !== 'half_dl' && {nd: layer.query.ndMethod}),
+      ...(layer.query.methodClass && {mc: layer.query.methodClass}),
+      ...(layer.query.ndMethod !== 'policy' && {nd: layer.query.ndMethod}),
     };
   }
   if (layer.visual.colorBy) compact.cb = layer.visual.colorBy;
@@ -587,8 +594,10 @@ export function deserializeLayerFromUrl(encoded: string): LayerConfig | null {
           startDate: compact.q.sd ?? null,
           endDate: compact.q.ed ?? null,
           eventAgg: compact.q.ea ?? 'most_recent',
-          dupAgg: compact.q.da ?? 'avg',
-          ndMethod: compact.q.nd ?? 'half_dl',
+          methodClass: compact.q.mc ?? null,
+          // A link from before the display choices omitted 'half_dl', its
+          // default; it now opens with the dataset's policy.
+          ndMethod: compact.q.nd ?? 'policy',
         }
       : undefined;
 

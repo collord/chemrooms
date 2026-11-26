@@ -48,6 +48,7 @@ import chemroomsCatalogsSql from '../sql/chemrooms_catalogs.sql?raw';
 import {openAriiResults, type AriiSourceInfo} from './ariiSource';
 import {
   bundleFiles,
+  bundleTooOld,
   loadBundle,
   type ChemduckSource,
 } from './chemduckBundle';
@@ -217,6 +218,11 @@ async function loadChemduckSchema(
     // A folder from before SOURCE.json listed files has none: the legacy list.
     const source: ChemduckSource | null = sr.ok ? await sr.json() : null;
     files = bundleFiles(source);
+    const tooOld = bundleTooOld(files);
+    if (tooOld) {
+      console.error(`[init] ${tooOld}`);
+      return false;
+    }
     const responses = await Promise.all(
       files.map((f) => fetch(dataUrl(`sql/${f}`))),
     );
@@ -279,6 +285,16 @@ async function loadChemduckSchema(
         await connector.query(analyteCatalogFromSummarySql);
       }
     }
+    // variable_catalog: ChemDuck's catalogue of variables (analyte, matrix,
+    // fraction, basis, method class, unit) under one name, for the method
+    // class picker. An ARII source has it as the analyte_summary sidecar;
+    // over remote partitions the live view would scan every result. A
+    // ChemDuck project's data is local, so the live view is cheap.
+    await connector.query(
+      `CREATE OR REPLACE VIEW variable_catalog AS SELECT * FROM ${
+        have.has('analyte_summary') ? 'analyte_summary' : 'v_analyte_summary'
+      }`,
+    );
   } catch (e) {
     console.error('[init] chemrooms catalogs failed to load:', e);
     return false;
@@ -491,7 +507,6 @@ export async function initEntityLayers(
     elevationColumns,
     coloringAnalyte: null,
     eventAgg: '',
-    dupAgg: '',
     ndMethod: '',
     matrixFilter: null,
     groupSamples,

@@ -326,6 +326,63 @@ either fixed or raised with ChemDuck.
 Facility A, a map for a fixed list of analytes matches the macro's answer
 cell for cell. A refusal for mixed units has been seen in the UI.
 
+> *Done 2026-11-25, apart from the row scope.* Decided by going ahead: the
+> recommendations of decisions 1 and 2 (the display choice; every depth
+> interval its own point).
+>
+> **What was built:**
+> - **The map** calls `aggregate_points` (`buildSamplesLayerSql.ts`). The
+>   entity id gains position and method class after its old six parts, so
+>   old ids still parse.
+> - **The non-detect control** is a display choice (`ndDisplay.ts`):
+>   - the dataset's policy, which is the default (at the limit, under
+>     `chemduck_default`);
+>   - at the limit, half the limit, or zero (`p_display_factor`);
+>   - hide.
+>
+>   Old names map to the nearest choice. A non-detect's label reads "<".
+> - **`dupAgg` is gone.** `methodClass` takes its place in the recipe,
+>   frozen layers, layer hash and bookmarks (`mc=`; `da=` is ignored).
+> - **A method-class picker** appears when the analyte has more than one
+>   class. It reads `variable_catalog`, which is `analyte_summary` for an
+>   ARII source and `v_analyte_summary` otherwise.
+> - **Refusals and ignored filters** reach the sidebar (`layerNotice.ts`,
+>   `RecipeNotice`). A refused map shows the locations layer instead of an
+>   empty globe.
+> - **The inspector** shows provenance: sample, method, chosen by, limit,
+>   drawn at, policy, unit source.
+> - **One readiness flag.** Queries that call ChemDuck wait for
+>   `selectChemduckReady`. A location from the URL had asked before init,
+>   and failed with "point_series does not exist".
+>
+> **The gate:** `mapRules.test.ts`, on the demo in the app's DuckDB-WASM.
+> - The map is `aggregate_points`, point for point, value for value, chosen
+>   result for chosen result.
+> - The display choice never changes which result is chosen.
+> - "Hide" removes exactly the non-detects.
+> - Labels mark non-detects, and the provenance columns are present.
+> - It checks that its cases aren't vacuous. A first version passed on an
+>   empty time series.
+> - Five deliberate breaks each failed it: the display factor not passed,
+>   hide not applied, labels unmarked, position dropped from the id, depth
+>   dropped from a line's name.
+>
+> **Seen in the app:**
+> - The demo maps Lead with the new rules.
+> - Facility B's pH in surface water was refused with ChemDuck's message
+>   ("pH in WS, N, method class field is in more than one unit (NONE: 57,
+>   SU: 19073)"), and the method-class picker was offered.
+>
+> **Not done:**
+> - **The row scope controls:** dates, sample types, reportable only, depth,
+>   units. ChemDuck's defaults apply: normal samples, and the dataset's
+>   reportable choice.
+> - **A cell-for-cell check on Facility A,** whose data isn't on this
+>   machine.
+>
+> **Changed for users:** an old link that didn't name a non-detect choice
+> meant half the limit, and now opens with the dataset's policy.
+
 ### Phase 4: time series and charts
 
 - Replace `buildTimeSeriesQuery` with `point_series`: one line per
@@ -334,6 +391,21 @@ cell for cell. A refusal for mixed units has been seen in the UI.
 
 *Done when:* the time series for a fixed set of locations equals the macro's
 answer, and a profile station plots one line per depth interval.
+
+> *Time series done 2026-11-25; there are no box plots yet.*
+> `buildTimeSeriesSql.ts` unions one `point_series` call per analyte.
+> - **One line per measurement point,** named by only the parts that tell it
+>   from the location's other points: matrix, fraction, depth, position,
+>   method class. There's a colour legend, and non-detects are marked by
+>   symbol.
+> - **The demo's two-screen wells** (5–10 and 15–20) were one zig-zagging
+>   line per analyte. They are now two lines.
+> - **The x axis was ordinal,** samples evenly spaced whatever their dates,
+>   because dates arrive as strings. It is now a time scale (`xScale:
+>   'utc'`).
+>
+> The gate holds the chart's rows to `point_series`' rows and its lines to
+> its points.
 
 ### Phase 5: remove the old paths
 

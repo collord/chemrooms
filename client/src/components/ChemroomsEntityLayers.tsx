@@ -13,7 +13,7 @@
  *   heights into location_elevations_sampled. Bump the layer SQL
  *   state with a timestamp so the entity hooks refetch.
  *
- * Reactive rebuild: whenever any of (coloringAnalyte, eventAgg, dupAgg,
+ * Reactive rebuild: whenever any of (coloringAnalyte, eventAgg, methodClass,
  *   ndMethod, matrixFilter, elevationColumns, hasChemduckSchema) change,
  *   rebuild the samples layer SQL via buildSamplesLayerSql() and push
  *   it into React state. The effect is pure React reactivity — no
@@ -139,7 +139,8 @@ export const ChemroomsEntityLayers: React.FC = () => {
     (s) => s.chemrooms.config.coloringAnalyte,
   );
   const eventAgg = useChemroomsStore((s) => s.chemrooms.config.eventAgg);
-  const dupAgg = useChemroomsStore((s) => s.chemrooms.config.dupAgg);
+  const methodClass = useChemroomsStore((s) => s.chemrooms.config.methodClass);
+  const samplesNotice = useChemroomsStore((s) => s.chemrooms.layerNotices['samples']);
   const ndMethod = useChemroomsStore((s) => s.chemrooms.config.ndMethod);
   const fractionFilter = useChemroomsStore(
     (s) => s.chemrooms.config.fractionFilter,
@@ -402,7 +403,7 @@ export const ChemroomsEntityLayers: React.FC = () => {
       elevationColumns,
       coloringAnalyte: effectiveAnalyte,
       eventAgg,
-      dupAgg,
+      methodClass,
       ndMethod,
       matrixFilter,
       fractionFilter,
@@ -414,7 +415,7 @@ export const ChemroomsEntityLayers: React.FC = () => {
     hasChemduckSchema,
     coloringAnalyte,
     eventAgg,
-    dupAgg,
+    methodClass,
     ndMethod,
     matrixFilter,
     fractionFilter,
@@ -480,6 +481,11 @@ export const ChemroomsEntityLayers: React.FC = () => {
   // come back as the full-extent preview.
   const hasAnalyte = Boolean(coloringAnalyte);
   const samplesVisSpecTable = hasAnalyte ? 'v_results_denormalized' : 'samples';
+  // When ChemDuck refuses the analyte's map (mixed units, ...), there is
+  // nothing to draw in its place; show where the data is instead. Without
+  // a layer drawn the scene never registers an extent, and the
+  // "Constructing scene" overlay stayed up over an empty globe.
+  const samplesRefused = samplesNotice?.kind === 'refused';
 
   return (
     <>
@@ -487,7 +493,7 @@ export const ChemroomsEntityLayers: React.FC = () => {
         layerId="locations"
         sqlQuery={locationsSql}
         visSpecTable="locations"
-        visible={locationsVisible && !hasAnalyte}
+        visible={locationsVisible && (!hasAnalyte || samplesRefused)}
         sampleRenderAs={sampleRenderAs}
         sphereRadiusMeters={sphereRadiusMeters}
         volumeRadiusMeters={volumeRadiusMeters}

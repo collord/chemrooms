@@ -6,9 +6,13 @@ inspector and time-series charts. It runs entirely in the browser on
 [SQLRooms](https://sqlrooms.org) and DuckDB-WASM, so the data is queried
 client-side with SQL; the server only hands out files.
 
-The domain rules (non-detect substitution, duplicate and event aggregation,
-fractions kept apart) live in ChemDuck's SQL views and macros, not in this
-repository's TypeScript. Each data folder carries that SQL (`sql/`, listed in
+The domain rules (which result a point shows, how a non-detect is valued,
+re-runs and same-day samples, fractions and method classes kept apart, units
+refused when they disagree) live in ChemDuck's SQL views and macros
+(`aggregate_points`, `point_series`), not in this repository's TypeScript.
+The *Non-Detect Display* control only changes how a selected non-detect is
+drawn (at the limit, half of it, zero, or hidden), never which result is
+selected. Each data folder carries that SQL (`sql/`, listed in
 `sql/SOURCE.json`), and Chemrooms loads it at startup and queries it.
 ChemDuck itself is vendored in `server/chemduck/` at a pinned commit, the
 same one the QGIS plugin and its export pipeline pin (see
@@ -258,6 +262,9 @@ python server/tests/test_chemduck_vendor.py   # the vendored ChemDuck: hashes, v
 `client/src/setup/chemduckBundle.test.ts` loads the demo folder's whole SQL
 bundle into the app's own DuckDB-WASM and calls the map macros, so a
 demo exported with a different ChemDuck than its SQL fails there.
+`client/src/setup/mapRules.test.ts` holds the map and the time series to
+ChemDuck's own answers on the demo: the same points, values and chosen
+results, and a display choice that never changes the selection.
 
 ChemDuck's own tests, including the hybrid ARII parity test, live in the
 chemduck repository (`python tests/test_arii_hybrid.py`).

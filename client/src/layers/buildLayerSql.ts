@@ -71,7 +71,7 @@ export function buildLayerSql(
         elevationColumns: ctx.elevationColumns,
         coloringAnalyte: layer.query.analyte,
         eventAgg: layer.query.eventAgg,
-        dupAgg: layer.query.dupAgg,
+        methodClass: layer.query.methodClass ?? null,
         ndMethod: layer.query.ndMethod,
         matrixFilter: layer.query.matrix,
         fractionFilter: layer.query.fraction ?? null,

@@ -46,7 +46,7 @@ export const FreezeLayerButton: React.FC = () => {
       matrix: recipe.matrixFilter,
       fraction: recipe.fractionFilter,
       eventAgg: recipe.eventAgg,
-      dupAgg: recipe.dupAgg,
+      methodClass: recipe.methodClass,
       ndMethod: recipe.ndMethod,
       colorBy: colorByResults,
       sampleRenderAs: recipe.sampleRenderAs,

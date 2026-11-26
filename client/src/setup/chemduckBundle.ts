@@ -43,8 +43,23 @@ export const LEGACY_BUNDLE_FILES = [
 export const REQUIRED_BUNDLE_FILES = new Set([
   '00_bootstrap.sql',
   '03_views.sql',
-  '08_aggregate_results.sql',
+  // aggregate_points, point_series, point_counts: every map and series.
+  '08_aggregate_points.sql',
 ]);
+
+/**
+ * Why a bundle can't serve this client, or null when it can: a folder whose
+ * ChemDuck SQL predates aggregate_points (the legacy four files) has
+ * nothing the maps call. Said once, by name, rather than as a failed query
+ * on every analyte picked.
+ */
+export function bundleTooOld(files: string[]): string | null {
+  return files.includes('08_aggregate_points.sql')
+    ? null
+    : "This data folder's ChemDuck SQL predates aggregate_points, which every map " +
+        'now calls. Rewrite it with server/sync_chemduck.py (and re-export the data ' +
+        'with server/export_chemduck.py), or republish the sidecars.';
+}
 
 const BUNDLE_FILE = /^[0-9]{2}_[a-z0-9_]+\.sql$/;
 
